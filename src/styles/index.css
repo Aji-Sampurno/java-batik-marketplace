@@ -34,6 +34,12 @@
   --transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   --glass-bg: rgba(255, 255, 255, 0.7);
   --glass-border: rgba(255, 255, 255, 0.3);
+
+  /* Responsive Breakpoints */
+  --bp-sm: 640px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
 }
 
 * {
@@ -93,6 +99,21 @@ a {
   padding: 0.8rem var(--spacing-lg) !important;
 }
 
+/* Mobile Menu Utilities */
+.mobile-menu-open {
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .hide-mobile { display: none !important; }
+  .section-title { font-size: 2rem; }
+  .glass-header { padding: 0.6rem var(--spacing-md) !important; }
+}
+
+@media (min-width: 769px) {
+  .show-mobile { display: none !important; }
+}
+
 .glass-header a {
   color: var(--color-text) !important;
 }
@@ -148,6 +169,13 @@ a {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: var(--spacing-lg);
   margin-top: var(--spacing-xl);
+}
+
+@media (max-width: 600px) {
+  .product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: var(--spacing-md);
+  }
 }
 
 /* Product Card */
@@ -226,14 +254,12 @@ a {
   transform: translate(0) scale(1);
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
+/* Hide Scrollbars (Modern Design) */
+body::-webkit-scrollbar {
+  display: none;
 }
-::-webkit-scrollbar-track {
-  background: var(--color-bg);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--color-accent-light);
-  border-radius: 10px;
+
+body {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
 }

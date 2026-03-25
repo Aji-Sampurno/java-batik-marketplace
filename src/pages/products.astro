@@ -6,8 +6,10 @@ import { supabase } from '../lib/supabase';
 const { searchParams } = Astro.url;
 const typeFilter = searchParams.get('type');
 const motifFilter = searchParams.get('motif');
+const sizeFilter = searchParams.get('size'); // New size filter
+const searchQuery = searchParams.get('q'); // New search query
 
-console.log("DEBUG: products.astro", { typeFilter, motifFilter });
+console.log("DEBUG: products.astro", { typeFilter, motifFilter, sizeFilter, searchQuery });
 
 // Fetch Types and Motifs for the filter UI
 let typesData: any[] = [];
@@ -27,10 +29,11 @@ if (supabase) {
   console.log("DEBUG: DB Match", { targetType, targetMotif });
 
   // Build the query
+  // Build the query - Show all products to allow "Stok Habis" status visibility
   let query = supabase.from('products').select('*, types(name), product_motifs(motif_id, motifs(name))');
   
   if (targetType) query = query.eq('type_id', targetType.id);
-  // Filtering by motif will be handled in memory for simplicity or via join if complex
+  if (sizeFilter) query = query.contains('sizes', [sizeFilter]); // Filter by array item
   
   const { data: p, error: pError } = await query.order('created_at', { ascending: false });
   productsData = p || [];
@@ -57,56 +60,100 @@ if (supabase) {
 
 const waBaseUrl = "https://wa.me/";
 
-// Final check to handle joined data format variations
-const filteredProducts = productsData?.filter(p => {
-    // Handle both object and array format for joined data
+// Final check to handle joined data format variations and comprehensive search
+const filteredProducts = productsData?.filter((p: any) => {
     const getJoinName = (val: any) => Array.isArray(val) ? val[0]?.name : val?.name;
-    
     const pTypeName = getJoinName(p.types);
-    
-    // Check if any of the product's motifs match the filter
     const productMotifs = p.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
     
+    // Type Filter
     const typeMatch = !typeFilter || pTypeName === typeFilter;
+    
+    // Motif Filter (Selected from sidebar)
     const motifMatch = !motifFilter || productMotifs.includes(motifFilter);
-    return typeMatch && motifMatch;
+    
+    // Search Query (Multi-column: Name, SKU/Code, Motif Name)
+    let searchMatch = true;
+    if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const nameMatch = p.name?.toLowerCase().includes(q);
+        const codeMatch = p.code?.toLowerCase().includes(q);
+        const motifSearchMatch = productMotifs.some((m: any) => m?.toLowerCase().includes(q));
+        searchMatch = nameMatch || codeMatch || motifSearchMatch;
+    }
+
+    return typeMatch && motifMatch && searchMatch;
 }) || [];
 ---
 
 <Layout title="Koleksi Eksklusif Galeri">
 	<section style="padding: var(--spacing-xl) 0; background: #fff;">
 		<div class="container">
-			<header style="margin-bottom: var(--spacing-2xl); border-bottom: 1px solid var(--color-border); padding-bottom: var(--spacing-lg);">
-				<p class="text-uppercase opacity-50" style="margin-bottom: 0.5rem;">The Collection</p>
-				<h1 class="section-title" style="margin: 0; font-size: 3.5rem;">Katalog <span style="font-style: italic;">Pilihan</span></h1>
+			<header class="catalog-header">
+				<p class="text-uppercase opacity-50 header-subtitle">The Collection</p>
+				<div class="header-main">
+					<h1 class="section-title">Katalog <span style="font-style: italic;">Pilihan</span></h1>
+					
+					<!-- Search Input -->
+					<form action="/products" method="GET" class="search-form">
+						<input type="text" name="q" value={searchQuery || ''} placeholder="Cari batik..." class="search-input" />
+						{typeFilter && <input type="hidden" name="type" value={typeFilter} />}
+						{motifFilter && <input type="hidden" name="motif" value={motifFilter} />}
+						{sizeFilter && <input type="hidden" name="size" value={sizeFilter} />}
+						<button type="submit" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; opacity: 0.5;">
+							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+						</button>
+					</form>
+				</div>
 			</header>
 
-			<div style="display: grid; grid-template-columns: 250px 1fr; gap: var(--spacing-2xl); align-items: start;">
+			<div class="products-layout">
 				<!-- Sidebar Filters -->
-				<aside style="position: sticky; top: 120px; display: flex; flex-direction: column; gap: var(--spacing-xl);">
-					<div class="filter-group">
-						<h3 class="text-uppercase" style="font-size: 0.7rem; color: var(--color-accent); margin-bottom: 1.5rem; letter-spacing: 2px;">Jenis Produk</h3>
-						<div style="display: flex; flex-direction: column; gap: 0.8rem;">
-							<a href="/products" class={!typeFilter ? 'active-filter' : ''} style="font-size: 0.9rem; opacity: 0.7;">Semua Jenis</a>
+				<aside class="filters-sidebar">
+					<!-- Search Form Hidden Inputs (to preserve filters) -->
+					<input type="hidden" name="q" value={searchQuery || ''} />
+					
+					<details open class="filter-group">
+						<summary style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; list-style: none; outline: none;">
+							<span class="text-uppercase" style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;">Jenis Produk</span>
+							<svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5; transition: transform 0.3s ease;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+						</summary>
+						<div style="display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem 0 1rem 0;">
+							<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: '' })}`} class={!typeFilter ? 'active-filter' : 'filter-link'}>Semua Jenis</a>
 							{typesData?.map(t => (
-								<a href={`/products?type=${encodeURIComponent(t.name)}${motifFilter ? `&motif=${encodeURIComponent(motifFilter)}` : ''}`} 
-								   class={typeFilter === t.name ? 'active-filter' : ''}
-								   style="font-size: 0.9rem; opacity: 0.7;">{t.name}</a>
+								<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: t.name })}`} 
+								   class={typeFilter === t.name ? 'active-filter' : 'filter-link'}>{t.name}</a>
+							))}
+						</div>
+					</details>
+
+					<div class="filter-group" style="padding-bottom: var(--spacing-sm);">
+						<h3 class="text-uppercase" style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;">Ukuran</h3>
+						<div style="display: flex; flex-wrap: wrap; gap: 0.6rem;">
+							<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: '' })}`} 
+							   class={!sizeFilter ? 'active-chip' : 'chip'} 
+							   style="font-size: 0.7rem;">Semua</a>
+							{['S', 'M', 'L', 'XL', 'XXL', 'All Size'].map(s => (
+								<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: s })}`} 
+								   class={sizeFilter === s ? 'active-chip' : 'chip'}
+								   style="font-size: 0.7rem;">{s}</a>
 							))}
 						</div>
 					</div>
 
-					<div class="filter-group">
-						<h3 class="text-uppercase" style="font-size: 0.7rem; color: var(--color-accent); margin-bottom: 1.5rem; letter-spacing: 2px;">Motif Batik</h3>
-						<div style="display: flex; flex-direction: column; gap: 0.8rem;">
-							<a href="/products" class={!motifFilter ? 'active-filter' : ''} style="font-size: 0.9rem; opacity: 0.7;">Semua Motif</a>
+					<details class="filter-group">
+						<summary style="display: flex; justify-space-between; align-items: center; cursor: pointer; list-style: none; outline: none; display: flex; justify-content: space-between;">
+							<span class="text-uppercase" style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;">Motif Batik</span>
+							<svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5; transition: transform 0.3s ease;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+						</summary>
+						<div style="display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem 0 1rem 0;">
+							<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), motif: '' })}`} class={!motifFilter ? 'active-filter' : 'filter-link'}>Semua Motif</a>
 							{motifsData?.map(m => (
-								<a href={`/products?motif=${encodeURIComponent(m.name)}${typeFilter ? `&type=${encodeURIComponent(typeFilter)}` : ''}`} 
-								   class={motifFilter === m.name ? 'active-filter' : ''}
-								   style="font-size: 0.9rem; opacity: 0.7;">{m.name}</a>
+								<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), motif: m.name })}`} 
+								   class={motifFilter === m.name ? 'active-filter' : 'filter-link'}>{m.name}</a>
 							))}
 						</div>
-					</div>
+					</details>
 
 					<div style="margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid var(--color-border);">
 						<p style="font-size: 0.75rem; opacity: 0.4; font-style: italic;">Menampilkan {filteredProducts.length} produk dari koleksi kami.</p>
@@ -115,30 +162,46 @@ const filteredProducts = productsData?.filter(p => {
 
 				<!-- Product Grid -->
 				<main>
-					<div class="product-grid" style="margin-top: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--spacing-xl);">
+					<div class="product-grid" style="margin-top: 0;">
 						{filteredProducts.map((p, index) => (
 							<div class="product-card reveal-up" data-delay={(index % 4) * 100}>
 								<div class="product-image">
-									<img src={p.image_url || 'https://via.placeholder.com/400x600?text=Batik'} alt={p.name} loading="lazy" />
+									<a href={`/products/${p.id}`}>
+										<img src={p.image_url || 'https://via.placeholder.com/400x600?text=Batik'} alt={p.name} loading="lazy" class={!p.is_active ? 'out-of-stock-img' : ''} />
+										{!p.is_active && (
+											<div class="overlay-badge">Stok Habis</div>
+										)}
+									</a>
 								</div>
-								<div class="product-info">
+								<div class="product-info" style="display: flex; flex-direction: column; flex: 1;">
 									<p class="text-uppercase color-accent" style="font-size: 0.65rem; color: var(--color-accent); margin-bottom: 0.2rem;">
 										{p.types?.name} • {p.product_motifs?.map((pm: any) => pm.motifs?.name).join(', ') || '-'}
 									</p>
-									<h3 style="font-family: var(--font-main); font-size: 1.2rem; font-weight: 500; margin-bottom: 0.5rem;">{p.name}</h3>
-									{p.code && <code style="font-size: 0.7rem; background: #f9f9f9; padding: 0.2rem 0.4rem; color: #888; border-radius: 2px;">{p.code}</code>}
-									<p class="price-tag" style="margin-top: 1rem;">Rp {Number(p.price).toLocaleString('id-ID')}</p>
+									<h3 class="product-title">
+										<a href={`/products/${p.id}`} style="color: inherit; text-decoration: none;">{p.name}</a>
+									</h3>
 									
-									<div class="actions" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+									<div class="product-meta">
+										{p.code && <code style="font-size: 0.7rem; background: #f9f9f9; padding: 0.2rem 0.4rem; color: #888; border-radius: 2px;">{p.code}</code>}
+										{p.sizes && p.sizes.length > 0 && p.sizes.map((s: any) => (
+											<span style="font-size: 0.65rem; border: 1px solid #eee; padding: 1px 6px; border-radius: 2px; color: var(--color-muted);">{s}</span>
+										))}
+									</div>
+
+									<p class="price-tag">Rp {Number(p.price).toLocaleString('id-ID')}</p>
+									
+									<div class="actions">
 										{p.tokopedia_url && (
-											<a href={p.tokopedia_url} target="_blank" 
-											   style="background: #1a1a1a; color: white; text-align: center; padding: 0.8rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-												Beli Sekarang
+											<a href={p.is_active ? p.tokopedia_url : 'javascript:void(0)'} 
+											   target={p.is_active ? "_blank" : "_self"} 
+											   class={`buy-btn ${!p.is_active ? 'disabled-btn' : ''}`}>
+												{p.is_active ? 'Beli Sekarang' : 'Stok Habis'}
 											</a>
 										)}
-										<a href={`${waBaseUrl}${p.wa_number}?text=Halo, saya tertarik dengan produk ${p.name}`} target="_blank" 
-										   style="border: 1px solid var(--color-text); text-align: center; padding: 0.8rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px;">
-											Tanya Designer
+										<a href={p.is_active ? `${waBaseUrl}${p.wa_number}?text=Halo, saya tertarik dengan produk ${p.name}` : 'javascript:void(0)'} 
+										   target={p.is_active ? "_blank" : "_self"} 
+										   class={`wa-btn ${!p.is_active ? 'disabled-btn' : ''}`}>
+											{p.is_active ? 'Tanya Designer' : 'Cek Ketersediaan'}
 										</a>
 									</div>
 								</div>
@@ -158,13 +221,271 @@ const filteredProducts = productsData?.filter(p => {
 	</section>
 
 	<style>
-		.active-filter {
-			color: var(--color-accent) !important;
-			opacity: 1 !important;
-			font-weight: 600;
-			padding-left: 0.5rem;
-			border-left: 2px solid var(--color-accent);
+		.catalog-header {
+			margin-bottom: var(--spacing-xl);
+			border-bottom: 1px solid var(--color-border);
+			padding-bottom: var(--spacing-lg);
 		}
+
+		.header-subtitle {
+			margin-bottom: 0.5rem;
+			font-size: 0.7rem;
+		}
+
+		.header-main {
+			display: flex;
+			justify-content: space-between;
+			align-items: flex-end;
+			flex-wrap: wrap;
+			gap: var(--spacing-md);
+		}
+
+		.section-title {
+			margin: 0;
+			font-size: clamp(2.5rem, 8vw, 3.5rem);
+		}
+
+		.search-form {
+			position: relative;
+			min-width: 300px;
+		}
+
+		.search-input {
+			width: 100%;
+			padding: 0.8rem 1rem;
+			border: 1px solid #eee;
+			border-radius: var(--radius-sm);
+			font-size: 0.9rem;
+			outline: none;
+			transition: border-color 0.3s ease;
+		}
+
+		.search-input:focus {
+			border-color: var(--color-accent);
+		}
+
+		.products-layout {
+			display: grid;
+			grid-template-columns: 250px 1fr;
+			gap: var(--spacing-2xl);
+			align-items: start;
+		}
+
+		.product-card {
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+		}
+
+		.product-image {
+			aspect-ratio: 2/3;
+			overflow: hidden;
+		}
+
+		.product-image img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			transition: filter 0.3s ease;
+		}
+
+		.out-of-stock-img {
+			filter: grayscale(0.8) opacity(0.5);
+		}
+
+		.overlay-badge {
+			position: absolute;
+			top: 10px;
+			right: 10px;
+			background: #fef2f2;
+			color: #b91c1c;
+			padding: 0.2rem 0.6rem;
+			font-size: 0.65rem;
+			font-weight: 800;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+			border-radius: 4px;
+			border: 1px solid rgba(185, 28, 28, 0.2);
+			z-index: 2;
+		}
+
+		.product-title {
+			font-family: var(--font-main);
+			font-size: 1.1rem;
+			font-weight: 500;
+			margin-bottom: 0.5rem;
+			display: -webkit-box;
+			-webkit-line-clamp: 2;
+			-webkit-box-orient: vertical;
+			overflow: hidden;
+			min-height: 2.8rem; /* Forces consistent height for 2 lines */
+		}
+
+		.product-meta {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.4rem;
+			margin-bottom: 1rem;
+		}
+
+		.actions {
+			margin-top: auto;
+			display: flex;
+			flex-direction: column;
+			gap: 0.5rem;
+			padding-top: 1.5rem;
+		}
+
+		.buy-btn {
+			background: #1a1a1a; 
+			color: white; 
+			text-align: center; 
+			padding: 0.8rem; 
+			font-size: 0.75rem; 
+			text-transform: uppercase; 
+			letter-spacing: 2px; 
+			font-weight: 600;
+			transition: all 0.3s;
+		}
+
+		.wa-btn {
+			border: 1px solid var(--color-text); 
+			color: var(--color-text);
+			text-align: center; 
+			padding: 0.8rem; 
+			font-size: 0.75rem; 
+			text-transform: uppercase; 
+			letter-spacing: 2px;
+			transition: all 0.3s;
+		}
+
+		.disabled-btn {
+			background: #f5f5f5 !important;
+			color: #aaa !important;
+			border-color: #eee !important;
+			cursor: not-allowed !important;
+			pointer-events: none !important;
+			transform: none !important;
+			box-shadow: none !important;
+		}
+
+		.filters-sidebar {
+			position: sticky;
+			top: 120px;
+			display: flex;
+			flex-direction: column;
+			gap: var(--spacing-md);
+		}
+
+		.filter-link {
+			font-size: 0.85rem;
+			opacity: 0.6;
+			transition: all 0.3s ease;
+			text-decoration: none;
+			color: var(--color-text);
+		}
+
+		.filter-link:hover {
+			opacity: 1;
+			padding-left: 5px;
+			color: var(--color-accent);
+		}
+
+		.active-filter {
+			font-size: 0.85rem;
+			color: var(--color-accent) !important;
+			font-weight: 600;
+			padding-left: 10px;
+			border-left: 2px solid var(--color-accent);
+			opacity: 1 !important;
+		}
+
+		details[open] .chevron {
+			transform: rotate(180deg);
+		}
+
+		details summary::-webkit-details-marker {
+			display: none;
+		}
+
+		.chip {
+			display: inline-block;
+			padding: 0.35rem 0.8rem;
+			border: 1px solid #eee;
+			border-radius: var(--radius-sm);
+			color: var(--color-text);
+			opacity: 0.6;
+			transition: all 0.3s ease;
+			font-weight: 500;
+			background: #fcfcfc;
+			text-decoration: none;
+		}
+
+		.chip:hover {
+			border-color: var(--color-accent);
+			color: var(--color-accent);
+			opacity: 1;
+			transform: translateY(-1px);
+			box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+		}
+
+		.active-chip {
+			display: inline-block;
+			padding: 0.35rem 0.8rem;
+			background: var(--color-text);
+			color: white !important;
+			border: 1px solid var(--color-text);
+			border-radius: var(--radius-sm);
+			font-weight: 600;
+			box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+			text-decoration: none;
+		}
+
+		@media (max-width: 900px) {
+			.header-main, .catalog-header {
+				text-align: center;
+				justify-content: center;
+			}
+			.header-main {
+				flex-direction: column;
+				align-items: center;
+				gap: var(--spacing-lg);
+			}
+			.search-form {
+				width: 100%;
+				max-width: 500px;
+			}
+			.products-layout {
+				grid-template-columns: 1fr;
+				gap: var(--spacing-xl);
+			}
+			.filters-sidebar {
+				position: static;
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+				gap: var(--spacing-lg);
+				padding-bottom: var(--spacing-lg);
+				border-bottom: 1px solid var(--color-border);
+				margin-bottom: var(--spacing-lg);
+			}
+			.filter-group {
+				flex: none;
+				width: 100%;
+			}
+			.active-filter {
+				padding-left: 0;
+				border-left: none;
+				border-bottom: 2px solid var(--color-accent);
+			}
+		}
+
+		@media (max-width: 600px) {
+			.filters-sidebar {
+				grid-template-columns: 1fr;
+				gap: var(--spacing-md);
+			}
+		}
+
 		.product-card:hover h3 {
 			color: var(--color-accent);
 		}

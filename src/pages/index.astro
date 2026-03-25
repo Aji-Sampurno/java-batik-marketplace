@@ -33,13 +33,13 @@ if (supabase) {
 		</div>
 
 		<div class="container" style="position: relative; z-index: 10; text-align: center;">
-			<div class="glass reveal" style="max-width: 800px; margin: 0 auto; padding: var(--spacing-2xl) var(--spacing-xl); border-radius: var(--radius-lg); backdrop-filter: blur(40px); background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1);">
-				<p class="text-uppercase animate-fade-in" style="color: var(--color-accent-light); margin-bottom: var(--spacing-md); letter-spacing: 4px;">Handcrafted Excellence</p>
-				<h1 class="animate-fade-in" style="font-size: clamp(3rem, 10vw, 5.5rem); color: white; line-height: 1; margin-bottom: var(--spacing-lg);">Keanggunan <br/> <span style="font-style: italic; color: var(--color-accent-light);">Warisan Nusantara</span></h1>
-				<p class="animate-fade-in" style="max-width: 600px; margin: 0 auto var(--spacing-xl); color: rgba(255,255,255,0.7); font-size: 1.1rem; line-height: 1.6;">Menghadirkan koleksi batik pilihan dengan sentuhan modern untuk gaya hidupan yang elegan dan berbudaya.</p>
-				<div class="animate-fade-in" style="display: flex; gap: var(--spacing-md); justify-content: center;">
-					<a href="/products" class="btn" style="background: white; color: black; padding: 1rem 2.5rem; font-weight: 600;">LIHAT KOLEKSI</a>
-					<a href="/about" class="btn" style="background: transparent; color: white; border: 1px solid rgba(255,255,255,0.3); padding: 1rem 2.5rem;">TENTANG KAMI</a>
+			<div class="glass reveal" style="max-width: 800px; margin: 0 auto; padding: clamp(2rem, 8vw, var(--spacing-2xl)) clamp(1rem, 5vw, var(--spacing-xl)); border-radius: var(--radius-lg); backdrop-filter: blur(40px); background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1);">
+				<p class="text-uppercase animate-fade-in" style="font-size: clamp(0.6rem, 2vw, 0.75rem); color: var(--color-accent-light); margin-bottom: var(--spacing-md); letter-spacing: 4px;">Handcrafted Excellence</p>
+				<h1 class="animate-fade-in" style="font-size: clamp(2.2rem, 9vw, 5.5rem); color: white; line-height: 1.1; margin-bottom: var(--spacing-lg);">Keanggunan <br/> <span style="font-style: italic; color: var(--color-accent-light);">Warisan Nusantara</span></h1>
+				<p class="animate-fade-in" style="max-width: 600px; margin: 0 auto var(--spacing-xl); color: rgba(255,255,255,0.7); font-size: clamp(0.9rem, 2.5vw, 1.1rem); line-height: 1.6;">Menghadirkan koleksi batik pilihan dengan sentuhan modern untuk gaya hidupan yang elegan dan berbudaya.</p>
+				<div class="animate-fade-in hero-btns" style="display: flex; gap: var(--spacing-md); justify-content: center; flex-wrap: wrap;">
+					<a href="/products" class="btn" style="background: white; color: black; padding: 1rem 2.5rem; font-weight: 600; width: auto; min-width: 200px;">LIHAT KOLEKSI</a>
+					<a href="/about" class="btn" style="background: transparent; color: white; border: 1px solid rgba(255,255,255,0.3); padding: 1rem 2.5rem; width: auto; min-width: 200px;">TENTANG KAMI</a>
 				</div>
 			</div>
 		</div>
@@ -85,18 +85,25 @@ if (supabase) {
 	
 			<div class="product-grid" style="margin-top: var(--spacing-lg);">
 				{featuredProducts.map((p, index) => (
-					<div class="product-card reveal-up" data-delay={index * 150}>
-						<div class="product-image">
-							<a href={`/products?name=${encodeURIComponent(p.name)}`}>
-								<img src={p.image_url || 'https://via.placeholder.com/400x600?text=Batik'} alt={p.name} loading="lazy" />
+					<div class="product-card reveal-up" data-delay={index * 150} style={!p.is_active ? 'opacity: 0.8;' : ''}>
+						<div class="product-image" style="position: relative;">
+							<a href={`/products/${p.id}`}>
+								<img src={p.image_url || 'https://via.placeholder.com/400x600?text=Batik'} alt={p.name} loading="lazy" class={!p.is_active ? 'out-of-stock-img' : ''} />
+								{!p.is_active && (
+									<div class="overlay-badge">Stok Habis</div>
+								)}
 							</a>
 						</div>
 						<div class="product-info">
 							<p class="text-uppercase opacity-50" style="font-size: 0.65rem;">
-								{p.types?.name} • {p.product_motifs?.map(pm => pm.motifs?.name).join(', ') || '-'}
+								{p.types?.name} • {p.product_motifs?.map((pm: any) => pm.motifs?.name).join(', ') || '-'}
 							</p>
-							<h3 style="font-family: var(--font-main); font-weight: 500;">{p.name}</h3>
-							<p class="price-tag">Rp {Number(p.price).toLocaleString('id-ID')}</p>
+							<h3 style="font-family: var(--font-main); font-weight: 500;">
+								<a href={`/products/${p.id}`} style="color: inherit; text-decoration: none;">{p.name}</a>
+							</h3>
+							<p class="price-tag">
+								{p.is_active ? `Rp ${Number(p.price).toLocaleString('id-ID')}` : <span style="color: #b91c1c; font-weight: 700;">STOK HABIS</span>}
+							</p>
 						</div>
 					</div>
 				))}
@@ -110,7 +117,7 @@ if (supabase) {
 			<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: var(--spacing-2xl); align-items: center;">
 				<div class="reveal">
 					<p class="text-uppercase color-accent" style="margin-bottom: var(--spacing-md); color: var(--color-accent);">Our Legacy</p>
-					<h2 class="section-title" style="font-size: 3.5rem;">Sentuhan Tangan <br/> <span style="font-style: italic;">Penuh Makna</span></h2>
+					<h2 class="section-title" style="font-size: clamp(2.5rem, 7.5vw, 3.5rem);">Sentuhan Tangan <br/> <span style="font-style: italic;">Penuh Makna</span></h2>
 					<p style="margin-bottom: var(--spacing-lg); opacity: 0.8; font-size: 1.1rem; line-height: 1.8;">Setiap helai kain di koleksi kami adalah hasil dari ketelitian dan dedikasi pengrajin. Melalui proses canting tradisional, setiap motif menceritakan filosofi mendalam tentang kehidupan dan kearifan lokal.</p>
 					<div style="display: flex; gap: var(--spacing-lg); margin-top: var(--spacing-xl);">
 						<div>
@@ -124,11 +131,11 @@ if (supabase) {
 						</div>
 					</div>
 				</div>
-				<div class="reveal-right">
+				<div class="reveal-right" style="position: relative;">
 					<div style="aspect-ratio: 4/5; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-lg);">
 						<img src="/images/batik_artisan.webp" alt="Artisan at work" style="width: 100%; height: 100%; object-fit: cover;" />
 					</div>
-					<div class="glass reveal-scale" data-delay="400" style="position: absolute; bottom: -30px; left: -30px; padding: var(--spacing-lg); border-radius: var(--radius-md); max-width: 250px;">
+					<div class="glass reveal-scale hide-mobile" data-delay="400" style="position: absolute; bottom: -30px; left: -30px; padding: var(--spacing-lg); border-radius: var(--radius-md); max-width: 250px; z-index: 5;">
 						<p style="font-style: italic; font-size: 0.9rem; margin: 0;">"Batik adalah doa yang digambar di atas kain."</p>
 					</div>
 				</div>
@@ -137,6 +144,29 @@ if (supabase) {
 	</section>
 
 	<!-- Newsletter/CTA -->
+
+	<style is:global>
+		.out-of-stock-img {
+			filter: grayscale(0.8) opacity(0.5);
+			transition: filter 0.3s ease;
+		}
+
+		.overlay-badge {
+			position: absolute;
+			top: 10px;
+			right: 10px;
+			background: #fef2f2;
+			color: #b91c1c;
+			padding: 0.2rem 0.6rem;
+			font-size: 0.65rem;
+			font-weight: 800;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+			border-radius: 4px;
+			border: 1px solid rgba(185, 28, 28, 0.2);
+			z-index: 2;
+		}
+	</style>
 
 	<script is:inline>
 		// Hero Parallax Effect

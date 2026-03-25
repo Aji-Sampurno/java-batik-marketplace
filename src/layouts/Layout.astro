@@ -42,18 +42,47 @@ const restWords = nameParts.slice(1).join(' ');
 						{settings.logo_url ? (
 							<img src={settings.logo_url} alt={settings.site_name} style="height: 48px; width: auto;" />
 						) : (
-							<span style="font-family: 'Playfair Display', serif; font-size: 1.6rem; letter-spacing: 1px; font-weight: 500; color: white;">
+							<span id="logo-text" style="font-family: 'Playfair Display', serif; font-size: 1.6rem; letter-spacing: 1px; font-weight: 500; color: white;">
 								{firstWord} <span style="font-style: italic; color: var(--color-accent-light);">{restWords}</span>
 							</span>
 						)}
 					</a>
 				</div>
-				<ul style="display: flex; gap: var(--spacing-lg); list-style: none;" class="text-uppercase nav-links">
+
+				<!-- Desktop Navigation -->
+				<ul style="display: flex; gap: var(--spacing-lg); list-style: none;" class="text-uppercase nav-links hide-mobile">
 					<li><a href="/products" style="font-weight: 500; color: rgba(255,255,255,0.8);">Katalog</a></li>
 					<li><a href="/about" style="font-weight: 500; color: rgba(255,255,255,0.8);">Tentang</a></li>
 					<li><a href="/admin" style="opacity: 0.3; font-size: 0.6rem; color: white;">Admin</a></li>
 				</ul>
+
+				<!-- Mobile Menu Toggle -->
+				<button id="mobile-menu-toggle" class="show-mobile" style="background: none; border: none; cursor: pointer; padding: var(--spacing-sm); z-index: 1001;">
+					<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+						<path id="menu-icon-top" d="M4 6H20" stroke="white" stroke-width="2" stroke-linecap="round" style="transition: var(--transition);"/>
+						<path id="menu-icon-mid" d="M4 12H20" stroke="white" stroke-width="2" stroke-linecap="round" style="transition: var(--transition);"/>
+						<path id="menu-icon-bot" d="M4 18H20" stroke="white" stroke-width="2" stroke-linecap="round" style="transition: var(--transition);"/>
+					</svg>
+				</button>
 			</nav>
+
+			<!-- Mobile Menu Overlay -->
+			<div id="mobile-menu" class="show-mobile" style="position: fixed; top: 0; left: 0; width: 100%; height: 100dvh; background: var(--color-bg); z-index: 1000; transform: translateY(-100%); transition: transform 0.6s cubic-bezier(0.85, 0, 0.15, 1); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: var(--spacing-xl); padding: var(--spacing-2xl);">
+				<ul style="list-style: none; text-align: center; display: flex; flex-direction: column; gap: var(--spacing-lg);" class="text-uppercase">
+					<li><a href="/" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Beranda</a></li>
+					<li><a href="/products" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Katalog</a></li>
+					<li><a href="/about" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Tentang Kami</a></li>
+					<li><a href="/admin" style="opacity: 0.5; font-size: 0.8rem; color: var(--color-text);">Admin Panel</a></li>
+				</ul>
+				
+				<div style="margin-top: var(--spacing-xl); text-align: center; opacity: 0.6;">
+					<p style="font-size: 0.8rem; margin-bottom: var(--spacing-sm);">{settings.site_name}</p>
+					<div style="display: flex; gap: var(--spacing-md); justify-content: center;">
+						{settings.url_instagram && <a href={settings.url_instagram} style="font-size: 0.7rem;">IG</a>}
+						{settings.url_whatsapp && <a href={`https://wa.me/${settings.url_whatsapp}`} style="font-size: 0.7rem;">WA</a>}
+					</div>
+				</div>
+			</div>
 		</header>
 		<main>
 			<slot />
@@ -122,7 +151,48 @@ const restWords = nameParts.slice(1).join(' ');
 		<script is:inline>
 			// Centralized Scroll & Animation Logic
 			const header = document.getElementById('main-header');
+			const mobileMenu = document.getElementById('mobile-menu');
+			const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+			const menuIconTop = document.getElementById('menu-icon-top');
+			const menuIconMid = document.getElementById('menu-icon-mid');
+			const menuIconBot = document.getElementById('menu-icon-bot');
+			const logoText = document.getElementById('logo-text');
 			
+			let isMenuOpen = false;
+
+			const toggleMenu = () => {
+				isMenuOpen = !isMenuOpen;
+				mobileMenu.style.transform = isMenuOpen ? 'translateY(0)' : 'translateY(-100%)';
+				document.body.classList.toggle('mobile-menu-open', isMenuOpen);
+				
+				// Animate Hamburger to X
+				if (isMenuOpen) {
+					menuIconTop.setAttribute('d', 'M6 18L18 6');
+					menuIconMid.setAttribute('d', 'M6 6L18 18');
+					menuIconBot.setAttribute('d', 'M6 6L18 18');
+					menuIconTop.setAttribute('stroke', 'var(--color-text)');
+					menuIconMid.setAttribute('stroke', 'var(--color-text)');
+					menuIconBot.setAttribute('stroke', 'var(--color-text)');
+				} else {
+					menuIconTop.setAttribute('d', 'M4 6H20');
+					menuIconMid.setAttribute('d', 'M4 12H20');
+					menuIconBot.setAttribute('d', 'M4 18H20');
+					updateHeaderColors();
+				}
+			};
+
+			const updateHeaderColors = () => {
+				const isGlass = window.scrollY > 50;
+				const color = isGlass ? 'var(--color-text)' : 'white';
+				
+				if (!isMenuOpen) {
+					menuIconTop.setAttribute('stroke', color);
+					menuIconMid.setAttribute('stroke', color);
+					menuIconBot.setAttribute('stroke', color);
+				}
+				if (logoText) logoText.style.color = color;
+			};
+
 			const handleHeader = () => {
 				if (window.scrollY > 50) {
 					header.classList.add('glass-header');
@@ -131,7 +201,10 @@ const restWords = nameParts.slice(1).join(' ');
 					header.classList.remove('glass-header');
 					header.style.position = 'absolute';
 				}
+				updateHeaderColors();
 			};
+
+			mobileMenuToggle.addEventListener('click', toggleMenu);
 
 			const observerOptions = {
 				threshold: 0.1,

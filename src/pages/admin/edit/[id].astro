@@ -1,0 +1,421 @@
+---
+export const prerender = false;
+import Layout from "../../../layouts/Layout.astro";
+import { supabase } from "../../../lib/supabase";
+
+// Check for session (Authentication Gate)
+const session = Astro.cookies.get("admin_session");
+if (session?.value !== "authenticated") {
+	return Astro.redirect("/login");
+}
+
+const { id } = Astro.params;
+
+let product: any = null;
+let types: any[] = [];
+let motifs: any[] = [];
+let selectedMotifIds: string[] = [];
+let message = "";
+let isError = false;
+
+if (supabase) {
+	// Fetch product data
+	const { data: p } = await supabase
+		.from("products")
+		.select("*, product_motifs(motif_id)")
+		.eq("id", id)
+		.single();
+
+	product = p;
+	if (p) {
+		selectedMotifIds = p.product_motifs.map((pm: any) => pm.motif_id);
+	}
+
+	// Fetch Types and Motifs
+	const { data: t } = await supabase.from("types").select("*");
+	const { data: m } = await supabase.from("motifs").select("*");
+	types = t || [];
+	motifs = m || [];
+}
+
+if (!product) {
+	return Astro.redirect("/admin");
+}
+
+// Handle Form Submission
+if (Astro.request.method === "POST") {
+	try {
+		const formData = await Astro.request.formData();
+		const name = formData.get("name");
+		const price = formData.get("price");
+		const type_id = formData.get("type_id");
+		const motif_ids = formData.getAll("motif_ids");
+		const description = formData.get("description");
+		const code = formData.get("code");
+		const image_files = formData.getAll("image_file") as File[];
+		const tokopedia_url = formData.get("tokopedia_url");
+		const sizes = formData.getAll("sizes");
+		const is_active = formData.get("is_active") === "on";
+
+		let updatedImages = [...(product.images || [])];
+		let primaryImageUrl = product.image_url;
+
+		// Handle new image uploads
+		if (image_files && image_files.length > 0 && image_files[0].size > 0) {
+			const newImages: string[] = [];
+			for (const file of image_files) {
+				if (file.size > 0) {
+					const fileExt = file.name.split(".").pop();
+					const fileName = `${Date.now()}_${Math.random()
+						.toString(36)
+						.substring(7)}.${fileExt}`;
+					const { error: uploadError } = await supabase.storage
+						.from("products")
+						.upload(fileName, file);
+					if (uploadError) throw uploadError;
+					const { data: urlData } = supabase.storage
+						.from("products")
+						.getPublicUrl(fileName);
+					newImages.push(urlData.publicUrl);
+				}
+			}
+			// If user uploaded new images, we replace the whole set for now (simpler UI)
+			// Or we could append: updatedImages = [...updatedImages, ...newImages];
+			updatedImages = newImages;
+			primaryImageUrl = newImages[0];
+		}
+
+		// Update product Table
+		const { error: updateError } = await supabase
+			.from("products")
+			.update({
+				name,
+				price,
+				type_id,
+				image_url: primaryImageUrl,
+				images: updatedImages,
+				tokopedia_url,
+				description,
+				code,
+				sizes,
+				is_active,
+			})
+			.eq("id", id);
+
+		if (updateError) throw updateError;
+
+		// Update Motifs (Delete old, Insert new)
+		await supabase.from("product_motifs").delete().eq("product_id", id);
+		if (motif_ids.length > 0) {
+			const mInserts = motif_ids.map((mid) => ({
+				product_id: id,
+				motif_id: mid,
+			}));
+			await supabase.from("product_motifs").insert(mInserts);
+		}
+
+		return Astro.redirect("/admin?success=status"); // Redirect to admin with success
+	} catch (e: any) {
+		isError = true;
+		message = "Gagal memperbarui produk: " + e.message;
+	}
+}
+---
+
+<Layout title={`Edit Produk - ${product.name}`}>
+	<section style="padding: var(--spacing-xl) 0; min-height: 80vh;">
+		<div class="container" style="max-width: 800px;">
+			<div
+				style="margin-bottom: var(--spacing-xl); display: flex; justify-content: space-between; align-items: center;"
+			>
+				<div>
+					<h1
+						class="text-uppercase"
+						style="font-size: 1.5rem; margin: 0; font-weight: 600;"
+					>
+						Edit Produk
+					</h1>
+					<p style="font-size: 0.8rem; opacity: 0.5;">
+						Ubah detail produk
+					</p>
+				</div>
+				<a
+					href="/admin"
+					style="font-size: 0.8rem; text-transform: uppercase; color: var(--color-muted); border-bottom: 1px solid #ccc; padding-bottom: 2px;"
+					>Kembali ke Dashboard</a
+				>
+			</div>
+
+			{
+				message && (
+					<div
+						class="animate-fade-in"
+						style={`padding: 1rem; margin-bottom: 2rem; border-radius: var(--radius-sm); border: 1px solid ${
+							isError ? "#ff4d4d" : "#03ac0e"
+						}; background: ${
+							isError ? "#fff5f5" : "#f5fff5"
+						}; color: ${
+							isError ? "#ff4d4d" : "#03ac0e"
+						}; text-align: center; font-size: 0.9rem; font-weight: 500;`}
+					>
+						{message}
+					</div>
+				)
+			}
+
+			<div
+				style="background: white; border: 1px solid var(--color-border); padding: var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);"
+			>
+				<form
+					method="POST"
+					enctype="multipart/form-data"
+					style="display: flex; flex-direction: column; gap: var(--spacing-lg);"
+				>
+					<div>
+						<label
+							class="text-uppercase opacity-50"
+							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
+							>Nama Produk</label
+						>
+						<input
+							name="name"
+							type="text"
+							required
+							value={product.name}
+							style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+						/>
+					</div>
+
+					<div
+						style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg);"
+					>
+						<div>
+							<label
+								class="text-uppercase opacity-50"
+								style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
+								>Kode SKU</label
+							>
+							<input
+								name="code"
+								type="text"
+								value={product.code}
+								style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+							/>
+						</div>
+						<div>
+							<label
+								class="text-uppercase opacity-50"
+								style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
+								>Harga (Rp)</label
+							>
+							<input
+								name="price"
+								type="number"
+								required
+								value={product.price}
+								style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+							/>
+						</div>
+					</div>
+
+					<div
+						style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg);"
+					>
+						<div>
+							<label
+								class="text-uppercase opacity-50"
+								style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
+								>Jenis Produk</label
+							>
+							<select
+								name="type_id"
+								required
+								style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm); background: white;"
+							>
+								{
+									types?.map((t) => (
+										<option
+											value={t.id}
+											selected={t.id === product.type_id}
+										>
+											{t.name}
+										</option>
+									))
+								}
+							</select>
+						</div>
+						<div>
+							<label
+								class="text-uppercase opacity-50"
+								style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
+								>Status Katalog</label
+							>
+							<label
+								style="display: flex; align-items: center; gap: 0.5rem; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm); cursor: pointer; background: #fcfcfc;"
+							>
+								<input
+									type="checkbox"
+									name="is_active"
+									checked={product.is_active}
+								/>
+								<span style="font-size: 0.85rem;"
+									>Tampilkan di Toko (In Stock)</span
+								>
+							</label>
+						</div>
+					</div>
+
+					<div>
+						<label
+							class="text-uppercase opacity-50"
+							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
+							>Motif Batik (Bisa Pilih Banyak)</label
+						>
+						<div
+							style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.5rem; background: #fcfcfc; padding: 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm); max-height: 150px; overflow-y: auto;"
+						>
+							{
+								motifs?.map((m) => (
+									<label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+										<input
+											type="checkbox"
+											name="motif_ids"
+											value={m.id}
+											checked={selectedMotifIds.includes(
+												m.id
+											)}
+										/>
+										{m.name}
+									</label>
+								))
+							}
+						</div>
+					</div>
+
+					<div>
+						<label
+							class="text-uppercase opacity-50"
+							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
+							>Ukuran Tersedia</label
+						>
+						<div
+							style="display: flex; gap: 1rem; flex-wrap: wrap; background: #fcfcfc; padding: 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+						>
+							{
+								["S", "M", "L", "XL", "XXL", "All Size"].map(
+									(size) => (
+										<label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer;">
+											<input
+												type="checkbox"
+												name="sizes"
+												value={size}
+												checked={product.sizes?.includes(
+													size
+												)}
+											/>
+											{size}
+										</label>
+									)
+								)
+							}
+						</div>
+					</div>
+
+					<div>
+						<label
+							class="text-uppercase opacity-50"
+							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
+							>Update Foto (Kosongkan jika tidak ingin mengubah)</label
+						>
+						<div
+							style="display: flex; gap: 1rem; margin-bottom: 1rem; overflow-x: auto; padding-bottom: 0.5rem;"
+						>
+							{
+								product.images?.map((img: string) => (
+									<div style="width: 80px; height: 80px; border-radius: 4px; overflow: hidden; border: 1px solid #eee; flex-shrink: 0;">
+										<img
+											src={img}
+											style="width: 100%; height: 100%; object-fit: cover;"
+											alt=""
+										/>
+									</div>
+								))
+							}
+						</div>
+						<input
+							name="image_file"
+							type="file"
+							accept="image/*"
+							multiple
+							style="width: 100%; padding: 0.6rem; border: 1px solid #ddd; border-radius: var(--radius-sm); background: #fcfcfc; font-size: 0.8rem;"
+						/>
+						<p
+							style="font-size: 0.65rem; opacity: 0.5; margin-top: 0.4rem;"
+						>
+							*Mengunggah foto baru akan menggantikan seluruh foto
+							lama dengan foto baru tersebut.
+						</p>
+					</div>
+
+					<div>
+						<label
+							class="text-uppercase opacity-50"
+							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
+							>Link Tokopedia (Opsional)</label
+						>
+						<input
+							name="tokopedia_url"
+							type="url"
+							value={product.tokopedia_url}
+							style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+						/>
+					</div>
+
+					<div>
+						<label
+							class="text-uppercase opacity-50"
+							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
+							>Deskripsi Produk</label
+						>
+						<textarea
+							name="description"
+							rows="4"
+							style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+							>{product.description}</textarea
+						>
+					</div>
+
+					<div
+						style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg); margin-top: var(--spacing-md);"
+					>
+						<a
+							href="/admin"
+							style="text-align: center; padding: 1rem; border: 1px solid #ddd; color: var(--color-muted); text-transform: uppercase; letter-spacing: 2px; font-weight: 600; font-size: 0.75rem; border-radius: var(--radius-sm);"
+							>Batal</a
+						>
+						<button
+							type="submit"
+							style="background: var(--color-text); color: white; padding: 1rem; border: none; text-transform: uppercase; letter-spacing: 2px; font-weight: 600; font-size: 0.75rem; border-radius: var(--radius-sm); cursor: pointer; transition: 0.3s;"
+							>Simpan Perubahan</button
+						>
+					</div>
+				</form>
+			</div>
+		</div>
+	</section>
+</Layout>
+
+<style>
+	input[type="checkbox"] {
+		width: 16px;
+		height: 16px;
+		accent-color: var(--color-accent);
+	}
+
+	input:focus,
+	select:focus,
+	textarea:focus {
+		border-color: var(--color-accent) !important;
+		outline: none;
+	}
+</style>
