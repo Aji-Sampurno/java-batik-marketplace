@@ -1,0 +1,395 @@
+---
+export const prerender = false;
+import Layout from '../layouts/Layout.astro';
+import { supabase } from '../lib/supabase';
+
+// Check for session (Authentication Gate)
+const session = Astro.cookies.get('admin_session');
+if (session?.value !== 'authenticated') {
+  return Astro.redirect('/login');
+}
+
+// Handle Logout
+if (Astro.url.searchParams.get('logout')) {
+  Astro.cookies.delete('admin_session');
+  return Astro.redirect('/login');
+}
+
+// Fetch Types and Motifs for the dropdowns
+let types: any[] = [];
+let motifs: any[] = [];
+let productsData: any[] = [];
+let settings: any = null;
+
+if (supabase) {
+  const { data: t } = await supabase.from('types').select('*');
+  const { data: m } = await supabase.from('motifs').select('*');
+  const { data: p } = await supabase.from('products').select('*, types(name), product_motifs(motifs(name))').order('created_at', { ascending: false });
+  const { data: s } = await supabase.from('settings').select('*').single();
+  
+  types = t || [];
+  motifs = m || [];
+  productsData = p || [];
+  settings = s || { site_name: 'Batik Nusantara' };
+} else {
+  // Mock data fallback
+  const { products: mockProducts } = await import('../data/products');
+  const uniqueTypes = [...new Set(mockProducts.map(p => p.type))];
+  types = uniqueTypes.map(t => ({ name: t, id: t }));
+  
+  const uniqueMotifs = [...new Set(mockProducts.map(p => p.motif))];
+  motifs = uniqueMotifs.map(m => ({ name: m, id: m }));
+
+  productsData = mockProducts.map(p => ({
+    ...p,
+    types: { name: p.type },
+    product_motifs: [{ motifs: { name: p.motif } }]
+  }));
+}
+
+let message = '';
+let isError = false;
+
+// Handle Form Submission (Server Side)
+if (Astro.request.method === 'POST') {
+  const contentType = Astro.request.headers.get('content-type');
+  if (contentType?.includes('form')) {
+    if (!supabase) {
+      isError = true;
+      message = 'Error: Supabase belum dikonfigurasi.';
+    } else {
+      try {
+        const formData = await Astro.request.formData();
+        const action = formData.get('action');
+
+        if (action === 'update_settings') {
+          const site_name = formData.get('site_name');
+          const address = formData.get('address');
+          const contact_whatsapp = formData.get('contact_whatsapp');
+          const url_instagram = formData.get('url_instagram');
+          const url_tiktok = formData.get('url_tiktok');
+          const url_tokopedia = formData.get('url_tokopedia');
+          const url_shopee = formData.get('url_shopee');
+          const logo_file = formData.get('logo_file') as File;
+          let logo_url = settings?.logo_url;
+
+          if (logo_file && logo_file.size > 0) {
+            const fileExt = logo_file.name.split('.').pop();
+            const fileName = `logo_${Date.now()}.${fileExt}`;
+            const { error: uploadError } = await supabase.storage.from('settings').upload(fileName, logo_file);
+            if (uploadError) throw uploadError;
+            const { data: urlData } = supabase.storage.from('settings').getPublicUrl(fileName);
+            logo_url = urlData.publicUrl;
+          }
+
+          const { error } = await supabase.from('settings').update({ 
+            site_name, logo_url, address, contact_whatsapp, 
+            url_instagram, url_tiktok, url_tokopedia, url_shopee 
+          }).eq('id', 1);
+          if (error) throw error;
+          return Astro.redirect('/admin?success=settings');
+        }
+
+        if (action === 'add_type') {
+          const name = formData.get('name');
+          const { error } = await supabase.from('types').insert([{ name }]);
+          if (error) throw error;
+          return Astro.redirect('/admin?success=type');
+        }
+
+        if (action === 'add_motif') {
+          const name = formData.get('name');
+          const { error } = await supabase.from('motifs').insert([{ name }]);
+          if (error) throw error;
+          return Astro.redirect('/admin?success=motif');
+        }
+
+        if (action === 'add_product') {
+          const name = formData.get('name');
+          const price = formData.get('price');
+          const type_id = formData.get('type_id');
+          const motif_ids = formData.getAll('motif_ids');
+          const image_file = formData.get('image_file') as File;
+          const tokopedia_url = formData.get('tokopedia_url');
+          const description = formData.get('description');
+          const code = formData.get('code');
+
+          let image_url = '';
+
+          if (image_file && image_file.size > 0) {
+            const fileExt = image_file.name.split('.').pop();
+            const fileName = `${Date.now()}.${fileExt}`;
+            const { error: uploadError } = await supabase.storage.from('products').upload(fileName, image_file);
+            if (uploadError) throw uploadError;
+            const { data: urlData } = supabase.storage.from('products').getPublicUrl(fileName);
+            image_url = urlData.publicUrl;
+          }
+
+          const { data: newP, error: dbE } = await supabase.from('products').insert([
+            { name, price, type_id, image_url, tokopedia_url, description, code }
+          ]).select();
+          if (dbE) throw dbE;
+
+          if (newP && newP.length > 0 && motif_ids.length > 0) {
+            const mInserts = motif_ids.map(mid => ({ product_id: newP[0].id, motif_id: mid }));
+            await supabase.from('product_motifs').insert(mInserts);
+          }
+          return Astro.redirect('/admin?success=product');
+        }
+      } catch (e: any) {
+        isError = true;
+        if (e.message?.includes('Bucket not found')) {
+          message = 'Gagal: Folder penyimpanan (Bucket) tidak ditemukan. Pastikan bucket "products" dan "settings" sudah dibuat di Supabase Storage.';
+        } else {
+          message = 'Gagal: ' + e.message;
+        }
+      }
+    }
+  }
+}
+
+const success = Astro.url.searchParams.get('success');
+if (success === 'product') message = 'Produk berhasil ditambahkan!';
+if (success === 'type') message = 'Jenis produk baru berhasil disimpan!';
+if (success === 'motif') message = 'Motif baru berhasil ditambahkan!';
+if (success === 'settings') message = 'Identitas website berhasil diperbarui!';
+---
+
+<Layout title={`Admin Panel - ${settings?.site_name || 'Batik Nusantara'}`}>
+	<section style="padding: var(--spacing-xl) 0; min-height: 80vh;">
+		<div class="container">
+			<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-xl); border-bottom: 1px solid var(--color-border); padding-bottom: var(--spacing-md); margin-top: 60px;">
+				<div style="display: flex; align-items: center; gap: var(--spacing-md);">
+					<div>
+						<h1 class="text-uppercase" style="font-size: 1.2rem; margin: 0; font-weight: 600;">{settings?.site_name || 'Batik Nusantara'} Dashboard</h1>
+						<p style="font-size: 0.8rem; opacity: 0.5;">Kelola identitas dan katalog batik Anda.</p>
+					</div>
+				</div>
+				<div style="display: flex; gap: var(--spacing-md); align-items: center;">
+					<a href="/" style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6;">Lihat Toko</a>
+					<a href="?logout=true" style="padding: 0.6rem 1.2rem; background: #fff5f5; color: #ff4d4d; border: 1px solid #ff4d4d; font-size: 0.75rem; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Logout</a>
+				</div>
+			</div>
+	
+			<!-- Overview Stats -->
+			<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl);">
+				<div class="glass" style="padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid var(--color-accent);">
+					<p class="text-uppercase opacity-50" style="font-size: 0.65rem;">Total Produk</p>
+					<h2 style="font-size: 2rem; margin: 0;">{productsData?.length || 0}</h2>
+				</div>
+				<div class="glass" style="padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid #03ac0e;">
+					<p class="text-uppercase opacity-50" style="font-size: 0.65rem;">Kategori Jenis</p>
+					<h2 style="font-size: 2rem; margin: 0;">{types?.length || 0}</h2>
+				</div>
+				<div class="glass" style="padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid #3b82f6;">
+					<p class="text-uppercase opacity-50" style="font-size: 0.65rem;">Total Motif</p>
+					<h2 style="font-size: 2rem; margin: 0;">{motifs?.length || 0}</h2>
+				</div>
+			</div>
+			
+			{message && (
+				<div class="animate-fade-in" style={`padding: 1rem; margin-bottom: 2rem; border-radius: var(--radius-sm); border: 1px solid ${isError ? '#ff4d4d' : '#03ac0e'}; background: ${isError ? '#fff5f5' : '#f5fff5'}; color: ${isError ? '#ff4d4d' : '#03ac0e'}; text-align: center; font-size: 0.9rem; font-weight: 500;`}>
+					{message}
+				</div>
+			)}
+	
+			<div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: var(--spacing-xl); align-items: start;">
+				<!-- Column 1: Forms -->
+				<div style="display: flex; flex-direction: column; gap: var(--spacing-lg);">
+					<!-- Form Product -->
+					<div style="background: white; border: 1px solid var(--color-border); padding: var(--spacing-lg); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
+						<h2 style="font-size: 1rem; margin-bottom: var(--spacing-lg); font-weight: 600;" class="text-uppercase">Tambah Produk Baru</h2>
+						
+						<form method="POST" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: var(--spacing-md);">
+							<input type="hidden" name="action" value="add_product" />
+							<div>
+								<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">Nama Produk</label>
+								<input name="name" type="text" required placeholder="Kemeja Batik Parang" style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);" />
+							</div>
+		
+							<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+								<div>
+									<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">Kode SKU</label>
+									<input name="code" type="text" placeholder="BTK-001" style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);" />
+								</div>
+								<div>
+									<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">Harga (Rp)</label>
+									<input name="price" type="number" required placeholder="450000" style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);" />
+								</div>
+							</div>
+		
+							<div>
+								<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">Jenis Produk</label>
+								<select name="type_id" required style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm); background: white;">
+									{types?.map(t => <option value={t.id}>{t.name}</option>)}
+								</select>
+							</div>
+		
+							<div>
+								<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">Motif (Multi-select)</label>
+								<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; background: #fcfcfc; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm); max-height: 120px; overflow-y: auto;">
+									{motifs?.map(m => (
+										<label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; cursor: pointer;">
+											<input type="checkbox" name="motif_ids" value={m.id} />
+											{m.name}
+										</label>
+									))}
+								</div>
+							</div>
+		
+							<div>
+								<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">Foto Produk</label>
+								<input name="image_file" type="file" accept="image/*" required style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: var(--radius-sm); background: #fcfcfc; font-size: 0.75rem;" />
+							</div>
+		
+							<div style="margin-top: var(--spacing-sm);">
+								<button type="submit" style="background: var(--color-text); color: white; padding: 0.8rem; border: none; text-transform: uppercase; letter-spacing: 2px; width: 100%; cursor: pointer; font-weight: 600; font-size: 0.75rem; border-radius: var(--radius-sm); transition: var(--transition);">Simpan Produk</button>
+							</div>
+						</form>
+					</div>
+
+					<!-- Metadata Management (Types & Motifs) -->
+					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+						<div style="background: white; border: 1px solid var(--color-border); padding: var(--spacing-lg); border-radius: var(--radius-md);">
+							<h3 style="font-size: 0.8rem; margin-bottom: 1rem; font-weight: 600;" class="text-uppercase">Tambah Jenis</h3>
+							<form method="POST" style="display: flex; flex-direction: column; gap: 0.8rem;">
+								<input type="hidden" name="action" value="add_type" />
+								<input name="name" type="text" required placeholder="Contoh: Kemeja" style="width: 100%; padding: 0.6rem; border: 1px solid #ddd; border-radius: var(--radius-sm); font-size: 0.85rem;" />
+								<button type="submit" style="background: var(--color-accent); color: white; padding: 0.6rem; border: none; font-size: 0.7rem; font-weight: 600; cursor: pointer; border-radius: var(--radius-sm);">SIMPAN</button>
+							</form>
+						</div>
+						<div style="background: white; border: 1px solid var(--color-border); padding: var(--spacing-lg); border-radius: var(--radius-md);">
+							<h3 style="font-size: 0.8rem; margin-bottom: 1rem; font-weight: 600;" class="text-uppercase">Tambah Motif</h3>
+							<form method="POST" style="display: flex; flex-direction: column; gap: 0.8rem;">
+								<input type="hidden" name="action" value="add_motif" />
+								<input name="name" type="text" required placeholder="Contoh: Parang" style="width: 100%; padding: 0.6rem; border: 1px solid #ddd; border-radius: var(--radius-sm); font-size: 0.85rem;" />
+								<button type="submit" style="background: var(--color-accent); color: white; padding: 0.6rem; border: none; font-size: 0.7rem; font-weight: 600; cursor: pointer; border-radius: var(--radius-sm);">SIMPAN</button>
+							</form>
+						</div>
+					</div>
+
+					<!-- Site Settings Management -->
+					<div style="background: white; border: 1px solid var(--color-border); padding: var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
+						<h2 style="font-size: 1rem; margin-bottom: var(--spacing-lg); font-weight: 600;" class="text-uppercase">Konfigurasi Website</h2>
+						<form method="POST" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: var(--spacing-lg);">
+							<input type="hidden" name="action" value="update_settings" />
+							
+							<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+								<div>
+									<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">Nama Website</label>
+									<input name="site_name" type="text" required value={settings?.site_name} style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);" />
+								</div>
+								<div>
+									<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">Logo Website</label>
+									<input name="logo_file" type="file" accept="image/*" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: var(--radius-sm); font-size: 0.75rem;" />
+								</div>
+							</div>
+
+							<div>
+								<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">Alamat Toko Offline</label>
+								<textarea name="address" rows="2" style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);">{settings?.address}</textarea>
+							</div>
+
+							<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+								<div>
+									<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">WhatsApp Admin</label>
+									<input name="contact_whatsapp" type="text" placeholder="Contoh: 62812345678" value={settings?.contact_whatsapp} style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);" />
+								</div>
+								<div>
+									<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">Instagram URL</label>
+									<input name="url_instagram" type="text" value={settings?.url_instagram} style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);" />
+								</div>
+							</div>
+
+							<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+								<div>
+									<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">TikTok URL</label>
+									<input name="url_tiktok" type="text" value={settings?.url_tiktok} style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);" />
+								</div>
+								<div>
+									<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">Tokopedia URL</label>
+									<input name="url_tokopedia" type="text" value={settings?.url_tokopedia} style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);" />
+								</div>
+							</div>
+
+							<div>
+								<label class="text-uppercase opacity-50" style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;">Shopee URL</label>
+								<input name="url_shopee" type="text" value={settings?.url_shopee} style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);" />
+							</div>
+
+							<button type="submit" style="background: var(--color-accent); color: white; padding: 1rem; border: none; text-transform: uppercase; letter-spacing: 2px; width: 100%; cursor: pointer; font-weight: 600; font-size: 0.8rem; border-radius: var(--radius-sm); margin-top: var(--spacing-md);">Update Konfigurasi Website</button>
+						</form>
+					</div>
+				</div>
+	
+				<!-- List Column -->
+				<div>
+					<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--spacing-lg);">
+						<h2 style="font-size: 1.1rem; font-weight: 600;">Daftar Produk Terdaftar</h2>
+						<span class="text-uppercase opacity-50" style="font-size: 0.6rem;">{productsData?.length || 0} Items</span>
+					</div>
+					
+					<div style="background: white; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm);">
+						<table style="width: 100%; border-collapse: collapse;">
+							<thead>
+								<tr style="background: #f9f9f9; border-bottom: 1px solid var(--color-border); text-align: left;" class="text-uppercase">
+									<th style="padding: 1rem; font-size: 0.65rem; opacity: 0.6;">Produk</th>
+									<th style="padding: 1rem; font-size: 0.65rem; opacity: 0.6;">Kategori</th>
+									<th style="padding: 1rem; font-size: 0.65rem; opacity: 0.6;">Harga</th>
+									<th style="padding: 1rem; font-size: 0.65rem; opacity: 0.6; text-align: center;">Aksi</th>
+								</tr>
+							</thead>
+							<tbody>
+								{productsData?.map(p => (
+									<tr style="border-bottom: 1px solid #f0f0f0; transition: background 0.2s;" class="table-row-hover">
+										<td style="padding: 1rem;">
+											<div style="display: flex; gap: 0.8rem; align-items: center;">
+												<div style="width: 40px; height: 40px; background: #eee; border-radius: 4px; overflow: hidden; flex-shrink: 0;">
+													<img src={p.image_url} style="width: 100%; height: 100%; object-fit: cover;" alt="" />
+												</div>
+												<div>
+													<div style="font-weight: 500; font-size: 0.9rem;">{p.name}</div>
+													<code style="font-size: 0.7rem; color: var(--color-muted);">{p.code || '-'}</code>
+												</div>
+											</div>
+										</td>
+										<td style="padding: 1rem;">
+											<div style="font-size: 0.85rem;">{p.types?.name}</div>
+											<div style="font-size: 0.7rem; opacity: 0.5;">
+												{p.product_motifs?.map((pm: any) => pm.motifs?.name).join(', ') || '-'}
+											</div>
+										</td>
+										<td style="padding: 1rem; font-weight: 600; font-size: 0.85rem;">
+											Rp {Number(p.price).toLocaleString('id-ID')}
+										</td>
+										<td style="padding: 1rem; text-align: center;">
+											<button title="Hapus" style="border: none; background: #fff5f5; color: #ff4d4d; padding: 0.4rem; border-radius: 4px; cursor: pointer; transition: 0.2s;">
+												<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+													<path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+													<path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+												</svg>
+											</button>
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+						{(!productsData || productsData.length === 0) && (
+							<div style="padding: var(--spacing-xl); text-align: center; opacity: 0.4;">Belum ada produk.</div>
+						)}
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<style>
+		.table-row-hover:hover {
+			background-color: #f9f9f9;
+		}
+		select:focus, input:focus, textarea:focus {
+			border-color: var(--color-accent) !important;
+			outline: none;
+		}
+	</style>
+</Layout>

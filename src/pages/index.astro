@@ -1,0 +1,151 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { supabase } from '../lib/supabase';
+
+let featuredProducts: any[] = [];
+
+if (supabase) {
+  const { data } = await supabase
+    .from('products')
+    .select('*, types(name), product_motifs(motifs(name))')
+    .order('created_at', { ascending: false })
+    .limit(3);
+  featuredProducts = data || [];
+} else {
+  // Mock fallback
+  const { products: mockProducts } = await import('../data/products');
+  featuredProducts = mockProducts.slice(0, 3).map(p => ({
+    ...p,
+    types: { name: p.type },
+    product_motifs: [{ motifs: { name: p.motif } }],
+    image_url: p.imageUrl
+  }));
+}
+---
+
+<Layout title="Eksklusivitas Indonesia">
+	<!-- Hero Section -->
+	<section class="hero" style="position: relative; min-height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #000;">
+		<div class="hero-image-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden;">
+			<img id="hero-bg" src="/images/home_hero.webp" alt="Premium Batik Background" style="width: 100%; height: 120%; object-fit: cover; opacity: 0.8; transform: translateY(0); transition: transform 0.1s linear;" />
+			<div class="hero-gradient-overlay"></div>
+			<div class="hero-radial-gradient"></div>
+		</div>
+
+		<div class="container" style="position: relative; z-index: 10; text-align: center;">
+			<div class="glass reveal" style="max-width: 800px; margin: 0 auto; padding: var(--spacing-2xl) var(--spacing-xl); border-radius: var(--radius-lg); backdrop-filter: blur(40px); background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1);">
+				<p class="text-uppercase animate-fade-in" style="color: var(--color-accent-light); margin-bottom: var(--spacing-md); letter-spacing: 4px;">Handcrafted Excellence</p>
+				<h1 class="animate-fade-in" style="font-size: clamp(3rem, 10vw, 5.5rem); color: white; line-height: 1; margin-bottom: var(--spacing-lg);">Keanggunan <br/> <span style="font-style: italic; color: var(--color-accent-light);">Warisan Nusantara</span></h1>
+				<p class="animate-fade-in" style="max-width: 600px; margin: 0 auto var(--spacing-xl); color: rgba(255,255,255,0.7); font-size: 1.1rem; line-height: 1.6;">Menghadirkan koleksi batik pilihan dengan sentuhan modern untuk gaya hidupan yang elegan dan berbudaya.</p>
+				<div class="animate-fade-in" style="display: flex; gap: var(--spacing-md); justify-content: center;">
+					<a href="/products" class="btn" style="background: white; color: black; padding: 1rem 2.5rem; font-weight: 600;">LIHAT KOLEKSI</a>
+					<a href="/about" class="btn" style="background: transparent; color: white; border: 1px solid rgba(255,255,255,0.3); padding: 1rem 2.5rem;">TENTANG KAMI</a>
+				</div>
+			</div>
+		</div>
+		
+		<!-- Scroll Indicator -->
+		<div style="position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0.5;">
+			<p class="text-uppercase" style="font-size: 0.5rem; color: white;">Scroll</p>
+			<div style="width: 1px; height: 50px; background: linear-gradient(to bottom, white, transparent);"></div>
+		</div>
+	</section>
+
+	<!-- Features/Benefits -->
+	<section style="padding: var(--spacing-xl) 0; background: white;">
+		<div class="container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-xl);">
+			<div class="reveal-up" data-delay="0" style="text-align: center; padding: var(--spacing-lg);">
+				<div style="font-size: 2rem; margin-bottom: var(--spacing-md);">✨</div>
+				<h3 class="text-uppercase" style="margin-bottom: var(--spacing-sm);">Premium Quality</h3>
+				<p style="font-size: 0.9rem; opacity: 0.6;">Hanya menggunakan bahan terbaik dan proses batik autentik.</p>
+			</div>
+			<div class="reveal-up" data-delay="100" style="text-align: center; padding: var(--spacing-lg);">
+				<div style="font-size: 2rem; margin-bottom: var(--spacing-md);">🌿</div>
+				<h3 class="text-uppercase" style="margin-bottom: var(--spacing-sm);">Modern Design</h3>
+				<p style="font-size: 0.9rem; opacity: 0.6;">Motif tradisional yang disesuaikan dengan gaya kontemporer.</p>
+			</div>
+			<div class="reveal-up" data-delay="200" style="text-align: center; padding: var(--spacing-lg);">
+				<div style="font-size: 2rem; margin-bottom: var(--spacing-md);">🌏</div>
+				<h3 class="text-uppercase" style="margin-bottom: var(--spacing-sm);">Ethical Sourcing</h3>
+				<p style="font-size: 0.9rem; opacity: 0.6;">Mendukung pengrajin lokal di seluruh penjuru Indonesia.</p>
+			</div>
+		</div>
+	</section>
+
+	<!-- Featured Collection -->
+	<section class="featured reveal" style="padding: var(--spacing-xl) 0;">
+		<div class="container">
+			<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: var(--spacing-lg);">
+				<div>
+					<p class="text-uppercase opacity-50" style="margin-bottom: 0.5rem;">The Latest Arrivals</p>
+					<h2 class="section-title" style="margin: 0;">Koleksi Unggulan</h2>
+				</div>
+				<a href="/products" class="text-uppercase" style="font-size: 0.7rem; color: var(--color-accent); font-weight: 600; border-bottom: 2px solid var(--color-accent); padding-bottom: 2px;">Lihat Semua</a>
+			</div>
+	
+			<div class="product-grid" style="margin-top: var(--spacing-lg);">
+				{featuredProducts.map((p, index) => (
+					<div class="product-card reveal-up" data-delay={index * 150}>
+						<div class="product-image">
+							<a href={`/products?name=${encodeURIComponent(p.name)}`}>
+								<img src={p.image_url || 'https://via.placeholder.com/400x600?text=Batik'} alt={p.name} loading="lazy" />
+							</a>
+						</div>
+						<div class="product-info">
+							<p class="text-uppercase opacity-50" style="font-size: 0.65rem;">
+								{p.types?.name} • {p.product_motifs?.map(pm => pm.motifs?.name).join(', ') || '-'}
+							</p>
+							<h3 style="font-family: var(--font-main); font-weight: 500;">{p.name}</h3>
+							<p class="price-tag">Rp {Number(p.price).toLocaleString('id-ID')}</p>
+						</div>
+					</div>
+				))}
+			</div>
+		</div>
+	</section>
+
+	<!-- Heritage Section -->
+	<section style="padding: var(--spacing-xl) 0; background: #fdfcfb; overflow: hidden;">
+		<div class="container">
+			<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: var(--spacing-2xl); align-items: center;">
+				<div class="reveal">
+					<p class="text-uppercase color-accent" style="margin-bottom: var(--spacing-md); color: var(--color-accent);">Our Legacy</p>
+					<h2 class="section-title" style="font-size: 3.5rem;">Sentuhan Tangan <br/> <span style="font-style: italic;">Penuh Makna</span></h2>
+					<p style="margin-bottom: var(--spacing-lg); opacity: 0.8; font-size: 1.1rem; line-height: 1.8;">Setiap helai kain di koleksi kami adalah hasil dari ketelitian dan dedikasi pengrajin. Melalui proses canting tradisional, setiap motif menceritakan filosofi mendalam tentang kehidupan dan kearifan lokal.</p>
+					<div style="display: flex; gap: var(--spacing-lg); margin-top: var(--spacing-xl);">
+						<div>
+							<h4 style="font-family: var(--font-serif); font-size: 1.5rem; margin-bottom: 0.5rem;">100%</h4>
+							<p class="text-uppercase opacity-50" style="font-size: 0.6rem;">Authentic Handmade</p>
+						</div>
+						<div style="width: 1px; background: var(--color-border);"></div>
+						<div>
+							<h4 style="font-family: var(--font-serif); font-size: 1.5rem; margin-bottom: 0.5rem;">50+</h4>
+							<p class="text-uppercase opacity-50" style="font-size: 0.6rem;">Master Artisans</p>
+						</div>
+					</div>
+				</div>
+				<div class="reveal-right">
+					<div style="aspect-ratio: 4/5; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-lg);">
+						<img src="/images/batik_artisan.webp" alt="Artisan at work" style="width: 100%; height: 100%; object-fit: cover;" />
+					</div>
+					<div class="glass reveal-scale" data-delay="400" style="position: absolute; bottom: -30px; left: -30px; padding: var(--spacing-lg); border-radius: var(--radius-md); max-width: 250px;">
+						<p style="font-style: italic; font-size: 0.9rem; margin: 0;">"Batik adalah doa yang digambar di atas kain."</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- Newsletter/CTA -->
+
+	<script is:inline>
+		// Hero Parallax Effect
+		const heroBg = document.getElementById('hero-bg');
+		window.addEventListener('scroll', () => {
+			const scroll = window.scrollY;
+			if (scroll < window.innerHeight) {
+				heroBg.style.transform = `translateY(${scroll * 0.3}px)`;
+			}
+		});
+	</script>
+</Layout>

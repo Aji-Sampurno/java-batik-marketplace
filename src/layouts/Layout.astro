@@ -1,0 +1,159 @@
+---
+interface Props {
+	title: string;
+}
+
+const { title } = Astro.props;
+import { supabase } from '../lib/supabase';
+import '../styles/index.css';
+
+// Fetch Site Settings
+let settings: any = { site_name: 'Batik Nusantara' };
+if (supabase) {
+  try {
+    const { data } = await supabase.from('settings').select('*').single();
+    if (data) settings = data;
+  } catch (e) {
+    console.error('Settings fetch error:', e);
+  }
+}
+
+// Logic for Text Logo (Split by space)
+const nameParts = settings.site_name.split(' ');
+const firstWord = nameParts[0];
+const restWords = nameParts.slice(1).join(' ');
+---
+
+<!doctype html>
+<html lang="id">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="description" content="Marketplace Batik Eksklusif - Modern & Minimalist" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<link rel="icon" type="image/svg+xml" href={settings.logo_url || "/favicon.svg"} />
+		<title>{title} | {settings.site_name}</title>
+	</head>
+	<body style="scroll-behavior: smooth;">
+		<header id="main-header" style="position: absolute; top: 0; left: 0; right: 0; z-index: 100; transition: var(--transition); padding: 1.2rem 0;">
+			<nav class="container" style="display: flex; justify-content: space-between; align-items: center;">
+				<div class="logo">
+					<a href="/" style="display: flex; align-items: center; gap: 0.8rem;">
+						{settings.logo_url ? (
+							<img src={settings.logo_url} alt={settings.site_name} style="height: 48px; width: auto;" />
+						) : (
+							<span style="font-family: 'Playfair Display', serif; font-size: 1.6rem; letter-spacing: 1px; font-weight: 500; color: white;">
+								{firstWord} <span style="font-style: italic; color: var(--color-accent-light);">{restWords}</span>
+							</span>
+						)}
+					</a>
+				</div>
+				<ul style="display: flex; gap: var(--spacing-lg); list-style: none;" class="text-uppercase nav-links">
+					<li><a href="/products" style="font-weight: 500; color: rgba(255,255,255,0.8);">Katalog</a></li>
+					<li><a href="/about" style="font-weight: 500; color: rgba(255,255,255,0.8);">Tentang</a></li>
+					<li><a href="/admin" style="opacity: 0.3; font-size: 0.6rem; color: white;">Admin</a></li>
+				</ul>
+			</nav>
+		</header>
+		<main>
+			<slot />
+		</main>
+		<footer style="background: #0a0a0a; color: white; padding: var(--spacing-2xl) 0 var(--spacing-xl) 0; border-top: 1px solid rgba(255,255,255,0.05);">
+			<div class="container">
+				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-xl); margin-bottom: var(--spacing-xl);">
+					<!-- Brand -->
+					<div>
+						<a href="/" style="display: inline-block; margin-bottom: var(--spacing-md);">
+							{settings.logo_url ? (
+								<img src={settings.logo_url} alt={settings.site_name} style="height: 40px;" />
+							) : (
+								<span style="font-family: 'Playfair Display', serif; font-size: 1.4rem; letter-spacing: 1px; color: white;">
+									{firstWord} <span style="font-style: italic; color: var(--color-accent-light);">{restWords}</span>
+								</span>
+							)}
+						</a>
+						<p style="font-size: 0.8rem; opacity: 0.4; line-height: 1.6; max-width: 250px;">
+							Menghubungkan warisan budaya Indonesia dengan gaya hidup modern yang minimalis.
+						</p>
+					</div>
+
+					<!-- Location -->
+					<div>
+						<h4 class="text-uppercase" style="font-size: 0.75rem; margin-bottom: var(--spacing-lg); letter-spacing: 1px; color: var(--color-accent-light);">Butik Offline</h4>
+						<p style="font-size: 0.85rem; opacity: 0.7; line-height: 1.8;">
+							{settings.address || 'Alamat belum diatur di dashboard admin.'}
+						</p>
+					</div>
+
+					<!-- Contact -->
+					<div>
+						<h4 class="text-uppercase" style="font-size: 0.75rem; margin-bottom: var(--spacing-lg); letter-spacing: 1px; color: var(--color-accent-light);">Layanan Admin</h4>
+						<ul style="list-style: none; padding: 0;">
+							{settings.contact_whatsapp && (
+								<li style="margin-bottom: 0.5rem;">
+									<a href={`https://wa.me/${settings.contact_whatsapp}`} target="_blank" style="font-size: 0.85rem; color: white; opacity: 0.7; text-decoration: none; border-bottom: 1px solid transparent; transition: 0.3s;" onmouseover="this.style.opacity=1; this.style.borderBottomColor='white'" onmouseout="this.style.opacity=0.7; this.style.borderBottomColor='transparent'">WhatsApp: +{settings.contact_whatsapp}</a>
+								</li>
+							)}
+							<li><a href="/about" style="font-size: 0.85rem; color: white; opacity: 0.7;">Tentang Kami</a></li>
+							<li><a href="/products" style="font-size: 0.85rem; color: white; opacity: 0.7;">Koleksi Terbaru</a></li>
+						</ul>
+					</div>
+
+					<!-- Channels -->
+					<div>
+						<h4 class="text-uppercase" style="font-size: 0.75rem; margin-bottom: var(--spacing-lg); letter-spacing: 1px; color: var(--color-accent-light);">Kunjungi Kami</h4>
+						<div style="display: flex; flex-direction: column; gap: 0.5rem;">
+							{settings.url_tokopedia && <a href={settings.url_tokopedia} target="_blank" style="font-size: 0.85rem; color: white; opacity: 0.7;">Tokopedia</a>}
+							{settings.url_shopee && <a href={settings.url_shopee} target="_blank" style="font-size: 0.85rem; color: white; opacity: 0.7;">Shopee</a>}
+							{settings.url_instagram && <a href={settings.url_instagram} target="_blank" style="font-size: 0.85rem; color: white; opacity: 0.7;">Instagram</a>}
+							{settings.url_tiktok && <a href={settings.url_tiktok} target="_blank" style="font-size: 0.85rem; color: white; opacity: 0.7;">TikTok</a>}
+						</div>
+					</div>
+				</div>
+
+				<div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: var(--spacing-xl); text-align: center;">
+					<p class="text-uppercase opacity-30" style="font-size: 0.65rem; letter-spacing: 2px;">
+						&copy; 2026 {settings.site_name}. All Rights Reserved.
+					</p>
+				</div>
+			</div>
+		</footer>
+
+		<script is:inline>
+			// Centralized Scroll & Animation Logic
+			const header = document.getElementById('main-header');
+			
+			const handleHeader = () => {
+				if (window.scrollY > 50) {
+					header.classList.add('glass-header');
+					header.style.position = 'fixed';
+				} else {
+					header.classList.remove('glass-header');
+					header.style.position = 'absolute';
+				}
+			};
+
+			const observerOptions = {
+				threshold: 0.1,
+				rootMargin: '0px 0px -50px 0px'
+			};
+
+			const revealObserver = new IntersectionObserver((entries) => {
+				entries.forEach(entry => {
+					if (entry.isIntersecting) {
+						const delay = entry.target.getAttribute('data-delay') || 0;
+						setTimeout(() => {
+							entry.target.classList.add('active');
+						}, delay);
+						revealObserver.unobserve(entry.target);
+					}
+				});
+			}, observerOptions);
+
+			// Init
+			window.addEventListener('scroll', handleHeader);
+			document.querySelectorAll('.reveal, .reveal-up, .reveal-left, .reveal-right, .reveal-scale').forEach(el => revealObserver.observe(el));
+			handleHeader(); // Initial check
+		</script>
+	</body>
+</html>

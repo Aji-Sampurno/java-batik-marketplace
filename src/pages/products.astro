@@ -1,0 +1,172 @@
+---
+export const prerender = false;
+import Layout from '../layouts/Layout.astro';
+import { supabase } from '../lib/supabase';
+
+const { searchParams } = Astro.url;
+const typeFilter = searchParams.get('type');
+const motifFilter = searchParams.get('motif');
+
+console.log("DEBUG: products.astro", { typeFilter, motifFilter });
+
+// Fetch Types and Motifs for the filter UI
+let typesData: any[] = [];
+let motifsData: any[] = [];
+let productsData: any[] = [];
+
+if (supabase) {
+  const { data: t } = await supabase.from('types').select('*');
+  const { data: m } = await supabase.from('motifs').select('*');
+  typesData = t || [];
+  motifsData = m || [];
+
+  // Get IDs for filtering
+  const targetType = typesData.find(t => t.name === typeFilter);
+  const targetMotif = motifsData.find(m => m.name === motifFilter);
+  
+  console.log("DEBUG: DB Match", { targetType, targetMotif });
+
+  // Build the query
+  let query = supabase.from('products').select('*, types(name), product_motifs(motif_id, motifs(name))');
+  
+  if (targetType) query = query.eq('type_id', targetType.id);
+  // Filtering by motif will be handled in memory for simplicity or via join if complex
+  
+  const { data: p, error: pError } = await query.order('created_at', { ascending: false });
+  productsData = p || [];
+
+  if (pError) console.error("Filter Query Error:", pError);
+} else {
+  // Fallback to mock data if supabase is not configured
+  const { products: mockProducts } = await import('../data/products');
+  productsData = mockProducts.map(p => ({
+    ...p,
+    types: { name: p.type },
+    product_motifs: [{ motifs: { name: p.motif } }],
+    image_url: p.imageUrl,
+    wa_number: p.waNumber,
+    tokopedia_url: p.tokopediaUrl
+  }));
+  
+  const uniqueTypes = [...new Set(mockProducts.map(p => p.type))];
+  typesData = uniqueTypes.map(t => ({ name: t }));
+  
+  const uniqueMotifs = [...new Set(mockProducts.map(p => p.motif))];
+  motifsData = uniqueMotifs.map(m => ({ name: m }));
+}
+
+const waBaseUrl = "https://wa.me/";
+
+// Final check to handle joined data format variations
+const filteredProducts = productsData?.filter(p => {
+    // Handle both object and array format for joined data
+    const getJoinName = (val: any) => Array.isArray(val) ? val[0]?.name : val?.name;
+    
+    const pTypeName = getJoinName(p.types);
+    
+    // Check if any of the product's motifs match the filter
+    const productMotifs = p.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
+    
+    const typeMatch = !typeFilter || pTypeName === typeFilter;
+    const motifMatch = !motifFilter || productMotifs.includes(motifFilter);
+    return typeMatch && motifMatch;
+}) || [];
+---
+
+<Layout title="Koleksi Eksklusif Galeri">
+	<section style="padding: var(--spacing-xl) 0; background: #fff;">
+		<div class="container">
+			<header style="margin-bottom: var(--spacing-2xl); border-bottom: 1px solid var(--color-border); padding-bottom: var(--spacing-lg);">
+				<p class="text-uppercase opacity-50" style="margin-bottom: 0.5rem;">The Collection</p>
+				<h1 class="section-title" style="margin: 0; font-size: 3.5rem;">Katalog <span style="font-style: italic;">Pilihan</span></h1>
+			</header>
+
+			<div style="display: grid; grid-template-columns: 250px 1fr; gap: var(--spacing-2xl); align-items: start;">
+				<!-- Sidebar Filters -->
+				<aside style="position: sticky; top: 120px; display: flex; flex-direction: column; gap: var(--spacing-xl);">
+					<div class="filter-group">
+						<h3 class="text-uppercase" style="font-size: 0.7rem; color: var(--color-accent); margin-bottom: 1.5rem; letter-spacing: 2px;">Jenis Produk</h3>
+						<div style="display: flex; flex-direction: column; gap: 0.8rem;">
+							<a href="/products" class={!typeFilter ? 'active-filter' : ''} style="font-size: 0.9rem; opacity: 0.7;">Semua Jenis</a>
+							{typesData?.map(t => (
+								<a href={`/products?type=${encodeURIComponent(t.name)}${motifFilter ? `&motif=${encodeURIComponent(motifFilter)}` : ''}`} 
+								   class={typeFilter === t.name ? 'active-filter' : ''}
+								   style="font-size: 0.9rem; opacity: 0.7;">{t.name}</a>
+							))}
+						</div>
+					</div>
+
+					<div class="filter-group">
+						<h3 class="text-uppercase" style="font-size: 0.7rem; color: var(--color-accent); margin-bottom: 1.5rem; letter-spacing: 2px;">Motif Batik</h3>
+						<div style="display: flex; flex-direction: column; gap: 0.8rem;">
+							<a href="/products" class={!motifFilter ? 'active-filter' : ''} style="font-size: 0.9rem; opacity: 0.7;">Semua Motif</a>
+							{motifsData?.map(m => (
+								<a href={`/products?motif=${encodeURIComponent(m.name)}${typeFilter ? `&type=${encodeURIComponent(typeFilter)}` : ''}`} 
+								   class={motifFilter === m.name ? 'active-filter' : ''}
+								   style="font-size: 0.9rem; opacity: 0.7;">{m.name}</a>
+							))}
+						</div>
+					</div>
+
+					<div style="margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid var(--color-border);">
+						<p style="font-size: 0.75rem; opacity: 0.4; font-style: italic;">Menampilkan {filteredProducts.length} produk dari koleksi kami.</p>
+					</div>
+				</aside>
+
+				<!-- Product Grid -->
+				<main>
+					<div class="product-grid" style="margin-top: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--spacing-xl);">
+						{filteredProducts.map((p, index) => (
+							<div class="product-card reveal-up" data-delay={(index % 4) * 100}>
+								<div class="product-image">
+									<img src={p.image_url || 'https://via.placeholder.com/400x600?text=Batik'} alt={p.name} loading="lazy" />
+								</div>
+								<div class="product-info">
+									<p class="text-uppercase color-accent" style="font-size: 0.65rem; color: var(--color-accent); margin-bottom: 0.2rem;">
+										{p.types?.name} • {p.product_motifs?.map((pm: any) => pm.motifs?.name).join(', ') || '-'}
+									</p>
+									<h3 style="font-family: var(--font-main); font-size: 1.2rem; font-weight: 500; margin-bottom: 0.5rem;">{p.name}</h3>
+									{p.code && <code style="font-size: 0.7rem; background: #f9f9f9; padding: 0.2rem 0.4rem; color: #888; border-radius: 2px;">{p.code}</code>}
+									<p class="price-tag" style="margin-top: 1rem;">Rp {Number(p.price).toLocaleString('id-ID')}</p>
+									
+									<div class="actions" style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+										{p.tokopedia_url && (
+											<a href={p.tokopedia_url} target="_blank" 
+											   style="background: #1a1a1a; color: white; text-align: center; padding: 0.8rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+												Beli Sekarang
+											</a>
+										)}
+										<a href={`${waBaseUrl}${p.wa_number}?text=Halo, saya tertarik dengan produk ${p.name}`} target="_blank" 
+										   style="border: 1px solid var(--color-text); text-align: center; padding: 0.8rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px;">
+											Tanya Designer
+										</a>
+									</div>
+								</div>
+							</div>
+						))}
+					</div>
+
+					{filteredProducts.length === 0 && (
+						<div class="reveal" style="padding: var(--spacing-xl) 0; text-align: center; background: #f9f9f9; border-radius: var(--radius-md); margin-top: 2rem;">
+							<p style="font-style: italic; opacity: 0.5;">Maaf, koleksi yang Anda cari belum tersedia.</p>
+							<a href="/products" style="text-decoration: underline; margin-top: 1rem; display: block; font-size: 0.8rem;">Lihat Semua Koleksi</a>
+						</div>
+					)}
+				</main>
+			</div>
+		</div>
+	</section>
+
+	<style>
+		.active-filter {
+			color: var(--color-accent) !important;
+			opacity: 1 !important;
+			font-weight: 600;
+			padding-left: 0.5rem;
+			border-left: 2px solid var(--color-accent);
+		}
+		.product-card:hover h3 {
+			color: var(--color-accent);
+		}
+	</style>
+</Layout>
