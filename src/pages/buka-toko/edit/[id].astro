@@ -2,6 +2,7 @@
 export const prerender = false;
 import Layout from "../../../layouts/Layout.astro";
 import { supabase } from "../../../lib/supabase";
+import DeleteConfirmModal from "../../../components/DeleteConfirmModal.astro";
 
 // Check for session (Authentication Gate)
 const session = Astro.cookies.get("admin_session");
@@ -39,13 +40,26 @@ if (supabase) {
 }
 
 if (!product) {
-	return Astro.redirect("/admin");
+	return Astro.redirect("/buka-toko");
 }
 
 // Handle Form Submission
 if (Astro.request.method === "POST") {
 	try {
 		const formData = await Astro.request.formData();
+		const action = formData.get("action");
+
+		if (action === "delete_product") {
+			// Delete motifs relation first
+			await supabase.from("product_motifs").delete().eq("product_id", id);
+			const { error } = await supabase
+				.from("products")
+				.delete()
+				.eq("id", id);
+			if (error) throw error;
+			return Astro.redirect("/buka-toko?success=delete");
+		}
+
 		const name = formData.get("name");
 		const price = formData.get("price");
 		const type_id = formData.get("type_id");
@@ -114,7 +128,7 @@ if (Astro.request.method === "POST") {
 			await supabase.from("product_motifs").insert(mInserts);
 		}
 
-		return Astro.redirect("/admin?success=status"); // Redirect to admin with success
+		return Astro.redirect("/buka-toko?success=status"); // Redirect to admin with success
 	} catch (e: any) {
 		isError = true;
 		message = "Gagal memperbarui produk: " + e.message;
@@ -140,7 +154,7 @@ if (Astro.request.method === "POST") {
 					</p>
 				</div>
 				<a
-					href="/admin"
+					href="/buka-toko"
 					style="font-size: 0.8rem; text-transform: uppercase; color: var(--color-muted); border-bottom: 1px solid #ccc; padding-bottom: 2px;"
 					>Kembali ke Dashboard</a
 				>
@@ -386,10 +400,10 @@ if (Astro.request.method === "POST") {
 					</div>
 
 					<div
-						style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg); margin-top: var(--spacing-md);"
+						style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--spacing-lg); margin-top: var(--spacing-md);"
 					>
 						<a
-							href="/admin"
+							href="/buka-toko"
 							style="text-align: center; padding: 1rem; border: 1px solid #ddd; color: var(--color-muted); text-transform: uppercase; letter-spacing: 2px; font-weight: 600; font-size: 0.75rem; border-radius: var(--radius-sm);"
 							>Batal</a
 						>
@@ -398,11 +412,25 @@ if (Astro.request.method === "POST") {
 							style="background: var(--color-text); color: white; padding: 1rem; border: none; text-transform: uppercase; letter-spacing: 2px; font-weight: 600; font-size: 0.75rem; border-radius: var(--radius-sm); cursor: pointer; transition: 0.3s;"
 							>Simpan Perubahan</button
 						>
+						<button
+							type="button"
+							onclick={`const f = document.getElementById('deleteForm'); showDeleteConfirm(f, 'Apakah Anda yakin ingin menghapus produk ini secara permanen?')`}
+							style="background: #fff5f5; color: #ff4d4d; border: 1px solid #ff4d4d; padding: 1rem; text-transform: uppercase; letter-spacing: 2px; font-weight: 600; font-size: 0.75rem; border-radius: var(--radius-sm); cursor: pointer; transition: 0.3s;"
+							onmouseover="this.style.background='#ff4d4d'; this.style.color='white'"
+							onmouseout="this.style.background='#fff5f5'; this.style.color='#ff4d4d'"
+							>Hapus Produk</button
+						>
 					</div>
+				</form>
+
+				<!-- Hidden Delete Form -->
+				<form id="deleteForm" method="POST" style="display: none;">
+					<input type="hidden" name="action" value="delete_product" />
 				</form>
 			</div>
 		</div>
 	</section>
+	<DeleteConfirmModal />
 </Layout>
 
 <style>

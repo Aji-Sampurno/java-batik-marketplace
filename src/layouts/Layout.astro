@@ -19,9 +19,12 @@ if (supabase) {
 }
 
 // Logic for Text Logo (Split by space)
-const nameParts = settings.site_name.split(' ');
+const nameParts = settings.site_name.split(" ");
 const firstWord = nameParts[0];
-const restWords = nameParts.slice(1).join(' ');
+const restWords = nameParts.slice(1).join(" ");
+
+// Admin Visibility Check
+const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
 ---
 
 <!doctype html>
@@ -53,8 +56,16 @@ const restWords = nameParts.slice(1).join(' ');
 				<!-- Desktop Navigation -->
 				<ul style="display: flex; gap: var(--spacing-lg); list-style: none;" class="text-uppercase nav-links hide-mobile">
 					<li><a href="/products" style="font-weight: 500; color: rgba(255,255,255,0.8);">Katalog</a></li>
-					<li><a href="/about" style="font-weight: 500; color: rgba(255,255,255,0.8);">Tentang</a></li>
-					<li><a href="/admin" style="opacity: 0.3; font-size: 0.6rem; color: white;">Admin</a></li>
+					<li>
+						<a href="/about" style="font-weight: 500; color: rgba(255,255,255,0.8);">Tentang</a>
+					</li>
+					{
+						isAdmin && (
+							<li>
+								<a href="/buka-toko" style="opacity: 0.3; font-size: 0.6rem; color: white;">Admin</a>
+							</li>
+						)
+					}
 				</ul>
 
 				<!-- Mobile Menu Toggle -->
@@ -72,8 +83,16 @@ const restWords = nameParts.slice(1).join(' ');
 				<ul style="list-style: none; text-align: center; display: flex; flex-direction: column; gap: var(--spacing-lg);" class="text-uppercase">
 					<li><a href="/" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Beranda</a></li>
 					<li><a href="/products" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Katalog</a></li>
-					<li><a href="/about" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Tentang Kami</a></li>
-					<li><a href="/admin" style="opacity: 0.5; font-size: 0.8rem; color: var(--color-text);">Admin Panel</a></li>
+					<li>
+						<a href="/about" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Tentang Kami</a>
+					</li>
+					{
+						isAdmin && (
+							<li>
+								<a href="/buka-toko" style="opacity: 0.5; font-size: 0.8rem; color: var(--color-text);">Admin Panel</a>
+							</li>
+						)
+					}
 				</ul>
 				
 				<div style="margin-top: var(--spacing-xl); text-align: center; opacity: 0.6;">
@@ -141,8 +160,13 @@ const restWords = nameParts.slice(1).join(' ');
 					</div>
 				</div>
 
-				<div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: var(--spacing-xl); text-align: center;">
-					<p class="text-uppercase opacity-30" style="font-size: 0.65rem; letter-spacing: 2px;">
+				<div
+					style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: var(--spacing-xl); text-align: center; position: relative;"
+				>
+					<p
+						class="text-uppercase opacity-30"
+						style="font-size: 0.65rem; letter-spacing: 2px;"
+					>
 						&copy; 2026 {settings.site_name}. All Rights Reserved.
 					</p>
 				</div>

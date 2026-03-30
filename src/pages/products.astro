@@ -15,12 +15,16 @@ console.log("DEBUG: products.astro", { typeFilter, motifFilter, sizeFilter, sear
 let typesData: any[] = [];
 let motifsData: any[] = [];
 let productsData: any[] = [];
+let settings: any = { contact_whatsapp: '628123456789' };
 
 if (supabase) {
   const { data: t } = await supabase.from('types').select('*');
   const { data: m } = await supabase.from('motifs').select('*');
   typesData = t || [];
   motifsData = m || [];
+
+  const { data: s } = await supabase.from('settings').select('*').single();
+  if (s) settings = s;
 
   // Get IDs for filtering
   const targetType = typesData.find(t => t.name === typeFilter);
@@ -87,7 +91,7 @@ const filteredProducts = productsData?.filter((p: any) => {
 ---
 
 <Layout title="Koleksi Eksklusif Galeri">
-	<section style="padding: var(--spacing-xl) 0; background: #fff;">
+	<section style="padding: 90px 0 80px 0; background: #fff;">
 		<div class="container">
 			<header class="catalog-header">
 				<p class="text-uppercase opacity-50 header-subtitle">The Collection</p>
@@ -198,10 +202,10 @@ const filteredProducts = productsData?.filter((p: any) => {
 												{p.is_active ? 'Beli Sekarang' : 'Stok Habis'}
 											</a>
 										)}
-										<a href={p.is_active ? `${waBaseUrl}${p.wa_number}?text=Halo, saya tertarik dengan produk ${p.name}` : 'javascript:void(0)'} 
+										<a href={p.is_active ? `${waBaseUrl}${settings.contact_whatsapp}?text=Halo, saya tertarik dengan produk ${p.name}` : 'javascript:void(0)'} 
 										   target={p.is_active ? "_blank" : "_self"} 
 										   class={`wa-btn ${!p.is_active ? 'disabled-btn' : ''}`}>
-											{p.is_active ? 'Tanya Designer' : 'Cek Ketersediaan'}
+											{p.is_active ? 'Chat Admin' : 'Cek Ketersediaan'}
 										</a>
 									</div>
 								</div>
@@ -219,6 +223,7 @@ const filteredProducts = productsData?.filter((p: any) => {
 			</div>
 		</div>
 	</section>
+
 
 	<style>
 		.catalog-header {
