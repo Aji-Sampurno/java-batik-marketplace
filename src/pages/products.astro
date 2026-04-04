@@ -14,30 +14,62 @@ console.log("DEBUG: products.astro", { typeFilter, motifFilter, sizeFilter, sear
 // Fetch Types and Motifs for the filter UI
 let typesData: any[] = [];
 let motifsData: any[] = [];
+let sizesData: any[] = [];
 let productsData: any[] = [];
+let hierarchicalTypes: any[] = [];
+let activePathIds: any[] = [];
 let settings: any = { contact_whatsapp: '628123456789' };
 
 if (supabase) {
   const { data: t } = await supabase.from('types').select('*');
   const { data: m } = await supabase.from('motifs').select('*');
+  const { data: sz } = await supabase.from('sizes').select('*');
   typesData = t || [];
   motifsData = m || [];
+  sizesData = sz || [];
 
   const { data: s } = await supabase.from('settings').select('*').single();
   if (s) settings = s;
 
+  // Hierarchical Helper: Sort categories into a flat list with levels
+  const buildCategoryTree = (list: any[], parentId = null, depth = 0): any[] => {
+    let result: any[] = [];
+    list.filter((item) => item.parent_id === parentId).forEach((item) => {
+      result.push({ ...item, depth });
+      const children = buildCategoryTree(list, item.id, depth + 1);
+      result = result.concat(children);
+    });
+    return result;
+  };
+
+  hierarchicalTypes = buildCategoryTree(typesData);
+  
   // Get IDs for filtering
   const targetType = typesData.find(t => t.name === typeFilter);
   const targetMotif = motifsData.find(m => m.name === motifFilter);
   
   console.log("DEBUG: DB Match", { targetType, targetMotif });
 
+  // Get active ancestry path for conditional visibility
+  const getAncestry = (list: any[], currentId: any): any[] => {
+    if (!currentId) return [];
+    const item = list.find(t => t.id === currentId);
+    if (!item) return [];
+    return [item.id, ...getAncestry(list, item.parent_id)];
+  };
+
+  activePathIds = getAncestry(typesData, targetType?.id || null);
+
   // Build the query
-  // Build the query - Show all products to allow "Stok Habis" status visibility
-  let query = supabase.from('products').select('*, types(name), product_motifs(motif_id, motifs(name))');
+  let query = supabase.from('products').select('*, types(name), product_motifs(motif_id, motifs(name)), product_categories(category_id, types(name))');
   
-  if (targetType) query = query.eq('type_id', targetType.id);
-  if (sizeFilter) query = query.contains('sizes', [sizeFilter]); // Filter by array item
+  if (targetType) {
+    // If filtering by type, we check both the main type_id AND the join table for any level matches
+    // Note: Filtering specifically by the join table can be done via 'product_categories.category_id'
+    // but for simplicity here we will fetch then filter in JS to handle hierarchical "OR" logic easily
+  }
+  
+  if (sizeFilter) query = query.contains('sizes', [sizeFilter]); // Proper array filter
   
   const { data: p, error: pError } = await query.order('created_at', { ascending: false });
   productsData = p || [];
@@ -58,37 +90,54 @@ if (supabase) {
   const uniqueTypes = [...new Set(mockProducts.map(p => p.type))];
   typesData = uniqueTypes.map(t => ({ name: t }));
   
+  uniqueTypes.forEach(t => {
+      hierarchicalTypes.push({ name: t, depth: 0, parent_id: null });
+  });
+  
   const uniqueMotifs = [...new Set(mockProducts.map(p => p.motif))];
   motifsData = uniqueMotifs.map(m => ({ name: m }));
+
+  const mockSizes = ['S', 'M', 'L', 'XL', 'XXL', 'All Size'];
+  sizesData = mockSizes.map(s => ({ name: s }));
 }
 
 const waBaseUrl = "https://wa.me/";
 
 // Final check to handle joined data format variations and comprehensive search
 const filteredProducts = productsData?.filter((p: any) => {
-    const getJoinName = (val: any) => Array.isArray(val) ? val[0]?.name : val?.name;
-    const pTypeName = getJoinName(p.types);
+    // Hierarchical Type Match: Check if the filtered name matches ANY associated category
+    const productCategoryNames = p.product_categories?.map((pc: any) => pc.types?.name) || [];
+    if (p.types?.name) productCategoryNames.push(p.types.name); // Include primary type
+    
+    const typeMatch = !typeFilter || productCategoryNames.includes(typeFilter);
+    
+    // Motif Filter
     const productMotifs = p.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
-    
-    // Type Filter
-    const typeMatch = !typeFilter || pTypeName === typeFilter;
-    
-    // Motif Filter (Selected from sidebar)
     const motifMatch = !motifFilter || productMotifs.includes(motifFilter);
     
-    // Search Query (Multi-column: Name, SKU/Code, Motif Name)
+    // Search Query
     let searchMatch = true;
     if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const nameMatch = p.name?.toLowerCase().includes(q);
         const codeMatch = p.code?.toLowerCase().includes(q);
         const motifSearchMatch = productMotifs.some((m: any) => m?.toLowerCase().includes(q));
-        searchMatch = nameMatch || codeMatch || motifSearchMatch;
+        const categorySearchMatch = productCategoryNames.some((c: any) => c?.toLowerCase().includes(q));
+        searchMatch = nameMatch || codeMatch || motifSearchMatch || categorySearchMatch;
     }
 
     return typeMatch && motifMatch && searchMatch;
 }) || [];
+
+// Sort: Active products first, then by created_at descending
+const sortedProducts = filteredProducts.sort((a: any, b: any) => {
+    if (a.is_active === b.is_active) {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+    return a.is_active ? -1 : 1;
+});
 ---
+
 
 <Layout title="Koleksi Eksklusif Galeri">
 	<section style="padding: 90px 0 80px 0; background: #fff;">
@@ -122,11 +171,19 @@ const filteredProducts = productsData?.filter((p: any) => {
 							<span class="text-uppercase" style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;">Jenis Produk</span>
 							<svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5; transition: transform 0.3s ease;"><polyline points="6 9 12 15 18 9"></polyline></svg>
 						</summary>
-						<div style="display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem 0 1rem 0;">
+						<div style="display: flex; flex-direction: column; gap: 0.2rem; padding: 0.6rem 0 1rem 0;">
 							<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: '' })}`} class={!typeFilter ? 'active-filter' : 'filter-link'}>Semua Jenis</a>
-							{typesData?.map(t => (
+							{hierarchicalTypes?.filter(t => {
+								// Visible if L1 OR parent is in active path
+								return t.parent_id === null || activePathIds.includes(t.parent_id);
+							}).map(t => (
 								<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: t.name })}`} 
-								   class={typeFilter === t.name ? 'active-filter' : 'filter-link'}>{t.name}</a>
+								   class={typeFilter === t.name ? 'active-filter' : 'filter-link'}
+								   style={`padding-left: ${t.depth * 1.2 + 0.8}rem; font-size: ${0.85 - (t.depth * 0.05)}rem; ${t.depth > 0 ? 'opacity: 0.8;' : 'font-weight: 500;'}`}>
+									{activePathIds.includes(t.id) && <span style="color: var(--color-accent); margin-right: 4px;">•</span>}
+									{t.depth > 0 && <span style="opacity: 0.3; margin-right: 6px;">∟</span>}
+									<span style={typeFilter === t.name ? "font-weight: 700; text-decoration: underline;" : ""}>{t.name}</span>
+								</a>
 							))}
 						</div>
 					</details>
@@ -137,10 +194,10 @@ const filteredProducts = productsData?.filter((p: any) => {
 							<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: '' })}`} 
 							   class={!sizeFilter ? 'active-chip' : 'chip'} 
 							   style="font-size: 0.7rem;">Semua</a>
-							{['S', 'M', 'L', 'XL', 'XXL', 'All Size'].map(s => (
-								<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: s })}`} 
-								   class={sizeFilter === s ? 'active-chip' : 'chip'}
-								   style="font-size: 0.7rem;">{s}</a>
+							{sizesData?.map(s => (
+								<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: s.name })}`} 
+								   class={sizeFilter === s.name ? 'active-chip' : 'chip'}
+								   style="font-size: 0.7rem;">{s.name}</a>
 							))}
 						</div>
 					</div>
@@ -167,16 +224,20 @@ const filteredProducts = productsData?.filter((p: any) => {
 				<!-- Product Grid -->
 				<main>
 					<div class="product-grid" style="margin-top: 0;">
-						{filteredProducts.map((p, index) => (
-							<div class="product-card reveal-up" data-delay={(index % 4) * 100}>
-								<div class="product-image">
+						{sortedProducts.map((p, index) => (
+							<div class={`product-card reveal-up ${!p.is_active ? 'product-inactive' : ''}`} data-delay={(index % 4) * 100}>
+								<div class="product-image" style="position: relative;">
 									<a href={`/products/${p.id}`}>
 										<img src={p.image_url || 'https://via.placeholder.com/400x600?text=Batik'} alt={p.name} loading="lazy" class={!p.is_active ? 'out-of-stock-img' : ''} />
 										{!p.is_active && (
-											<div class="overlay-badge">Stok Habis</div>
+											<div class="ribbon-wrapper">
+												<div class="ribbon">HABIS</div>
+											</div>
 										)}
+
 									</a>
 								</div>
+
 								<div class="product-info" style="display: flex; flex-direction: column; flex: 1;">
 									<p class="text-uppercase color-accent" style="font-size: 0.65rem; color: var(--color-accent); margin-bottom: 0.2rem;">
 										{p.types?.name} • {p.product_motifs?.map((pm: any) => pm.motifs?.name).join(', ') || '-'}
@@ -192,26 +253,34 @@ const filteredProducts = productsData?.filter((p: any) => {
 										))}
 									</div>
 
-									<p class="price-tag">Rp {Number(p.price).toLocaleString('id-ID')}</p>
+									<div style="display: flex; align-items: center; gap: 0.5rem;">
+										{p.original_price && p.original_price > p.price && (
+											<span style="text-decoration: line-through; color: #999; font-size: 0.8rem;">
+												Rp {Number(p.original_price).toLocaleString('id-ID')}
+											</span>
+										)}
+										<p class="price-tag" style="margin: 0;">Rp {Number(p.price).toLocaleString('id-ID')}</p>
+									</div>
 									
 									<div class="actions">
 										{p.tokopedia_url && (
 											<a href={p.is_active ? p.tokopedia_url : 'javascript:void(0)'} 
 											   target={p.is_active ? "_blank" : "_self"} 
 											   class={`buy-btn ${!p.is_active ? 'disabled-btn' : ''}`}>
-												{p.is_active ? 'Beli Sekarang' : 'Stok Habis'}
+												{p.is_active ? 'Beli Sekarang' : 'HABIS TERJUAL'}
 											</a>
 										)}
 										<a href={p.is_active ? `${waBaseUrl}${settings.contact_whatsapp}?text=Halo, saya tertarik dengan produk ${p.name}` : 'javascript:void(0)'} 
 										   target={p.is_active ? "_blank" : "_self"} 
 										   class={`wa-btn ${!p.is_active ? 'disabled-btn' : ''}`}>
-											{p.is_active ? 'Chat Admin' : 'Cek Ketersediaan'}
+											{p.is_active ? 'Chat Admin' : 'CEK PRODUK LAIN'}
 										</a>
 									</div>
 								</div>
 							</div>
 						))}
 					</div>
+
 
 					{filteredProducts.length === 0 && (
 						<div class="reveal" style="padding: var(--spacing-xl) 0; text-align: center; background: #f9f9f9; border-radius: var(--radius-md); margin-top: 2rem;">
@@ -283,7 +352,7 @@ const filteredProducts = productsData?.filter((p: any) => {
 		}
 
 		.product-image {
-			aspect-ratio: 2/3;
+			aspect-ratio: 4/5;
 			overflow: hidden;
 		}
 
@@ -294,25 +363,46 @@ const filteredProducts = productsData?.filter((p: any) => {
 			transition: filter 0.3s ease;
 		}
 
-		.out-of-stock-img {
-			filter: grayscale(0.8) opacity(0.5);
+		.product-inactive {
+			opacity: 0.85;
 		}
 
-		.overlay-badge {
-			position: absolute;
-			top: 10px;
-			right: 10px;
-			background: #fef2f2;
-			color: #b91c1c;
-			padding: 0.2rem 0.6rem;
-			font-size: 0.65rem;
-			font-weight: 800;
-			text-transform: uppercase;
-			letter-spacing: 1px;
-			border-radius: 4px;
-			border: 1px solid rgba(185, 28, 28, 0.2);
-			z-index: 2;
+		.out-of-stock-img {
+			filter: grayscale(1) contrast(0.8);
 		}
+
+		/* Diagonal Ribbon */
+		.ribbon-wrapper {
+			width: 120px;
+			height: 120px;
+			overflow: hidden;
+			position: absolute;
+			top: -4px;
+			right: -4px;
+			z-index: 10;
+			pointer-events: none;
+		}
+
+		.ribbon {
+			font-family: var(--font-main);
+			font-weight: 800;
+			color: #fff;
+			text-align: center;
+			transform: rotate(45deg);
+			position: absolute;
+			padding: 7px 0;
+			top: 25px;
+			right: -40px;
+			width: 180px;
+			background-color: #b91c1c;
+			box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+			font-size: 0.75rem;
+			letter-spacing: 3px;
+			text-transform: uppercase;
+		}
+
+
+
 
 		.product-title {
 			font-family: var(--font-main);

@@ -1370,7 +1370,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
 									>Motif (Multi-select)</label
 								>
-								<div class="motif-style-container" id="motif-grid">
+								<div class="motif-style-container">
 									{
 										motifs?.map((m) => (
 											<label class="motif-style-label">
@@ -2291,15 +2291,13 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 
 				if (checkedL2s.length === 0) {
 					l3Area.style.display = "none";
-					updateName(); // Trigger update name when L2 is unchecked
 					return;
 				}
 
 				let hasL3 = false;
 				checkedL2s.forEach((l2) => {
-					const l2Id = l2.getAttribute("data-id");
 					const l3s = hierarchicalTypes.filter(
-						(t) => String(t.parent_id) === String(l2Id),
+						(t) => t.parent_id === l2.getAttribute("data-id"),
 					);
 					if (l3s.length > 0) {
 						hasL3 = true;
@@ -2307,22 +2305,16 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 							const label = document.createElement("label");
 							label.className = "motif-style-label";
 							label.innerHTML = `
-								<input type="checkbox" name="category_ids" value="${cc.id}" data-id="${cc.id}" data-parent="${l2Id}" />
+								<input type="checkbox" name="category_ids" value="${cc.id}" data-id="${cc.id}" data-parent="${l2.getAttribute("data-id")}" />
 								${cc.name}
 							`;
 							l3Grid.appendChild(label);
-
-							// Trigger name update when L3 is changed
-							const cb = label.querySelector("input");
-							cb.addEventListener("change", updateName);
 						});
 					}
 				});
 
 				l3Area.style.display = hasL3 ? "block" : "none";
-				updateName(); // Trigger name update when L2 is changed
 			}
-
 
 			l2Children.forEach((c) => {
 				const label = document.createElement("label");
@@ -2334,75 +2326,9 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 				l2Row.appendChild(label);
 
 				const cb = label.querySelector("input");
-				cb.addEventListener("change", (e) => {
-					if (cb.checked) {
-						// Single-select behavior for Level 2
-						l2Row.querySelectorAll("input:checked").forEach((other) => {
-							if (other !== cb) other.checked = false;
-						});
-					}
-					updateL3Selection();
-					updateName();
-				});
+				cb.addEventListener("change", updateL3Selection);
 			});
-			updateName(); // Initial update when L2s appear
 		}
-
-		// --- Product Naming Automation Logic ---
-		const nameInput = document.getElementById("product_name_input");
-		const itemCodeInput = document.getElementById("product_item_code_input");
-		const categoryContainer = document.getElementById("sub-category-checkboxes");
-
-		function updateName() {
-			if (!nameInput) return;
-
-			// 1. Get Category (Jenis) - ALL LEVELS
-			const selectedCategories = [];
-			const l1Text = document.querySelector('[data-ss-type="product-l1"] .ss-input');
-			if (l1Text && l1Text.value && l1Text.value !== "") {
-				selectedCategories.push(l1Text.value);
-			}
-
-			// Get L2 and L3 from checkboxes within sub-category container
-			if (categoryContainer) {
-				const checkedSubCats = Array.from(
-					categoryContainer.querySelectorAll("input:checked"),
-				);
-				checkedSubCats.forEach((cb) => {
-					const catName = cb.parentElement.textContent.trim();
-					if (catName && !selectedCategories.includes(catName)) {
-						selectedCategories.push(catName);
-					}
-				});
-			}
-
-			const jenis = selectedCategories.join(" ");
-
-			// 2. Get Motifs
-			let motifStr = "";
-			const motifGrid = document.getElementById("motif-grid");
-			if (motifGrid) {
-				const checkedMotifs = Array.from(
-					motifGrid.querySelectorAll("input:checked"),
-				);
-				motifStr = checkedMotifs
-					.map((m) => m.parentElement.textContent.trim())
-					.join(", ");
-			}
-
-
-			// 3. Get Item Code
-			const itemCode = itemCodeInput?.value.trim() || "";
-
-			// Combine
-			const parts = [];
-			if (jenis) parts.push(jenis);
-			if (motifStr) parts.push(motifStr);
-			if (itemCode) parts.push(itemCode);
-
-			nameInput.value = parts.join(" ");
-		}
-
 
 		function setupToggles() {
 			const configs = [
@@ -2462,25 +2388,84 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 			});
 		}
 
-		// Naming Listeners Setup
+		// Product Naming Automation
 		function setupNamingAutomation() {
-			const itemCodeInput = document.getElementById("product_item_code_input");
-			const categoryContainer = document.getElementById("sub-category-checkboxes");
+			const nameInput = document.getElementById("product_name_input");
+			const itemCodeInput = document.getElementById(
+				"product_item_code_input",
+			);
+			const categoryContainer = document.getElementById(
+				"sub-category-checkboxes",
+			);
+			const motifContainer = document.querySelector(
+				".motif-style-container",
+			); // Note: ensure this is the motif one
 			const l1Input = document.getElementById("l1_category_input");
+			const l1Text = document.querySelector(
+				'[data-ss-type="product-l1"] .ss-input',
+			);
 
+			function updateName() {
+				// 1. Get Category (Jenis) - LEVEL 1 ONLY as requested
+				let jenis = "";
+				if (l1Text && l1Text.value) {
+					jenis = l1Text.value;
+				}
+
+				// 2. Get Motifs
+				let motifStr = "";
+				// We need the specific motif container. The previous selector might be vague.
+				// Let's find it by looking for the one after the label "Motif (Multi-select)"
+				const motifLabels = Array.from(
+					document.querySelectorAll("label"),
+				).filter((l) => l.textContent.includes("Motif (Multi-select)"));
+				if (motifLabels.length > 0) {
+					const mCont = motifLabels[0].nextElementSibling;
+					const checkedMotifs = Array.from(
+						mCont.querySelectorAll("input:checked"),
+					);
+					motifStr = checkedMotifs
+						.map((m) => m.parentElement.textContent.trim())
+						.join(", ");
+				}
+
+				// 3. Get Item Code
+				const itemCode = itemCodeInput.value.trim();
+
+				// Combine
+				const parts = [];
+				if (jenis) parts.push(jenis);
+				if (motifStr) parts.push(motifStr);
+				if (itemCode) parts.push(itemCode);
+
+				nameInput.value = parts.join(" ");
+			}
+
+			// Listeners
 			itemCodeInput?.addEventListener("input", updateName);
+
+			// For dynamic checkboxes (Category L2/L3), we use delegation
 			categoryContainer?.addEventListener("change", updateName);
 
-			const motifGrid = document.getElementById("motif-grid");
-			motifGrid?.addEventListener("change", updateName);
+			// For Motifs (static on load)
+			const motifLabels = Array.from(
+				document.querySelectorAll("label"),
+			).filter((l) => l.textContent.includes("Motif (Multi-select)"));
+			if (motifLabels.length > 0) {
+				const mCont = motifLabels[0].nextElementSibling;
+				mCont.addEventListener("change", updateName);
+			}
 
-
+			// For L1 (Searchable Select Callback Hack)
+			// The current ss system doesn't trigger 'change' easily on hidden inputs.
+			// Let's monkey patch or poll? Better: add a MutationObserver or hook into the existing click.
+			// Actually, the ss system already calls renderSubCategoriesFromList.
+			// I can wrap that or just observe the hidden input.
 			if (l1Input) {
 				const observer = new MutationObserver(updateName);
 				observer.observe(l1Input, { attributes: true });
 			}
 		}
-
 
 		setupToggles();
 		initSearchableSelect();

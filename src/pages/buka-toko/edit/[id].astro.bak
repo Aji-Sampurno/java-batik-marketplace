@@ -421,7 +421,7 @@ if (Astro.request.method === "POST") {
 							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
 							>Motif Batik (Bisa Pilih Banyak)</label
 						>
-						<div class="motif-style-container" id="motif-grid">
+						<div class="motif-style-container">
 							{
 								motifs?.map((m) => (
 									<label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
@@ -664,69 +664,29 @@ if (Astro.request.method === "POST") {
 	/* Cascading Checkboxes Styles */
 	.motif-style-container {
 		display: grid !important;
-		grid-template-columns: repeat(
-			auto-fill,
-			minmax(110px, 1fr)
-		) !important;
-		gap: 0.75rem 1rem !important;
-		background: #fdfdfd !important;
-		padding: 1.2rem !important;
-		border: 1px solid #e2e8f0 !important;
-		border-radius: 12px !important;
-		max-height: 250px !important;
+		grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
+		gap: 0.5rem 1rem !important;
+		background: #fcfcfc !important;
+		padding: 1rem !important;
+		border: 1px solid #ddd !important;
+		border-radius: var(--radius-sm) !important;
+		max-height: 200px !important;
 		overflow-y: auto !important;
+		margin-top: 0.5rem !important;
 	}
 	.motif-style-label {
 		display: flex !important;
 		align-items: center !important;
-		gap: 0.6rem !important;
-		padding: 0.4rem 0.6rem !important;
-		color: #334155 !important;
-		border-radius: 6px !important;
-		transition:
-			background 0.2s,
-			color 0.2s !important;
-		white-space: nowrap !important;
-		width: auto !important;
+		gap: 0.5rem !important;
 		font-size: 0.85rem !important;
 		cursor: pointer !important;
-	}
-	.motif-style-label:hover {
-		background: #f1f5f9 !important;
-	}
-	.motif-style-label input[type="checkbox"] {
-		width: 16px !important;
-		height: 16px !important;
-		cursor: pointer !important;
-		margin: 0 !important;
-		accent-color: #000 !important;
-	}
+		white-space: nowrap !important;
+		width: auto !important;
 	}
 </style>
 
 <script is:inline define:vars={{ hierarchicalTypes, currentCategoryIds }}>
 	// Price Markup Logic (15% Discount Markup)
-	const priceInput = document.getElementById("product_price_input");
-	const markupPreview = document.getElementById("price_markup_preview");
-	const markupVal = document.getElementById("markup_val");
-	const originalPriceInput = document.getElementById(
-		"original_price_input",
-	);
-
-	if (priceInput) {
-		priceInput.addEventListener("input", (e) => {
-			const val = parseFloat(e.target.value);
-			if (!isNaN(val) && val > 0) {
-				const originalPrice = Math.round(val / 0.85);
-				markupVal.innerText = originalPrice.toLocaleString("id-ID");
-				originalPriceInput.value = originalPrice;
-				markupPreview.style.display = "block";
-			} else {
-				markupPreview.style.display = "none";
-				originalPriceInput.value = "";
-			}
-		});
-	}
 
 	function initSearchableSelect() {
 		const selectContainers =
@@ -743,9 +703,7 @@ if (Astro.request.method === "POST") {
 			input.addEventListener("click", (e) => {
 				e.stopPropagation();
 				dropdown.classList.toggle("show");
-				if (dropdown.classList.contains("show")) {
-					searchInput.focus();
-				}
+				if (dropdown.classList.contains("show")) searchInput.focus();
 			});
 
 			searchInput.addEventListener("input", (e) => {
@@ -754,23 +712,12 @@ if (Astro.request.method === "POST") {
 				options.forEach((opt) => {
 					const text = opt.textContent.toLowerCase();
 					if (text.includes(term)) {
-						opt.style.display = "block";
+						opt.style.display = "flex";
 						hasResults = true;
 					} else {
 						opt.style.display = "none";
 					}
 				});
-				const noRes = optionsContainer.querySelector(".ss-no-results");
-				if (!hasResults) {
-					if (!noRes) {
-						const div = document.createElement("div");
-						div.className = "ss-no-results";
-						div.textContent = "Kategori tidak ditemukan";
-						optionsContainer.appendChild(div);
-					}
-				} else if (noRes) {
-					noRes.remove();
-				}
 			});
 
 			options.forEach((opt) => {
@@ -783,11 +730,7 @@ if (Astro.request.method === "POST") {
 
 					hiddenInput.value = val;
 					input.value = text;
-					options.forEach((o) => o.classList.remove("selected"));
-					opt.classList.add("selected");
 					dropdown.classList.remove("show");
-					searchInput.value = "";
-					options.forEach((o) => (o.style.display = "block"));
 
 					if (ssType === "product-l1") {
 						renderSubCategoriesFromList([val]);
@@ -806,15 +749,14 @@ if (Astro.request.method === "POST") {
 		const container = document.getElementById("sub-category-checkboxes");
 		if (!container || parentIds.length === 0) return;
 
-		container.style.display = "block";
 		container.innerHTML = `
-			<div style="margin-top: 1rem;">
+			<div style="margin-top: 1.5rem;">
 				<label class="text-uppercase opacity-50" style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;">Jenis Produk (Level 2)</label>
-				<div class="motif-style-container" id="l2-selection-row"></div>
+				<div class="motif-style-container" id="l2-selection-row" style="margin-top: 0;"></div>
 			</div>
-			<div id="l3-selection-area" style="display: none; margin-top: 1rem;">
+			<div id="l3-selection-area" style="display: none; margin-top: 1.5rem;">
 				<label class="text-uppercase opacity-50" style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;">Pilihan Detail (Level 3)</label>
-				<div class="motif-style-container" id="l3-grid"></div>
+				<div class="motif-style-container" id="l3-grid" style="margin-top: 0;"></div>
 			</div>
 		`;
 
@@ -829,34 +771,26 @@ if (Astro.request.method === "POST") {
 			l3Grid.innerHTML = "";
 			let hasL3 = false;
 
-			if (checkedL2s.length === 0) {
-				l3Area.style.display = "none";
-				updateName();
-				return;
+			if (checkedL2s.length > 0) {
+				checkedL2s.forEach((l2) => {
+					const l3s = hierarchicalTypes.filter(
+						(t) => t.parent_id === l2.getAttribute("data-id"),
+					);
+					if (l3s.length > 0) {
+						hasL3 = true;
+						l3s.forEach((cc) => {
+							const label = document.createElement("label");
+							label.className = "motif-style-label";
+							const isChecked = currentCategoryIds.includes(cc.id)
+								? "checked"
+								: "";
+							label.innerHTML = `<input type="checkbox" name="category_ids" value="${cc.id}" data-id="${cc.id}" ${isChecked} /> ${cc.name}`;
+							l3Grid.appendChild(label);
+						});
+					}
+				});
 			}
-
-			checkedL2s.forEach((l2) => {
-				const l2Id = l2.getAttribute("data-id");
-				const l3s = hierarchicalTypes.filter(
-					(t) => String(t.parent_id) === String(l2Id),
-				);
-				if (l3s.length > 0) {
-					hasL3 = true;
-					l3s.forEach((cc) => {
-						const label = document.createElement("label");
-						label.className = "motif-style-label";
-						const isChecked = currentCategoryIds.includes(cc.id)
-							? "checked"
-							: "";
-						label.innerHTML = `<input type="checkbox" name="category_ids" value="${cc.id}" data-id="${cc.id}" ${isChecked} /> ${cc.name}`;
-						l3Grid.appendChild(label);
-
-						label.querySelector("input").addEventListener("change", updateName);
-					});
-				}
-			});
 			l3Area.style.display = hasL3 ? "block" : "none";
-			updateName();
 		}
 
 		const l2Children = hierarchicalTypes.filter((t) =>
@@ -870,102 +804,87 @@ if (Astro.request.method === "POST") {
 				: "";
 			label.innerHTML = `<input type="checkbox" name="category_ids" value="${c.id}" data-id="${c.id}" ${isChecked} /> ${c.name}`;
 			l2Row.appendChild(label);
-
-			const cb = label.querySelector("input");
-			cb.addEventListener("change", (e) => {
-				if (cb.checked) {
-					// Single-select behavior for Level 2
-					l2Row.querySelectorAll("input:checked").forEach((other) => {
-						if (other !== cb) other.checked = false;
-					});
-				}
-				updateL3Selection();
-				updateName();
-			});
+			label
+				.querySelector("input")
+				.addEventListener("change", updateL3Selection);
 		});
 
-		// Trigger initial population
+		// Trigger L3 update for initial load
 		updateL3Selection();
-		updateName();
 	}
 
-	// --- Product Naming Automation Logic ---
-	const nameInput = document.getElementById("product_name_input");
-	const itemCodeInput = document.getElementById("product_item_code_input");
-	const categoryContainer = document.getElementById("sub-category-checkboxes");
-
-	function updateName() {
-		if (!nameInput) return;
-
-		// 1. Get Category (Jenis) - ALL LEVELS
-		const selectedCategories = [];
-		const l1Text = document.querySelector('[data-ss-type="product-l1"] .ss-input');
-		if (l1Text && l1Text.value && l1Text.value !== "") {
-			selectedCategories.push(l1Text.value);
-		}
-
-		// Get L2 and L3 from checkboxes within sub-category container
-		if (categoryContainer) {
-			const checkedSubCats = Array.from(
-				categoryContainer.querySelectorAll("input:checked"),
-			);
-			checkedSubCats.forEach((cb) => {
-				const catName = cb.parentElement.textContent.trim();
-				if (catName && !selectedCategories.includes(catName)) {
-					selectedCategories.push(catName);
-				}
-			});
-		}
-
-		const jenis = selectedCategories.join(" ");
-
-		// 2. Get Motifs
-		let motifStr = "";
-		const motifGrid = document.getElementById("motif-grid");
-		if (motifGrid) {
-			const checkedMotifs = Array.from(
-				motifGrid.querySelectorAll("input:checked"),
-			);
-			motifStr = checkedMotifs
-				.map((m) => m.parentElement.textContent.trim())
-				.join(", ");
-		}
-
-		// 3. Get Item Code
-		const itemCode = itemCodeInput?.value.trim() || "";
-
-		// Combine
-		const parts = [];
-		if (jenis) parts.push(jenis);
-		if (motifStr) parts.push(motifStr);
-		if (itemCode) parts.push(itemCode);
-
-		nameInput.value = parts.join(" ");
-	}
-
-
-	// Naming Listeners Setup
+	// Product Naming Automation
 	function setupNamingAutomation() {
-		const itemCodeInput = document.getElementById("product_item_code_input");
+		const nameInput = document.getElementById("product_name_input");
+		const itemCodeInput = document.getElementById(
+			"product_item_code_input",
+		);
+		const categoryContainer = document.getElementById(
+			"sub-category-checkboxes",
+		);
 		const l1Input = document.getElementById("l1_category_input");
+		const l1Text = document.querySelector(
+			'[data-ss-type="product-l1"] .ss-input',
+		);
+
+		function updateName() {
+			// 1. Get Category (Jenis) - LEVEL 1 ONLY as requested
+			let jenis = "";
+			if (l1Text && l1Text.value) {
+				jenis = l1Text.value;
+			}
+
+			// 2. Get Motifs
+			let motifStr = "";
+			const motifLabels = Array.from(
+				document.querySelectorAll("label"),
+			).filter((l) =>
+				l.textContent.includes("Motif Batik (Bisa Pilih Banyak)"),
+			);
+			if (motifLabels.length > 0) {
+				const mCont = motifLabels[0].nextElementSibling;
+				const checkedMotifs = Array.from(
+					mCont.querySelectorAll("input:checked"),
+				);
+				motifStr = checkedMotifs
+					.map((m) => m.parentElement.textContent.trim())
+					.join(", ");
+			}
+
+			// 3. Get Item Code
+			const itemCode = itemCodeInput.value.trim();
+
+			// Combine
+			const parts = [];
+			if (jenis) parts.push(jenis);
+			if (motifStr) parts.push(motifStr);
+			if (itemCode) parts.push(itemCode);
+
+			nameInput.value = parts.join(" ");
+		}
 
 		itemCodeInput?.addEventListener("input", updateName);
+		categoryContainer?.addEventListener("change", updateName);
+		const motifLabels = Array.from(
+			document.querySelectorAll("label"),
+		).filter((l) =>
+			l.textContent.includes("Motif Batik (Bisa Pilih Banyak)"),
+		);
+		if (motifLabels.length > 0) {
+			const mCont = motifLabels[0].nextElementSibling;
+			mCont.addEventListener("change", updateName);
+		}
 
-		const motifGrid = document.getElementById("motif-grid");
-		motifGrid?.addEventListener("change", updateName);
-
+		// Observe L1 hidden input for changes
 		if (l1Input) {
 			const observer = new MutationObserver(updateName);
 			observer.observe(l1Input, { attributes: true });
 		}
 	}
 
-
 	// Initialize
 	initSearchableSelect();
-	const initialL1Input = document.getElementById("l1_category_input");
-	if (initialL1Input && initialL1Input.value) {
-		renderSubCategoriesFromList([initialL1Input.value]);
-	}
+	const initialL1 = document.getElementById("l1_category_input").value;
+	if (initialL1) renderSubCategoriesFromList([initialL1]);
 	setupNamingAutomation();
 </script>
