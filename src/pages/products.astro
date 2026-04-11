@@ -18,6 +18,7 @@ let sizesData: any[] = [];
 let productsData: any[] = [];
 let hierarchicalTypes: any[] = [];
 let activePathIds: any[] = [];
+let targetType: any = null;
 let settings: any = { contact_whatsapp: '628123456789' };
 
 if (supabase) {
@@ -32,11 +33,12 @@ if (supabase) {
   if (s) settings = s;
 
   // Hierarchical Helper: Sort categories into a flat list with levels
-  const buildCategoryTree = (list: any[], parentId = null, depth = 0): any[] => {
+  const buildCategoryTree = (list: any[], parentId = null, depth = 0, currentPath = ""): any[] => {
     let result: any[] = [];
     list.filter((item) => item.parent_id === parentId).forEach((item) => {
-      result.push({ ...item, depth });
-      const children = buildCategoryTree(list, item.id, depth + 1);
+      const fullPath = currentPath ? `${currentPath} > ${item.name}` : item.name;
+      result.push({ ...item, depth, fullPath });
+      const children = buildCategoryTree(list, item.id, depth + 1, fullPath);
       result = result.concat(children);
     });
     return result;
@@ -44,8 +46,8 @@ if (supabase) {
 
   hierarchicalTypes = buildCategoryTree(typesData);
   
-  // Get IDs for filtering
-  const targetType = typesData.find(t => t.name === typeFilter);
+  // Get category by Path (New) or ID (Legacy)
+  targetType = hierarchicalTypes.find(t => t.fullPath === typeFilter || t.id === typeFilter);
   const targetMotif = motifsData.find(m => m.name === motifFilter);
   
   console.log("DEBUG: DB Match", { targetType, targetMotif });
@@ -99,17 +101,25 @@ if (supabase) {
 
   const mockSizes = ['S', 'M', 'L', 'XL', 'XXL', 'All Size'];
   sizesData = mockSizes.map(s => ({ name: s }));
+
+  // Populate targetType for mock data
+  targetType = hierarchicalTypes.find(t => t.fullPath === typeFilter || t.name === typeFilter);
 }
 
 const waBaseUrl = "https://wa.me/";
 
 // Final check to handle joined data format variations and comprehensive search
 const filteredProducts = productsData?.filter((p: any) => {
-    // Hierarchical Type Match: Check if the filtered name matches ANY associated category
+    // Hierarchical Type Match: Check if the filtered ID matches ANY associated category
+    const productCategoryIds = p.product_categories?.map((pc: any) => pc.category_id) || [];
+    if (p.type_id) productCategoryIds.push(p.type_id);
+
+    // Also keep names for legacy/search support if needed, but ID is primary
     const productCategoryNames = p.product_categories?.map((pc: any) => pc.types?.name) || [];
-    if (p.types?.name) productCategoryNames.push(p.types.name); // Include primary type
+    if (p.types?.name) productCategoryNames.push(p.types.name);
     
-    const typeMatch = !typeFilter || productCategoryNames.includes(typeFilter);
+    // Match by ID primarily (from resolved targetType), fallback to Path string
+    const typeMatch = !typeFilter || productCategoryIds.includes(targetType?.id) || productCategoryNames.includes(typeFilter);
     
     // Motif Filter
     const productMotifs = p.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
@@ -177,12 +187,12 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 								// Visible if L1 OR parent is in active path
 								return t.parent_id === null || activePathIds.includes(t.parent_id);
 							}).map(t => (
-								<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: t.name })}`} 
-								   class={typeFilter === t.name ? 'active-filter' : 'filter-link'}
+								<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: t.fullPath })}`} 
+								   class={(typeFilter === t.fullPath || typeFilter === t.id) ? 'active-filter' : 'filter-link'}
 								   style={`padding-left: ${t.depth * 1.2 + 0.8}rem; font-size: ${0.85 - (t.depth * 0.05)}rem; ${t.depth > 0 ? 'opacity: 0.8;' : 'font-weight: 500;'}`}>
 									{activePathIds.includes(t.id) && <span style="color: var(--color-accent); margin-right: 4px;">•</span>}
 									{t.depth > 0 && <span style="opacity: 0.3; margin-right: 6px;">∟</span>}
-									<span style={typeFilter === t.name ? "font-weight: 700; text-decoration: underline;" : ""}>{t.name}</span>
+									<span style={(typeFilter === t.fullPath || typeFilter === t.id) ? "font-weight: 700; text-decoration: underline;" : ""}>{t.name}</span>
 								</a>
 							))}
 						</div>
