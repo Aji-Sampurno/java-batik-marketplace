@@ -50,14 +50,34 @@ if (supabase) {
 
 	// Filter products by search query (In-memory)
 	if (adminSearchQuery) {
-		const q = adminSearchQuery.toLowerCase();
+		const q = adminSearchQuery.toLowerCase().trim();
+		const keywords = q.split(/\s+/).filter((kw) => kw.length > 0);
+
 		productsData = productsData.filter((p) => {
-			const nameMatch = p.name?.toLowerCase().includes(q);
-			const codeMatch = p.code?.toLowerCase().includes(q);
-			const motifMatch = p.product_motifs?.some((pm: any) =>
-				pm.motifs?.name?.toLowerCase().includes(q),
-			);
-			return nameMatch || codeMatch || motifMatch;
+			// Get all category names for this product
+			const productCategoryNames =
+				p.product_categories?.map((pc: any) => pc.types?.name) || [];
+			if (p.types?.name) productCategoryNames.push(p.types.name);
+
+			// Get all motif names for this product
+			const productMotifs =
+				p.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
+
+			// ALL keywords must match at least one search surface
+			return keywords.every((kw) => {
+				const nameMatch = p.name?.toLowerCase().includes(kw);
+				const codeMatch = p.code?.toLowerCase().includes(kw);
+				const motifMatch = productMotifs.some((m: any) =>
+					m?.toLowerCase().includes(kw),
+				);
+				const categoryMatch = productCategoryNames.some((c: any) =>
+					c?.toLowerCase().includes(kw),
+				);
+
+				return (
+					nameMatch || codeMatch || motifMatch || categoryMatch
+				);
+			});
 		});
 	}
 } else {

@@ -1,15 +1,36 @@
 ---
 export const prerender = false;
-import Layout from '../layouts/Layout.astro';
-import { supabase } from '../lib/supabase';
+import Layout from "../layouts/Layout.astro";
+import { supabase } from "../lib/supabase";
 
 const { searchParams } = Astro.url;
-const typeFilter = searchParams.get('type');
-const motifFilter = searchParams.get('motif');
-const sizeFilter = searchParams.get('size'); // New size filter
-const searchQuery = searchParams.get('q'); // New search query
+const typeFilter = searchParams.get("type");
+const motifFilter = searchParams.get("motif");
+const sizeFilter = searchParams.get("size"); // New size filter
+const searchQuery = searchParams.get("q");
+const minPrice = searchParams.get("minP")
+	? Number(searchParams.get("minP"))
+	: null;
+const maxPrice = searchParams.get("maxP")
+	? Number(searchParams.get("maxP"))
+	: null;
+const sort = searchParams.get("sort") || "newest";
 
-console.log("DEBUG: products.astro", { typeFilter, motifFilter, sizeFilter, searchQuery });
+const getSortUrl = (newSort: string) => {
+	const p = new URLSearchParams(searchParams);
+	p.set("sort", newSort);
+	return `?${p.toString()}`;
+};
+
+console.log("DEBUG: products.astro", {
+	typeFilter,
+	motifFilter,
+	sizeFilter,
+	searchQuery,
+	minPrice,
+	maxPrice,
+	sort,
+});
 
 // Fetch Types and Motifs for the filter UI
 let typesData: any[] = [];
@@ -19,152 +40,283 @@ let productsData: any[] = [];
 let hierarchicalTypes: any[] = [];
 let activePathIds: any[] = [];
 let targetType: any = null;
-let settings: any = { contact_whatsapp: '628123456789' };
+let settings: any = { contact_whatsapp: "628123456789" };
 
 if (supabase) {
-  const { data: t } = await supabase.from('types').select('*');
-  const { data: m } = await supabase.from('motifs').select('*');
-  const { data: sz } = await supabase.from('sizes').select('*');
-  typesData = t || [];
-  motifsData = m || [];
-  sizesData = sz || [];
+	const { data: t } = await supabase.from("types").select("*");
+	const { data: m } = await supabase.from("motifs").select("*");
+	const { data: sz } = await supabase.from("sizes").select("*");
+	typesData = t || [];
+	motifsData = m || [];
+	sizesData = sz || [];
 
-  const { data: s } = await supabase.from('settings').select('*').single();
-  if (s) settings = s;
+	const { data: s } = await supabase.from("settings").select("*").single();
+	if (s) settings = s;
 
-  // Hierarchical Helper: Sort categories into a flat list with levels
-  const buildCategoryTree = (list: any[], parentId = null, depth = 0, currentPath = ""): any[] => {
-    let result: any[] = [];
-    list.filter((item) => item.parent_id === parentId).forEach((item) => {
-      const fullPath = currentPath ? `${currentPath} > ${item.name}` : item.name;
-      result.push({ ...item, depth, fullPath });
-      const children = buildCategoryTree(list, item.id, depth + 1, fullPath);
-      result = result.concat(children);
-    });
-    return result;
-  };
+	// Hierarchical Helper: Sort categories into a flat list with levels
+	const buildCategoryTree = (
+		list: any[],
+		parentId = null,
+		depth = 0,
+		currentPath = "",
+	): any[] => {
+		let result: any[] = [];
+		list.filter((item) => item.parent_id === parentId).forEach((item) => {
+			const fullPath = currentPath
+				? `${currentPath} > ${item.name}`
+				: item.name;
+			result.push({ ...item, depth, fullPath });
+			const children = buildCategoryTree(
+				list,
+				item.id,
+				depth + 1,
+				fullPath,
+			);
+			result = result.concat(children);
+		});
+		return result;
+	};
 
-  hierarchicalTypes = buildCategoryTree(typesData);
-  
-  // Get category by Path (New) or ID (Legacy)
-  targetType = hierarchicalTypes.find(t => t.fullPath === typeFilter || t.id === typeFilter);
-  const targetMotif = motifsData.find(m => m.name === motifFilter);
-  
-  console.log("DEBUG: DB Match", { targetType, targetMotif });
+	hierarchicalTypes = buildCategoryTree(typesData);
 
-  // Get active ancestry path for conditional visibility
-  const getAncestry = (list: any[], currentId: any): any[] => {
-    if (!currentId) return [];
-    const item = list.find(t => t.id === currentId);
-    if (!item) return [];
-    return [item.id, ...getAncestry(list, item.parent_id)];
-  };
+	// Get category by Path (New) or ID (Legacy)
+	targetType = hierarchicalTypes.find(
+		(t) => t.fullPath === typeFilter || t.id === typeFilter,
+	);
+	const targetMotif = motifsData.find((m) => m.name === motifFilter);
 
-  activePathIds = getAncestry(typesData, targetType?.id || null);
+	console.log("DEBUG: DB Match", { targetType, targetMotif });
 
-  // Build the query
-  let query = supabase.from('products').select('*, types(name), product_motifs(motif_id, motifs(name)), product_categories(category_id, types(name))');
-  
-  if (targetType) {
-    // If filtering by type, we check both the main type_id AND the join table for any level matches
-    // Note: Filtering specifically by the join table can be done via 'product_categories.category_id'
-    // but for simplicity here we will fetch then filter in JS to handle hierarchical "OR" logic easily
-  }
-  
-  if (sizeFilter) query = query.contains('sizes', [sizeFilter]); // Proper array filter
-  
-  const { data: p, error: pError } = await query.order('created_at', { ascending: false });
-  productsData = p || [];
+	// Get active ancestry path for conditional visibility
+	const getAncestry = (list: any[], currentId: any): any[] => {
+		if (!currentId) return [];
+		const item = list.find((t) => t.id === currentId);
+		if (!item) return [];
+		return [item.id, ...getAncestry(list, item.parent_id)];
+	};
 
-  if (pError) console.error("Filter Query Error:", pError);
+	activePathIds = getAncestry(typesData, targetType?.id || null);
+
+	// Build the query
+	let query = supabase
+		.from("products")
+		.select(
+			"*, types(name), product_motifs(motif_id, motifs(name)), product_categories(category_id, types(name))",
+		);
+
+	if (targetType) {
+		// If filtering by type, we check both the main type_id AND the join table for any level matches
+		// Note: Filtering specifically by the join table can be done via 'product_categories.category_id'
+		// but for simplicity here we will fetch then filter in JS to handle hierarchical "OR" logic easily
+	}
+
+	if (sizeFilter) query = query.contains("sizes", [sizeFilter]); // Proper array filter
+
+	const { data: p, error: pError } = await query.order("created_at", {
+		ascending: false,
+	});
+	productsData = p || [];
+
+	if (pError) console.error("Filter Query Error:", pError);
 } else {
-  // Fallback to mock data if supabase is not configured
-  const { products: mockProducts } = await import('../data/products');
-  productsData = mockProducts.map(p => ({
-    ...p,
-    types: { name: p.type },
-    product_motifs: [{ motifs: { name: p.motif } }],
-    image_url: p.imageUrl,
-    wa_number: p.waNumber,
-    tokopedia_url: p.tokopediaUrl
-  }));
-  
-  const uniqueTypes = [...new Set(mockProducts.map(p => p.type))];
-  typesData = uniqueTypes.map(t => ({ name: t }));
-  
-  uniqueTypes.forEach(t => {
-      hierarchicalTypes.push({ name: t, depth: 0, parent_id: null });
-  });
-  
-  const uniqueMotifs = [...new Set(mockProducts.map(p => p.motif))];
-  motifsData = uniqueMotifs.map(m => ({ name: m }));
+	// Fallback to mock data if supabase is not configured
+	const { products: mockProducts } = await import("../data/products");
+	productsData = mockProducts.map((p) => ({
+		...p,
+		types: { name: p.type },
+		product_motifs: [{ motifs: { name: p.motif } }],
+		image_url: p.imageUrl,
+		wa_number: p.waNumber,
+		tokopedia_url: p.tokopediaUrl,
+	}));
 
-  const mockSizes = ['S', 'M', 'L', 'XL', 'XXL', 'All Size'];
-  sizesData = mockSizes.map(s => ({ name: s }));
+	const uniqueTypes = [...new Set(mockProducts.map((p) => p.type))];
+	typesData = uniqueTypes.map((t) => ({ name: t }));
 
-  // Populate targetType for mock data
-  targetType = hierarchicalTypes.find(t => t.fullPath === typeFilter || t.name === typeFilter);
+	uniqueTypes.forEach((t) => {
+		hierarchicalTypes.push({ name: t, depth: 0, parent_id: null });
+	});
+
+	const uniqueMotifs = [...new Set(mockProducts.map((p) => p.motif))];
+	motifsData = uniqueMotifs.map((m) => ({ name: m }));
+
+	const mockSizes = ["S", "M", "L", "XL", "XXL", "All Size"];
+	sizesData = mockSizes.map((s) => ({ name: s }));
+
+	// Populate targetType for mock data
+	targetType = hierarchicalTypes.find(
+		(t) => t.fullPath === typeFilter || t.name === typeFilter,
+	);
 }
 
 const waBaseUrl = "https://wa.me/";
 
 // Final check to handle joined data format variations and comprehensive search
-const filteredProducts = productsData?.filter((p: any) => {
-    // Hierarchical Type Match: Check if the filtered ID matches ANY associated category
-    const productCategoryIds = p.product_categories?.map((pc: any) => pc.category_id) || [];
-    if (p.type_id) productCategoryIds.push(p.type_id);
+const filteredProducts =
+	productsData?.filter((p: any) => {
+		// Hierarchical Type Match: Check if the filtered ID matches ANY associated category
+		const productCategoryIds =
+			p.product_categories?.map((pc: any) => pc.category_id) || [];
+		if (p.type_id) productCategoryIds.push(p.type_id);
 
-    // Also keep names for legacy/search support if needed, but ID is primary
-    const productCategoryNames = p.product_categories?.map((pc: any) => pc.types?.name) || [];
-    if (p.types?.name) productCategoryNames.push(p.types.name);
-    
-    // Match by ID primarily (from resolved targetType), fallback to Path string
-    const typeMatch = !typeFilter || productCategoryIds.includes(targetType?.id) || productCategoryNames.includes(typeFilter);
-    
-    // Motif Filter
-    const productMotifs = p.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
-    const motifMatch = !motifFilter || productMotifs.includes(motifFilter);
-    
-    // Search Query
-    let searchMatch = true;
-    if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const nameMatch = p.name?.toLowerCase().includes(q);
-        const codeMatch = p.code?.toLowerCase().includes(q);
-        const motifSearchMatch = productMotifs.some((m: any) => m?.toLowerCase().includes(q));
-        const categorySearchMatch = productCategoryNames.some((c: any) => c?.toLowerCase().includes(q));
-        searchMatch = nameMatch || codeMatch || motifSearchMatch || categorySearchMatch;
-    }
+		// Also keep names for legacy/search support if needed, but ID is primary
+		const productCategoryNames =
+			p.product_categories?.map((pc: any) => pc.types?.name) || [];
+		if (p.types?.name) productCategoryNames.push(p.types.name);
 
-    return typeMatch && motifMatch && searchMatch;
-}) || [];
+		// Match by ID primarily (from resolved targetType), fallback to Path string
+		const typeMatch =
+			!typeFilter ||
+			productCategoryIds.includes(targetType?.id) ||
+			productCategoryNames.includes(typeFilter);
 
-// Sort: Active products first, then by created_at descending
+		// Motif Filter
+		const productMotifs =
+			p.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
+		const motifMatch = !motifFilter || productMotifs.includes(motifFilter);
+
+		// Search Query
+		let searchMatch = true;
+		if (searchQuery) {
+			const q = searchQuery.toLowerCase().trim();
+			const keywords = q.split(/\s+/).filter((kw) => kw.length > 0);
+
+			// All keywords must match at least one search surface (AND logic between keywords)
+			searchMatch = keywords.every((kw) => {
+				const nameMatch = p.name?.toLowerCase().includes(kw);
+				const codeMatch = p.code?.toLowerCase().includes(kw);
+				const motifMatch = productMotifs.some((m: any) =>
+					m?.toLowerCase().includes(kw),
+				);
+				const categoryMatch = productCategoryNames.some((c: any) =>
+					c?.toLowerCase().includes(kw),
+				);
+
+				return nameMatch || codeMatch || motifMatch || categoryMatch;
+			});
+		}
+
+		// Price Range Filter
+		const priceMatch =
+			(!minPrice || p.price >= minPrice) &&
+			(!maxPrice || p.price <= maxPrice);
+
+		return typeMatch && motifMatch && searchMatch && priceMatch;
+	}) || [];
+
+// Sort Logic
 const sortedProducts = filteredProducts.sort((a: any, b: any) => {
-    if (a.is_active === b.is_active) {
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    }
-    return a.is_active ? -1 : 1;
+	// Priority 1: Availability (Active first)
+	if (a.is_active !== b.is_active) {
+		return a.is_active ? -1 : 1;
+	}
+
+	// Priority 2: User requested sort
+	switch (sort) {
+		case "price-asc":
+			return a.price - b.price;
+		case "price-desc":
+			return b.price - a.price;
+		case "alphabetical":
+			return (a.name || "").localeCompare(b.name || "");
+		case "newest":
+		default:
+			return (
+				new Date(b.created_at).getTime() -
+				new Date(a.created_at).getTime()
+			);
+	}
 });
 ---
-
 
 <Layout title="Koleksi Eksklusif Galeri">
 	<section style="padding: 90px 0 80px 0; background: #fff;">
 		<div class="container">
 			<header class="catalog-header">
-				<p class="text-uppercase opacity-50 header-subtitle">The Collection</p>
+				<p class="text-uppercase opacity-50 header-subtitle">
+					The Collection
+				</p>
 				<div class="header-main">
-					<h1 class="section-title">Katalog <span style="font-style: italic;">Pilihan</span></h1>
-					
+					<h1 class="section-title">
+						Katalog <span style="font-style: italic;">Pilihan</span>
+					</h1>
+
 					<!-- Search Input -->
 					<form action="/products" method="GET" class="search-form">
-						<input type="text" name="q" value={searchQuery || ''} placeholder="Cari batik..." class="search-input" />
-						{typeFilter && <input type="hidden" name="type" value={typeFilter} />}
-						{motifFilter && <input type="hidden" name="motif" value={motifFilter} />}
-						{sizeFilter && <input type="hidden" name="size" value={sizeFilter} />}
-						<button type="submit" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; opacity: 0.5;">
-							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+						<input
+							type="text"
+							name="q"
+							value={searchParams.get("q") || ""}
+							placeholder="Cari batik..."
+							class="search-input"
+						/>
+						{
+							typeFilter && (
+								<input
+									type="hidden"
+									name="type"
+									value={typeFilter}
+								/>
+							)
+						}
+						{
+							motifFilter && (
+								<input
+									type="hidden"
+									name="motif"
+									value={motifFilter}
+								/>
+							)
+						}
+						{
+							sizeFilter && (
+								<input
+									type="hidden"
+									name="size"
+									value={sizeFilter}
+								/>
+							)
+						}
+						{
+							minPrice && (
+								<input
+									type="hidden"
+									name="minP"
+									value={minPrice}
+								/>
+							)
+						}
+						{
+							maxPrice && (
+								<input
+									type="hidden"
+									name="maxP"
+									value={maxPrice}
+								/>
+							)
+						}
+						{
+							sort && (
+								<input type="hidden" name="sort" value={sort} />
+							)
+						}
+						<button
+							type="submit"
+							style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; opacity: 0.5;"
+						>
+							<svg
+								width="20"
+								height="20"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								><circle cx="11" cy="11" r="8"></circle><line
+									x1="21"
+									y1="21"
+									x2="16.65"
+									y2="16.65"></line></svg
+							>
 						</button>
 					</form>
 				</div>
@@ -174,135 +326,549 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 				<!-- Sidebar Filters -->
 				<aside class="filters-sidebar">
 					<!-- Search Form Hidden Inputs (to preserve filters) -->
-					<input type="hidden" name="q" value={searchQuery || ''} />
-					
+					<input
+						type="hidden"
+						name="q"
+						value={searchParams.get("q") || ""}
+					/>
+
+					<div class="filter-group">
+						<h3
+							class="text-uppercase"
+							style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;"
+						>
+							Rentang Harga
+						</h3>
+						<form
+							action="/products"
+							method="GET"
+							style="display: flex; flex-direction: column; gap: 0.5rem;"
+						>
+							<!-- Preserve existing filters -->
+							{
+								Array.from(searchParams.entries()).map(
+									([key, value]) =>
+										key !== "minP" &&
+										key !== "maxP" && (
+											<input
+												type="hidden"
+												name={key}
+												value={value}
+											/>
+										),
+								)
+							}
+
+							<div
+								style="display: flex; flex-direction: column; gap: 0.8rem;"
+							>
+								<div
+									style="display: flex; flex-direction: column; gap: 0.3rem;"
+								>
+									<label
+										style="font-size: 0.6rem; opacity: 0.5; text-transform: uppercase; font-weight: 600;"
+										>Harga Minimum</label
+									>
+									<input
+										type="text"
+										inputmode="numeric"
+										name="minP"
+										value={minPrice
+											? `Rp ${minPrice.toLocaleString("id-ID")}`
+											: ""}
+										placeholder="Rp 0"
+										class="price-input js-price-input"
+										style="width: 100%;"
+									/>
+								</div>
+								<div
+									style="display: flex; flex-direction: column; gap: 0.3rem;"
+								>
+									<label
+										style="font-size: 0.6rem; opacity: 0.5; text-transform: uppercase; font-weight: 600;"
+										>Harga Maksimum</label
+									>
+									<input
+										type="text"
+										inputmode="numeric"
+										name="maxP"
+										value={maxPrice
+											? `Rp ${maxPrice.toLocaleString("id-ID")}`
+											: ""}
+										placeholder="Rp 0"
+										class="price-input js-price-input"
+										style="width: 100%;"
+									/>
+								</div>
+							</div>
+							<button type="submit" class="apply-filter-btn"
+								>Terapkan</button
+							>
+						</form>
+					</div>
+
 					<details open class="filter-group">
-						<summary style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; list-style: none; outline: none;">
-							<span class="text-uppercase" style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;">Jenis Produk</span>
-							<svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5; transition: transform 0.3s ease;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+						<summary
+							style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; list-style: none; outline: none;"
+						>
+							<span
+								class="text-uppercase"
+								style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;"
+								>Jenis Produk</span
+							>
+							<svg
+								class="chevron"
+								width="12"
+								height="12"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								style="opacity: 0.5; transition: transform 0.3s ease;"
+								><polyline points="6 9 12 15 18 9"
+								></polyline></svg
+							>
 						</summary>
-						<div style="display: flex; flex-direction: column; gap: 0.2rem; padding: 0.6rem 0 1rem 0;">
-							<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: '' })}`} class={!typeFilter ? 'active-filter' : 'filter-link'}>Semua Jenis</a>
-							{hierarchicalTypes?.filter(t => {
-								// Visible if L1 OR parent is in active path
-								return t.parent_id === null || activePathIds.includes(t.parent_id);
-							}).map(t => (
-								<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: t.fullPath })}`} 
-								   class={(typeFilter === t.fullPath || typeFilter === t.id) ? 'active-filter' : 'filter-link'}
-								   style={`padding-left: ${t.depth * 1.2 + 0.8}rem; font-size: ${0.85 - (t.depth * 0.05)}rem; ${t.depth > 0 ? 'opacity: 0.8;' : 'font-weight: 500;'}`}>
-									{activePathIds.includes(t.id) && <span style="color: var(--color-accent); margin-right: 4px;">•</span>}
-									{t.depth > 0 && <span style="opacity: 0.3; margin-right: 6px;">∟</span>}
-									<span style={(typeFilter === t.fullPath || typeFilter === t.id) ? "font-weight: 700; text-decoration: underline;" : ""}>{t.name}</span>
-								</a>
-							))}
+						<div
+							style="display: flex; flex-direction: column; gap: 0.2rem; padding: 0.6rem 0 1rem 0;"
+						>
+							<a
+								href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: "" })}`}
+								class={!typeFilter
+									? "active-filter"
+									: "filter-link"}>Semua Jenis</a
+							>
+							{
+								hierarchicalTypes
+									?.filter((t) => {
+										// Visible if L1 OR parent is in active path
+										return (
+											t.parent_id === null ||
+											activePathIds.includes(t.parent_id)
+										);
+									})
+									.map((t) => (
+										<a
+											href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: t.fullPath })}`}
+											class={
+												typeFilter === t.fullPath ||
+												typeFilter === t.id
+													? "active-filter"
+													: "filter-link"
+											}
+											style={`padding-left: ${t.depth * 1.2 + 0.8}rem; font-size: ${0.85 - t.depth * 0.05}rem; ${t.depth > 0 ? "opacity: 0.8;" : "font-weight: 500;"}`}
+										>
+											{activePathIds.includes(t.id) && (
+												<span style="color: var(--color-accent); margin-right: 4px;">
+													•
+												</span>
+											)}
+											{t.depth > 0 && (
+												<span style="opacity: 0.3; margin-right: 6px;">
+													∟
+												</span>
+											)}
+											<span
+												style={
+													typeFilter === t.fullPath ||
+													typeFilter === t.id
+														? "font-weight: 700; text-decoration: underline;"
+														: ""
+												}
+											>
+												{t.name}
+											</span>
+										</a>
+									))
+							}
 						</div>
 					</details>
 
-					<div class="filter-group" style="padding-bottom: var(--spacing-sm);">
-						<h3 class="text-uppercase" style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;">Ukuran</h3>
-						<div style="display: flex; flex-wrap: wrap; gap: 0.6rem;">
-							<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: '' })}`} 
-							   class={!sizeFilter ? 'active-chip' : 'chip'} 
-							   style="font-size: 0.7rem;">Semua</a>
-							{sizesData?.map(s => (
-								<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: s.name })}`} 
-								   class={sizeFilter === s.name ? 'active-chip' : 'chip'}
-								   style="font-size: 0.7rem;">{s.name}</a>
-							))}
+					<div
+						class="filter-group"
+						style="padding-bottom: var(--spacing-sm);"
+					>
+						<h3
+							class="text-uppercase"
+							style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;"
+						>
+							Ukuran
+						</h3>
+						<div
+							style="display: flex; flex-wrap: wrap; gap: 0.6rem;"
+						>
+							<a
+								href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: "" })}`}
+								class={!sizeFilter ? "active-chip" : "chip"}
+								style="font-size: 0.7rem;">Semua</a
+							>
+							{
+								sizesData?.map((s) => (
+									<a
+										href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: s.name })}`}
+										class={
+											sizeFilter === s.name
+												? "active-chip"
+												: "chip"
+										}
+										style="font-size: 0.7rem;"
+									>
+										{s.name}
+									</a>
+								))
+							}
 						</div>
 					</div>
 
 					<details class="filter-group">
-						<summary style="display: flex; justify-space-between; align-items: center; cursor: pointer; list-style: none; outline: none; display: flex; justify-content: space-between;">
-							<span class="text-uppercase" style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;">Motif Batik</span>
-							<svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5; transition: transform 0.3s ease;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+						<summary
+							style="display: flex; justify-space-between; align-items: center; cursor: pointer; list-style: none; outline: none; display: flex; justify-content: space-between;"
+						>
+							<span
+								class="text-uppercase"
+								style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;"
+								>Motif Batik</span
+							>
+							<svg
+								class="chevron"
+								width="12"
+								height="12"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								style="opacity: 0.5; transition: transform 0.3s ease;"
+								><polyline points="6 9 12 15 18 9"
+								></polyline></svg
+							>
 						</summary>
-						<div style="display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem 0 1rem 0;">
-							<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), motif: '' })}`} class={!motifFilter ? 'active-filter' : 'filter-link'}>Semua Motif</a>
-							{motifsData?.map(m => (
-								<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), motif: m.name })}`} 
-								   class={motifFilter === m.name ? 'active-filter' : 'filter-link'}>{m.name}</a>
-							))}
+						<div
+							style="display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem 0 1rem 0;"
+						>
+							<a
+								href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), motif: "" })}`}
+								class={!motifFilter
+									? "active-filter"
+									: "filter-link"}>Semua Motif</a
+							>
+							{
+								motifsData?.map((m) => (
+									<a
+										href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), motif: m.name })}`}
+										class={
+											motifFilter === m.name
+												? "active-filter"
+												: "filter-link"
+										}
+									>
+										{m.name}
+									</a>
+								))
+							}
 						</div>
 					</details>
 
-					<div style="margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid var(--color-border);">
-						<p style="font-size: 0.75rem; opacity: 0.4; font-style: italic;">Menampilkan {filteredProducts.length} produk dari koleksi kami.</p>
+					<div
+						style="margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid var(--color-border);"
+					>
+						<p
+							style="font-size: 0.75rem; opacity: 0.4; font-style: italic;"
+						>
+							Menampilkan {filteredProducts.length} produk dari koleksi
+							kami.
+						</p>
 					</div>
 				</aside>
 
 				<!-- Product Grid -->
 				<main>
-					<div class="product-grid" style="margin-top: 0;">
-						{sortedProducts.map((p, index) => (
-							<div class={`product-card reveal-up ${!p.is_active ? 'product-inactive' : ''}`} data-delay={(index % 4) * 100}>
-								<div class="product-image" style="position: relative;">
-									<a href={`/products/${p.id}`}>
-										<img src={p.image_url || 'https://via.placeholder.com/400x600?text=Batik'} alt={p.name} loading="lazy" class={!p.is_active ? 'out-of-stock-img' : ''} />
-										{!p.is_active && (
-											<div class="ribbon-wrapper">
-												<div class="ribbon">HABIS</div>
-											</div>
-										)}
-
+					<div
+						style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;"
+					>
+						<div class="results-info">
+							Menampilkan <strong
+								>{filteredProducts.length}</strong
+							> produk
+						</div>
+						<div class="sorting-controls">
+							<span class="sort-label">Urutkan:</span>
+							<div class="custom-dropdown" id="sortDropdown">
+								<button class="dropdown-trigger" type="button">
+									<span class="current-label">
+										{sort === "newest" && "Terbaru"}
+										{
+											sort === "price-asc" &&
+												"Harga: Terendah"
+										}
+										{
+											sort === "price-desc" &&
+												"Harga: Tertinggi"
+										}
+										{
+											sort === "alphabetical" &&
+												"Nama: A - Z"
+										}
+									</span>
+									<svg
+										class="chevron"
+										width="12"
+										height="12"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="3"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										><path d="M6 9l6 6 6-6"></path></svg
+									>
+								</button>
+								<div class="dropdown-menu">
+									<a
+										href={getSortUrl("newest")}
+										class={`dropdown-item ${sort === "newest" ? "active" : ""}`}
+									>
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											><circle cx="12" cy="12" r="10"
+											></circle><path d="M12 6v6l4 2"
+											></path></svg
+										>
+										Terbaru
+									</a>
+									<a
+										href={getSortUrl("price-asc")}
+										class={`dropdown-item ${sort === "price-asc" ? "active" : ""}`}
+									>
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											><path d="M12 19V5M5 12l7-7 7 7"
+											></path></svg
+										>
+										Harga: Terendah
+									</a>
+									<a
+										href={getSortUrl("price-desc")}
+										class={`dropdown-item ${sort === "price-desc" ? "active" : ""}`}
+									>
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											><path d="M12 5v14M5 12l7 7 7-7"
+											></path></svg
+										>
+										Harga: Tertinggi
+									</a>
+									<a
+										href={getSortUrl("alphabetical")}
+										class={`dropdown-item ${sort === "alphabetical" ? "active" : ""}`}
+									>
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											><path
+												d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+											></path><polyline
+												points="7 10 12 15 17 10"
+											></polyline><line
+												x1="12"
+												y1="15"
+												x2="12"
+												y2="3"></line><path
+												d="M11 5h10M11 9h10M11 13h10M11 17h10M11 21h10"
+											></path></svg
+										>
+										Nama: A-Z
 									</a>
 								</div>
-
-								<div class="product-info" style="display: flex; flex-direction: column; flex: 1;">
-									<p class="text-uppercase color-accent" style="font-size: 0.65rem; color: var(--color-accent); margin-bottom: 0.2rem;">
-										{p.types?.name} • {p.product_motifs?.map((pm: any) => pm.motifs?.name).join(', ') || '-'}
-									</p>
-									<h3 class="product-title">
-										<a href={`/products/${p.id}`} style="color: inherit; text-decoration: none;">{p.name}</a>
-									</h3>
-									
-									<div class="product-meta">
-										{p.code && <code style="font-size: 0.7rem; background: #f9f9f9; padding: 0.2rem 0.4rem; color: #888; border-radius: 2px;">{p.code}</code>}
-										{p.sizes && p.sizes.length > 0 && p.sizes.map((s: any) => (
-											<span style="font-size: 0.65rem; border: 1px solid #eee; padding: 1px 6px; border-radius: 2px; color: var(--color-muted);">{s}</span>
-										))}
-									</div>
-
-									<div style="display: flex; align-items: center; gap: 0.5rem;">
-										{p.original_price && p.original_price > p.price && (
-											<span style="text-decoration: line-through; color: #999; font-size: 0.8rem;">
-												Rp {Number(p.original_price).toLocaleString('id-ID')}
-											</span>
-										)}
-										<p class="price-tag" style="margin: 0;">Rp {Number(p.price).toLocaleString('id-ID')}</p>
-									</div>
-									
-									<div class="actions">
-										{p.tokopedia_url && (
-											<a href={p.is_active ? p.tokopedia_url : 'javascript:void(0)'} 
-											   target={p.is_active ? "_blank" : "_self"} 
-											   class={`buy-btn ${!p.is_active ? 'disabled-btn' : ''}`}>
-												{p.is_active ? 'Beli Sekarang' : 'HABIS TERJUAL'}
-											</a>
-										)}
-										<a href={p.is_active ? `${waBaseUrl}${settings.contact_whatsapp}?text=Halo, saya tertarik dengan produk ${p.name}` : 'javascript:void(0)'} 
-										   target={p.is_active ? "_blank" : "_self"} 
-										   class={`wa-btn ${!p.is_active ? 'disabled-btn' : ''}`}>
-											{p.is_active ? 'Chat Admin' : 'CEK PRODUK LAIN'}
+							</div>
+						</div>
+					</div>
+					<div class="product-grid" style="margin-top: 0;">
+						{
+							sortedProducts.map((p, index) => (
+								<div
+									class={`product-card reveal-up ${!p.is_active ? "product-inactive" : ""}`}
+									data-delay={(index % 4) * 100}
+								>
+									<div
+										class="product-image"
+										style="position: relative;"
+									>
+										<a href={`/products/${p.id}`}>
+											<img
+												src={
+													p.image_url ||
+													"https://via.placeholder.com/400x600?text=Batik"
+												}
+												alt={p.name}
+												loading="lazy"
+												class={
+													!p.is_active
+														? "out-of-stock-img"
+														: ""
+												}
+											/>
+											{!p.is_active && (
+												<div class="ribbon-wrapper">
+													<div class="ribbon">
+														HABIS
+													</div>
+												</div>
+											)}
 										</a>
 									</div>
+
+									<div
+										class="product-info"
+										style="display: flex; flex-direction: column; flex: 1;"
+									>
+										<p
+											class="text-uppercase color-accent"
+											style="font-size: 0.65rem; color: var(--color-accent); margin-bottom: 0.2rem;"
+										>
+											{p.types?.name} •{" "}
+											{p.product_motifs
+												?.map(
+													(pm: any) =>
+														pm.motifs?.name,
+												)
+												.join(", ") || "-"}
+										</p>
+										<h3 class="product-title">
+											<a
+												href={`/products/${p.id}`}
+												style="color: inherit; text-decoration: none;"
+											>
+												{p.name}
+											</a>
+										</h3>
+
+										<div class="product-meta">
+											{p.code && (
+												<code style="font-size: 0.7rem; background: #f9f9f9; padding: 0.2rem 0.4rem; color: #888; border-radius: 2px;">
+													{p.code}
+												</code>
+											)}
+											{p.sizes &&
+												p.sizes.length > 0 &&
+												p.sizes.map((s: any) => (
+													<span style="font-size: 0.65rem; border: 1px solid #eee; padding: 1px 6px; border-radius: 2px; color: var(--color-muted);">
+														{s}
+													</span>
+												))}
+										</div>
+
+										<div style="display: flex; align-items: center; gap: 0.5rem;">
+											{p.original_price &&
+												p.original_price > p.price && (
+													<span style="text-decoration: line-through; color: #999; font-size: 0.8rem;">
+														Rp{" "}
+														{Number(
+															p.original_price,
+														).toLocaleString(
+															"id-ID",
+														)}
+													</span>
+												)}
+											<p
+												class="price-tag"
+												style="margin: 0;"
+											>
+												Rp{" "}
+												{Number(p.price).toLocaleString(
+													"id-ID",
+												)}
+											</p>
+										</div>
+
+										<div class="actions">
+											{p.tokopedia_url && (
+												<a
+													href={
+														p.is_active
+															? p.tokopedia_url
+															: "javascript:void(0)"
+													}
+													target={
+														p.is_active
+															? "_blank"
+															: "_self"
+													}
+													class={`buy-btn ${!p.is_active ? "disabled-btn" : ""}`}
+												>
+													{p.is_active
+														? "Beli Sekarang"
+														: "HABIS TERJUAL"}
+												</a>
+											)}
+											<a
+												href={
+													p.is_active
+														? `${waBaseUrl}${settings.contact_whatsapp}?text=Halo, saya tertarik dengan produk ${p.name}`
+														: "javascript:void(0)"
+												}
+												target={
+													p.is_active
+														? "_blank"
+														: "_self"
+												}
+												class={`wa-btn ${!p.is_active ? "disabled-btn" : ""}`}
+											>
+												{p.is_active
+													? "Chat Admin"
+													: "CEK PRODUK LAIN"}
+											</a>
+										</div>
+									</div>
 								</div>
-							</div>
-						))}
+							))
+						}
 					</div>
 
-
-					{filteredProducts.length === 0 && (
-						<div class="reveal" style="padding: var(--spacing-xl) 0; text-align: center; background: #f9f9f9; border-radius: var(--radius-md); margin-top: 2rem;">
-							<p style="font-style: italic; opacity: 0.5;">Maaf, koleksi yang Anda cari belum tersedia.</p>
-							<a href="/products" style="text-decoration: underline; margin-top: 1rem; display: block; font-size: 0.8rem;">Lihat Semua Koleksi</a>
-						</div>
-					)}
+					{
+						filteredProducts.length === 0 && (
+							<div
+								class="reveal"
+								style="padding: var(--spacing-xl) 0; text-align: center; background: #f9f9f9; border-radius: var(--radius-md); margin-top: 2rem;"
+							>
+								<p style="font-style: italic; opacity: 0.5;">
+									Maaf, koleksi yang Anda cari belum tersedia.
+								</p>
+								<a
+									href="/products"
+									style="text-decoration: underline; margin-top: 1rem; display: block; font-size: 0.8rem;"
+								>
+									Lihat Semua Koleksi
+								</a>
+							</div>
+						)
+					}
 				</main>
 			</div>
 		</div>
 	</section>
-
 
 	<style>
 		.catalog-header {
@@ -405,14 +971,11 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 			right: -40px;
 			width: 180px;
 			background-color: #b91c1c;
-			box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+			box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
 			font-size: 0.75rem;
 			letter-spacing: 3px;
 			text-transform: uppercase;
 		}
-
-
-
 
 		.product-title {
 			font-family: var(--font-main);
@@ -442,24 +1005,24 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 		}
 
 		.buy-btn {
-			background: #1a1a1a; 
-			color: white; 
-			text-align: center; 
-			padding: 0.8rem; 
-			font-size: 0.75rem; 
-			text-transform: uppercase; 
-			letter-spacing: 2px; 
+			background: #1a1a1a;
+			color: white;
+			text-align: center;
+			padding: 0.8rem;
+			font-size: 0.75rem;
+			text-transform: uppercase;
+			letter-spacing: 2px;
 			font-weight: 600;
 			transition: all 0.3s;
 		}
 
 		.wa-btn {
-			border: 1px solid var(--color-text); 
+			border: 1px solid var(--color-text);
 			color: var(--color-text);
-			text-align: center; 
-			padding: 0.8rem; 
-			font-size: 0.75rem; 
-			text-transform: uppercase; 
+			text-align: center;
+			padding: 0.8rem;
+			font-size: 0.75rem;
+			text-transform: uppercase;
 			letter-spacing: 2px;
 			transition: all 0.3s;
 		}
@@ -479,7 +1042,42 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 			top: 120px;
 			display: flex;
 			flex-direction: column;
-			gap: var(--spacing-md);
+			gap: var(--spacing-lg);
+		}
+
+		.price-input {
+			padding: 0.6rem 0.8rem;
+			border: 1px solid #eee;
+			border-radius: 4px;
+			font-size: 0.8rem;
+			outline: none;
+			width: 100%;
+			background: #fafafa;
+			transition: all 0.3s ease;
+		}
+
+		.price-input:focus {
+			border-color: var(--color-accent);
+			background: #fff;
+			box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.05);
+		}
+
+		.apply-filter-btn {
+			background: var(--color-text);
+			color: white;
+			border: none;
+			padding: 0.5rem;
+			font-size: 0.7rem;
+			border-radius: 4px;
+			cursor: pointer;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+			font-weight: 600;
+			transition: opacity 0.3s;
+		}
+
+		.apply-filter-btn:hover {
+			opacity: 0.9;
 		}
 
 		.filter-link {
@@ -496,13 +1094,124 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 			color: var(--color-accent);
 		}
 
-		.active-filter {
-			font-size: 0.85rem;
-			color: var(--color-accent) !important;
+		.sorting-controls {
+			display: flex;
+			align-items: center;
+			gap: 1rem;
+		}
+
+		.sort-label {
+			font-size: 0.7rem;
+			text-transform: uppercase;
+			letter-spacing: 1.5px;
+			opacity: 0.4;
+			font-weight: 700;
+		}
+
+		/* Custom Dropdown Styling */
+		.custom-dropdown {
+			position: relative;
+			min-width: 170px;
+		}
+
+		.dropdown-trigger {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			width: 100%;
+			padding: 0.5rem 0.9rem;
+			background: white;
+			border: 1px solid #eee;
+			border-radius: 8px;
+			font-size: 0.75rem;
 			font-weight: 600;
-			padding-left: 10px;
-			border-left: 2px solid var(--color-accent);
-			opacity: 1 !important;
+			cursor: pointer;
+			transition: all 0.3s ease;
+			color: var(--color-text);
+		}
+
+		.dropdown-trigger:hover {
+			border-color: var(--color-accent);
+			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+			background: #fdfdfd;
+		}
+
+		.dropdown-trigger .chevron {
+			transition: transform 0.3s ease;
+			opacity: 0.3;
+		}
+
+		.custom-dropdown.active .dropdown-trigger .chevron {
+			transform: rotate(180deg);
+		}
+
+		.dropdown-menu {
+			position: absolute;
+			top: calc(100% + 8px);
+			right: 0;
+			width: 100%;
+			background: white;
+			border: 1px solid #eee;
+			border-radius: 12px;
+			box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+			z-index: 100;
+			opacity: 0;
+			visibility: hidden;
+			transform: translateY(-10px);
+			transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+			overflow: hidden;
+			padding: 0.4rem;
+		}
+
+		.custom-dropdown.active .dropdown-menu {
+			opacity: 1;
+			visibility: visible;
+			transform: translateY(0);
+		}
+
+		.dropdown-item {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			padding: 0.6rem 0.8rem;
+			font-size: 0.75rem;
+			color: var(--color-text);
+			text-decoration: none;
+			border-radius: 8px;
+			transition: all 0.2s ease;
+			font-weight: 500;
+		}
+
+		.dropdown-item:hover {
+			background: #fdfcfb;
+			color: var(--color-accent);
+		}
+
+		.dropdown-item.active {
+			background: #fdfcfb;
+			color: var(--color-accent);
+			font-weight: 700;
+		}
+
+		.dropdown-item svg {
+			opacity: 0.3;
+			transition: opacity 0.2s;
+		}
+
+		.dropdown-item:hover svg,
+		.dropdown-item.active svg {
+			opacity: 1;
+			color: var(--color-accent);
+		}
+
+		.results-info {
+			font-size: 0.8rem;
+			opacity: 0.6;
+		}
+
+		.results-info strong {
+			color: var(--color-text);
+			font-weight: 700;
 		}
 
 		details[open] .chevron {
@@ -531,7 +1240,7 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 			color: var(--color-accent);
 			opacity: 1;
 			transform: translateY(-1px);
-			box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+			box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 		}
 
 		.active-chip {
@@ -542,12 +1251,13 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 			border: 1px solid var(--color-text);
 			border-radius: var(--radius-sm);
 			font-weight: 600;
-			box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 			text-decoration: none;
 		}
 
 		@media (max-width: 900px) {
-			.header-main, .catalog-header {
+			.header-main,
+			.catalog-header {
 				text-align: center;
 				justify-content: center;
 			}
@@ -596,3 +1306,66 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 		}
 	</style>
 </Layout>
+
+<script is:inline>
+	function formatPriceInput(val) {
+		// Remove anything that's not a digit
+		const number = val.replace(/\D/g, "");
+		if (!number) return "";
+		// Format as Indonesian currency style with Rp prefix
+		return "Rp " + new Intl.NumberFormat("id-ID").format(number);
+	}
+
+	function initPriceInputs() {
+		// Existing price formatting logic
+		const inputs = document.querySelectorAll(".js-price-input");
+		inputs.forEach((input) => {
+			input.addEventListener("input", (e) => {
+				const el = e.target;
+				const rawValue = el.value;
+				const cursor = el.selectionStart;
+				const oldLen = rawValue.length;
+				const formatted = formatPriceInput(rawValue);
+				el.value = formatted;
+				const newLen = formatted.length;
+				const nextCursor = cursor ? cursor + (newLen - oldLen) : 0;
+				el.setSelectionRange(nextCursor, nextCursor);
+			});
+		});
+
+		document.addEventListener("submit", (e) => {
+			const form = e.target;
+			const priceInputs = form.querySelectorAll(".js-price-input");
+			priceInputs.forEach((input) => {
+				input.value = input.value.replace(/\D/g, "");
+			});
+		});
+	}
+
+	function initCustomDropdowns() {
+		const sortDropdown = document.getElementById("sortDropdown");
+		const trigger = sortDropdown?.querySelector(".dropdown-trigger");
+
+		if (trigger) {
+			trigger.addEventListener("click", (e) => {
+				e.stopPropagation();
+				sortDropdown?.classList.toggle("active");
+			});
+		}
+
+		// Close when clicking outside
+		window.addEventListener("click", () => {
+			sortDropdown?.classList.remove("active");
+		});
+	}
+
+	// Initialize on load
+	initPriceInputs();
+	initCustomDropdowns();
+
+	// Support Astro view transitions
+	document.addEventListener("astro:page-load", () => {
+		initPriceInputs();
+		initCustomDropdowns();
+	});
+</script>
