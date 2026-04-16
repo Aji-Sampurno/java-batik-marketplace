@@ -1039,10 +1039,24 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 
 		.filters-sidebar {
 			position: sticky;
-			top: 120px;
+			top: 100px;
+			max-height: calc(100vh - 120px);
+			overflow-y: auto;
 			display: flex;
 			flex-direction: column;
-			gap: var(--spacing-lg);
+			gap: 1.2rem;
+			-ms-overflow-style: none; /* IE and Edge */
+			scrollbar-width: none; /* Firefox */
+			padding-bottom: 2rem;
+		}
+
+		/* Hide scrollbar for Chrome, Safari and Opera */
+		.filters-sidebar::-webkit-scrollbar {
+			display: none;
+		}
+
+		.filter-group {
+			width: 100%;
 		}
 
 		.price-input {
@@ -1214,6 +1228,14 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 			font-weight: 700;
 		}
 
+		.filter-group summary span {
+			transition: color 0.3s ease;
+		}
+
+		.filter-group:hover summary span {
+			color: var(--color-accent);
+		}
+
 		details[open] .chevron {
 			transform: rotate(180deg);
 		}
@@ -1276,6 +1298,9 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 			}
 			.filters-sidebar {
 				position: static;
+				max-height: none;
+				overflow-y: visible;
+				padding-right: 0;
 				display: grid;
 				grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 				gap: var(--spacing-lg);

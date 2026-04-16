@@ -15,6 +15,7 @@ const { id } = Astro.params;
 let product: any = null;
 let types: any[] = [];
 let motifs: any[] = [];
+let sizesData: any[] = [];
 let selectedMotifIds: string[] = [];
 let message = "";
 let isError = false;
@@ -39,11 +40,16 @@ if (supabase) {
 		);
 	}
 
-	// Fetch Types and Motifs
+	// Fetch Types, Motifs and Sizes
 	const { data: t } = await supabase.from("types").select("*");
 	const { data: m } = await supabase.from("motifs").select("*");
+	const { data: sz } = await supabase
+		.from("sizes")
+		.select("*")
+		.order("name", { ascending: true });
 	types = t || [];
 	motifs = m || [];
+	sizesData = sz || [];
 }
 
 // Hierarchical Helper: Sort categories into a flat list with levels
@@ -450,20 +456,25 @@ if (Astro.request.method === "POST") {
 							style="display: flex; gap: 1rem; flex-wrap: wrap; background: #fcfcfc; padding: 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
 						>
 							{
-								["S", "M", "L", "XL", "XXL", "All Size"].map(
-									(size) => (
-										<label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer;">
-											<input
-												type="checkbox"
-												name="sizes"
-												value={size}
-												checked={product.sizes?.includes(
-													size,
-												)}
-											/>
-											{size}
-										</label>
-									),
+								sizesData.map((size) => (
+									<label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer;">
+										<input
+											type="checkbox"
+											name="sizes"
+											value={size.name}
+											checked={product.sizes?.includes(
+												size.name,
+											)}
+										/>
+										{size.name}
+									</label>
+								))
+							}
+							{
+								sizesData.length === 0 && (
+									<p style="font-size: 0.85rem; opacity: 0.5;">
+										Belum ada data ukuran.
+									</p>
 								)
 							}
 						</div>
