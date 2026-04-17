@@ -6,6 +6,7 @@ interface Props {
 const { title } = Astro.props;
 import { supabase } from '../lib/supabase';
 import '../styles/index.css';
+import Analytics from '@vercel/analytics/astro';
 
 // Fetch Site Settings
 let settings: any = { site_name: 'Batik Nusantara' };
@@ -353,5 +354,6 @@ const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
 			document.querySelectorAll('.reveal, .reveal-up, .reveal-left, .reveal-right, .reveal-scale').forEach(el => revealObserver.observe(el));
 			handleHeader(); // Initial check
 		</script>
+		<Analytics />
 	</body>
 </html>
