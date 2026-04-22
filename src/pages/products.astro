@@ -178,7 +178,18 @@ const filteredProducts =
 		// Size Filter
 		const variantSizes = p.product_variants?.map((v:any) => v.size_name) || [];
 		const legacySizes = p.sizes || [];
-		const sizeMatch = !sizeFilter || variantSizes.includes(sizeFilter) || legacySizes.includes(sizeFilter);
+		
+		let sizeMatch = !sizeFilter;
+		if (sizeFilter) {
+			if (legacySizes.includes(sizeFilter)) {
+				sizeMatch = true;
+			} else {
+				// Cek apakah ada varian yang namanya sama persis, ATAU berawalan "Size - " (misal "M - Lengan Pendek")
+				sizeMatch = variantSizes.some((vs: string) => 
+					vs === sizeFilter || vs.startsWith(`${sizeFilter} -`)
+				);
+			}
+		}
 
 		// Search Query
 		let searchMatch = true;
