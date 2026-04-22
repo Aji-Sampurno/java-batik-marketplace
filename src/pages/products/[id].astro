@@ -104,7 +104,7 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 										Rp {Number(product.original_price).toLocaleString('id-ID')}
 									</span>
 									<span style="color: #10b981; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
-										Hemat 15%
+										Hemat Rp {Number(product.original_price - product.price).toLocaleString("id-ID")}
 									</span>
 								</div>
 							)}

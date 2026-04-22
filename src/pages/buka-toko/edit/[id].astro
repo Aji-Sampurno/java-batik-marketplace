@@ -330,7 +330,7 @@ if (Astro.request.method === "POST") {
 												).toLocaleString("id-ID")
 											: "0"
 									}</span
-								> (Diskon 15%)
+								> (Hemat Rp <span id="markup_pct">{product.original_price ? Number(product.original_price - product.price).toLocaleString("id-ID") : "0"}</span>)
 							</div>
 							<input
 								type="hidden"
@@ -466,47 +466,126 @@ if (Astro.request.method === "POST") {
 					</div>
 
 					<div>
-						<label
-							class="text-uppercase opacity-50"
-							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-							>Ukuran & Variasi Harga</label
-						>
-						<p style="font-size: 0.7rem; color: var(--color-muted); margin-bottom: 1rem;">Centang ukuran yang tersedia, lalu isi harga khususnya jika berbeda.</p>
-						<div
-							style="display: flex; flex-direction: column; gap: 0.5rem; background: #fcfcfc; padding: 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
-						>
-							{
-								sizesData.map((s) => {
-									const existingVar = product.product_variants?.find((v:any) => v.size_name === s.name);
-									const isChecked = !!existingVar;
-									const vPrice = isChecked ? existingVar.price : product.price;
-									const vStock = isChecked ? existingVar.stock : 0;
-									return (
-									<div class="variant-item" style="display: flex; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee;">
-										<label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer; min-width: 60px;">
-											<input
-												type="checkbox"
-												class="variant-cb"
-												value={s.name}
-												checked={isChecked}
-											/>
-											{s.name}
-										</label>
-										<input type="hidden" name="variant_size" value={s.name} disabled={!isChecked} class="v-size-input" />
-										<div class="v-details" style={`flex: 1; gap: 0.5rem; display: ${isChecked ? 'flex' : 'none'};`}>
-											<div style="flex: 1;">
-												<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
-												<input type="text" value={vPrice} placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isChecked} class="v-price-input currency-mask" />
-												<input type="hidden" name="variant_price" value={vPrice} disabled={!isChecked} class="v-price-hidden-input" />
-											</div>
-											<div style="width: 80px;">
-												<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
-												<input type="number" name="variant_stock" value={vStock} placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isChecked} class="v-stock-input" />
+							<label
+								class="text-uppercase opacity-50"
+								style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
+								>Ukuran & Variasi Harga</label
+							>
+							<p style="font-size: 0.7rem; color: var(--color-muted); margin-bottom: 1rem;">Centang ukuran yang tersedia, lalu isi harga khususnya jika berbeda.</p>
+
+							{(() => {
+								const sleeveKeywords = ['kemeja', 'baju', 'hem', 'atasan', 'blouse', 'tunik', 'gamis', 'koko', 'pdh', 'jaket'];
+								const categoryNames = product.product_categories?.map((pc:any) => pc.types?.name?.toLowerCase() || '') || [];
+								if (product.types?.name) categoryNames.push(product.types?.name?.toLowerCase());
+								const jenisStr = categoryNames.join(" ");
+								const needsSleeve = sleeveKeywords.some(kw => jenisStr.includes(kw));
+								
+								const hasLengan = product.product_variants?.some((v:any) => v.size_name?.includes('Lengan Pendek') || v.size_name?.includes('Lengan Panjang'));
+								
+								const showWrapper = hasLengan || needsSleeve;
+
+								return (
+									<label id="sleeve_toggle_wrapper" style={`display: ${showWrapper ? 'flex' : 'none'}; align-items: center; gap: 0.5rem; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm); cursor: pointer; background: #fcfcfc; margin-bottom: 1rem;`}>
+										<input type="checkbox" id="toggle_sleeve_options" checked={hasLengan} />
+										<span style="font-size: 0.85rem; font-weight: 500;">Aktifkan Pilihan Lengan (Pendek & Panjang)</span>
+									</label>
+								);
+							})()}
+
+							<div
+								style="display: flex; flex-direction: column; gap: 0.5rem; background: #fcfcfc; padding: 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+							>
+								{
+									sizesData.map((s) => {
+										const hasLengan = product.product_variants?.some((v:any) => v.size_name?.includes('Lengan Pendek') || v.size_name?.includes('Lengan Panjang'));
+										// Standard size mapping
+										const existingVarStd = product.product_variants?.find((v:any) => v.size_name === s.name);
+										const isCheckedStd = !!existingVarStd;
+										const vPriceStd = isCheckedStd ? existingVarStd.price : product.price;
+										const vStockStd = isCheckedStd ? existingVarStd.stock : 0;
+
+										// Lengan split mapping
+										const vPendek = `${s.name} - Lengan Pendek`;
+										const existingVarPendek = product.product_variants?.find((v:any) => v.size_name === vPendek);
+										const isCheckedPendek = !!existingVarPendek;
+										const vPricePendek = isCheckedPendek ? existingVarPendek.price : product.price;
+										const vStockPendek = isCheckedPendek ? existingVarPendek.stock : 0;
+
+										const vPanjang = `${s.name} - Lengan Panjang`;
+										const existingVarPanjang = product.product_variants?.find((v:any) => v.size_name === vPanjang);
+										const isCheckedPanjang = !!existingVarPanjang;
+										const vPricePanjang = isCheckedPanjang ? existingVarPanjang.price : product.price;
+										const vStockPanjang = isCheckedPanjang ? existingVarPanjang.stock : 0;
+
+										return (
+										<>
+										<div class="variant-item variant-standard" style={`display: ${hasLengan ? 'none' : 'flex'}; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee;`}>
+											<label style="display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 60px;">
+												<input type="checkbox" class="variant-cb" value={s.name} checked={isCheckedStd} style="margin-top: 2px;" />
+												<span style="display: flex; flex-direction: column;">
+													<strong style="font-weight: 500;">{s.name}</strong>
+												</span>
+											</label>
+											<input type="hidden" name="variant_size" value={s.name} disabled={!isCheckedStd} class="v-size-input" />
+											<div class="v-details" style={`flex: 1; gap: 0.5rem; display: ${isCheckedStd ? 'flex' : 'none'};`}>
+												<div style="flex: 1;">
+													<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
+													<input type="text" value={vPriceStd} placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedStd} class="v-price-input currency-mask" />
+													<input type="hidden" name="variant_price" value={vPriceStd} disabled={!isCheckedStd} class="v-price-hidden-input" />
+												</div>
+												<div style="width: 80px;">
+													<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
+													<input type="number" name="variant_stock" value={vStockStd} placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedStd} class="v-stock-input" />
+												</div>
 											</div>
 										</div>
-									</div>
-									)
-								})
+
+										<div class="variant-item variant-sleeve-split" style={`display: ${hasLengan ? 'flex' : 'none'}; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee; padding-left: 1.5rem;`}>
+											<label style="display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 120px;">
+												<input type="checkbox" class="variant-cb" value={vPendek} checked={isCheckedPendek} style="margin-top: 2px;" />
+												<span style="display: flex; flex-direction: column;">
+													<strong style="font-weight: 500;">{s.name}</strong>
+													<span style="font-size: 0.7rem; opacity: 0.6;">Lengan Pendek</span>
+												</span>
+											</label>
+											<input type="hidden" name="variant_size" value={vPendek} disabled={!isCheckedPendek} class="v-size-input" />
+											<div class="v-details" style={`flex: 1; gap: 0.5rem; display: ${isCheckedPendek ? 'flex' : 'none'};`}>
+												<div style="flex: 1;">
+													<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
+													<input type="text" value={vPricePendek} placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedPendek} class="v-price-input currency-mask" />
+													<input type="hidden" name="variant_price" value={vPricePendek} disabled={!isCheckedPendek} class="v-price-hidden-input" />
+												</div>
+												<div style="width: 80px;">
+													<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
+													<input type="number" name="variant_stock" value={vStockPendek} placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedPendek} class="v-stock-input" />
+												</div>
+											</div>
+										</div>
+
+										<div class="variant-item variant-sleeve-split" style={`display: ${hasLengan ? 'flex' : 'none'}; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee; padding-left: 1.5rem;`}>
+											<label style="display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 120px;">
+												<input type="checkbox" class="variant-cb" value={vPanjang} checked={isCheckedPanjang} style="margin-top: 2px;" />
+												<span style="display: flex; flex-direction: column;">
+													<strong style="font-weight: 500;">{s.name}</strong>
+													<span style="font-size: 0.7rem; opacity: 0.6;">Lengan Panjang</span>
+												</span>
+											</label>
+											<input type="hidden" name="variant_size" value={vPanjang} disabled={!isCheckedPanjang} class="v-size-input" />
+											<div class="v-details" style={`flex: 1; gap: 0.5rem; display: ${isCheckedPanjang ? 'flex' : 'none'};`}>
+												<div style="flex: 1;">
+													<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
+													<input type="text" value={vPricePanjang} placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedPanjang} class="v-price-input currency-mask" />
+													<input type="hidden" name="variant_price" value={vPricePanjang} disabled={!isCheckedPanjang} class="v-price-hidden-input" />
+												</div>
+												<div style="width: 80px;">
+													<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
+													<input type="number" name="variant_stock" value={vStockPanjang} placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedPanjang} class="v-stock-input" />
+												</div>
+											</div>
+										</div>
+										</>
+										)
+									})
 							}
 							{
 								sizesData.length === 0 && (
@@ -766,9 +845,13 @@ if (Astro.request.method === "POST") {
 		priceInputHidden.addEventListener("input", (e) => {
 			const val = parseFloat(e.target.value);
 			if (!isNaN(val) && val > 0) {
-				const originalPrice = Math.round(val / 0.85);
+				let originalPrice = Math.round(val / 0.85);
+				originalPrice = Math.ceil(originalPrice / 10000) * 10000;
+				const pct = (originalPrice - val).toLocaleString("id-ID");
 				markupVal.innerText = originalPrice.toLocaleString("id-ID");
 				originalPriceInput.value = originalPrice;
+				const markupPctEl = document.getElementById("markup_pct");
+				if(markupPctEl) markupPctEl.innerText = pct;
 				markupPreview.style.display = "block";
 			} else {
 				markupPreview.style.display = "none";
@@ -990,6 +1073,27 @@ if (Astro.request.method === "POST") {
 		if (itemCode) parts.push(itemCode);
 
 		nameInput.value = parts.join(" ");
+
+		// --- Sleeve Toggle Visibility based on Category ---
+		const sleeveKeywords = ['kemeja', 'baju', 'hem', 'atasan', 'blouse', 'tunik', 'gamis', 'koko', 'pdh', 'jaket'];
+		const jenisLower = jenis.toLowerCase();
+		const needsSleeve = sleeveKeywords.some(kw => jenisLower.includes(kw));
+
+		const sleeveWrapper = document.getElementById('sleeve_toggle_wrapper');
+		if (sleeveWrapper) {
+			if (needsSleeve) {
+				sleeveWrapper.style.display = 'flex';
+			} else {
+				// Don't auto-hide if it's already checked/active with real data
+				const toggleCb = document.getElementById('toggle_sleeve_options');
+				if (toggleCb && !toggleCb.checked) {
+					sleeveWrapper.style.display = 'none';
+				} else if (toggleCb && toggleCb.checked) {
+				    // Even if it doesn't match the new category, it was checked, so leave it visible for the user to uncheck
+				    sleeveWrapper.style.display = 'flex';
+				}
+			}
+		}
 	}
 
 
@@ -1066,4 +1170,32 @@ if (Astro.request.method === "POST") {
 		});
 	}
 	initCurrencyMasks();
+
+	// Sleeve Mode Toggle Logic
+	const sleeveToggleEdit = document.getElementById('toggle_sleeve_options');
+	if(sleeveToggleEdit) {
+		sleeveToggleEdit.addEventListener('change', (e) => {
+			const isChecked = e.target.checked;
+			document.querySelectorAll('.variant-standard').forEach(el => {
+				el.style.display = isChecked ? 'none' : 'flex';
+				if(isChecked) {
+					const cb = el.querySelector('.variant-cb');
+					if(cb && cb.checked) {
+						cb.checked = false;
+						cb.dispatchEvent(new Event('change'));
+					}
+				}
+			});
+			document.querySelectorAll('.variant-sleeve-split').forEach(el => {
+				el.style.display = isChecked ? 'flex' : 'none';
+				if(!isChecked) {
+					const cb = el.querySelector('.variant-cb');
+					if(cb && cb.checked) {
+						cb.checked = false;
+						cb.dispatchEvent(new Event('change'));
+					}
+				}
+			});
+		});
+	}
 </script>

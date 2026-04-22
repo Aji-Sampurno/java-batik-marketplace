@@ -1315,7 +1315,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									>
 										Harga Coret: Rp <span id="markup_val"
 											>0</span
-										> (Diskon 15%)
+										> (Hemat Rp <span id="markup_pct">0</span>)
 									</div>
 									<input
 										type="hidden"
@@ -1446,33 +1446,63 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									>Ukuran & Variasi Harga</label
 								>
 								<p style="font-size: 0.7rem; color: var(--color-muted); margin-bottom: 1rem;">Centang ukuran yang tersedia, lalu isi harga khususnya jika berbeda.</p>
+
+								<label id="sleeve_toggle_wrapper" style="display: none; align-items: center; gap: 0.5rem; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm); cursor: pointer; background: #fcfcfc; margin-bottom: 1rem;">
+									<input type="checkbox" id="toggle_sleeve_options_add" />
+									<span style="font-size: 0.85rem; font-weight: 500;">Aktifkan Pilihan Lengan (Pendek & Panjang)</span>
+								</label>
+
 								<div
 									style="display: flex; flex-direction: column; gap: 0.5rem; background: #fcfcfc; padding: 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
 								>
 									{
 										sizesData.map((size) => (
-										<div class="variant-item-add" style="display: flex; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee;">
-											<label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer; min-width: 60px;">
-												<input
-													type="checkbox"
-													class="variant-cb-add"
-													value={size.name}
-												/>
-												{size.name}
-											</label>
-											<input type="hidden" name="variant_size" value={size.name} disabled class="v-size-input-add" />
-											<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: none;">
-												<div style="flex: 1;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
-													<input type="text" placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-price-input-add currency-mask" />
-													<input type="hidden" name="variant_price" disabled class="v-price-hidden-add" />
-												</div>
-												<div style="width: 80px;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
-													<input type="number" name="variant_stock" value="0" placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-stock-input-add" />
+										<>
+											<div class="variant-item-add variant-standard" style="display: flex; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee;">
+												<label style="display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 60px;">
+													<input type="checkbox" class="variant-cb-add" value={size.name} style="margin-top: 2px;" />
+													<span style="display: flex; flex-direction: column;">
+														<strong style="font-weight: 500;">{size.name}</strong>
+													</span>
+												</label>
+												<input type="hidden" name="variant_size" value={size.name} disabled class="v-size-input-add" />
+												<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: none;">
+													<div style="flex: 1;">
+														<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
+														<input type="text" placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-price-input-add currency-mask" />
+														<input type="hidden" name="variant_price" disabled class="v-price-hidden-add" />
+													</div>
+													<div style="width: 80px;">
+														<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
+														<input type="number" name="variant_stock" value="0" placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-stock-input-add" />
+													</div>
 												</div>
 											</div>
-										</div>
+
+											{['Lengan Pendek', 'Lengan Panjang'].map(sleeve => (
+											<div class="variant-item-add variant-sleeve-split" style="display: none; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee; padding-left: 1.5rem;">
+												<label style="display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 120px;">
+													<input type="checkbox" class="variant-cb-add" value={`${size.name} - ${sleeve}`} style="margin-top: 2px;" />
+													<span style="display: flex; flex-direction: column;">
+														<strong style="font-weight: 500;">{size.name}</strong>
+														<span style="font-size: 0.7rem; opacity: 0.6;">{sleeve}</span>
+													</span>
+												</label>
+												<input type="hidden" name="variant_size" value={`${size.name} - ${sleeve}`} disabled class="v-size-input-add" />
+												<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: none;">
+													<div style="flex: 1;">
+														<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
+														<input type="text" placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-price-input-add currency-mask" />
+														<input type="hidden" name="variant_price" disabled class="v-price-hidden-add" />
+													</div>
+													<div style="width: 80px;">
+														<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
+														<input type="number" name="variant_stock" value="0" placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-stock-input-add" />
+													</div>
+												</div>
+											</div>
+											))}
+										</>
 										))
 									}
 									{
@@ -2455,6 +2485,25 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 			if (itemCode) parts.push(itemCode);
 
 			nameInput.value = parts.join(" ");
+
+			// --- Sleeve Toggle Visibility based on Category ---
+			const sleeveKeywords = ['kemeja', 'baju', 'hem', 'atasan', 'blouse', 'tunik', 'gamis', 'koko', 'pdh', 'jaket'];
+			const jenisLower = jenis.toLowerCase();
+			const needsSleeve = sleeveKeywords.some(kw => jenisLower.includes(kw));
+			
+			const sleeveWrapper = document.getElementById('sleeve_toggle_wrapper');
+			if (sleeveWrapper) {
+				if (needsSleeve) {
+					sleeveWrapper.style.display = 'flex';
+				} else {
+					sleeveWrapper.style.display = 'none';
+					const toggleCb = document.getElementById('toggle_sleeve_options_add');
+					if (toggleCb && toggleCb.checked) {
+						toggleCb.checked = false;
+						toggleCb.dispatchEvent(new Event('change'));
+					}
+				}
+			}
 		}
 
 
@@ -2505,9 +2554,13 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 				const val = parseFloat(e.target.value);
 				if (!isNaN(val) && val > 0) {
 					// P = O * 0.85 => O = P / 0.85
-					const originalPrice = Math.round(val / 0.85);
+					let originalPrice = Math.round(val / 0.85);
+					originalPrice = Math.ceil(originalPrice / 10000) * 10000;
+					const pct = (originalPrice - val).toLocaleString("id-ID");
 					markupVal.innerText = originalPrice.toLocaleString("id-ID");
 					originalPriceInput.value = originalPrice;
+					const markupPctEl = document.getElementById("markup_pct");
+					if(markupPctEl) markupPctEl.innerText = pct;
 					markupPreview.style.display = "block";
 				} else {
 					markupPreview.style.display = "none";
@@ -2597,5 +2650,33 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 			});
 		}
 		initCurrencyMasks();
+
+		// Sleeve Mode Toggle Logic
+		const sleeveToggleAdd = document.getElementById('toggle_sleeve_options_add');
+		if(sleeveToggleAdd) {
+			sleeveToggleAdd.addEventListener('change', (e) => {
+				const isChecked = e.target.checked;
+				document.querySelectorAll('.variant-standard').forEach(el => {
+					el.style.display = isChecked ? 'none' : 'flex';
+					if(isChecked) {
+						const cb = el.querySelector('.variant-cb-add');
+						if(cb && cb.checked) {
+							cb.checked = false;
+							cb.dispatchEvent(new Event('change'));
+						}
+					}
+				});
+				document.querySelectorAll('.variant-sleeve-split').forEach(el => {
+					el.style.display = isChecked ? 'flex' : 'none';
+					if(!isChecked) {
+						const cb = el.querySelector('.variant-cb-add');
+						if(cb && cb.checked) {
+							cb.checked = false;
+							cb.dispatchEvent(new Event('change'));
+						}
+					}
+				});
+			});
+		}
 	</script>
 </Layout>
