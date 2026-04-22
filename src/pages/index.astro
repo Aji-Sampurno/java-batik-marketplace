@@ -8,7 +8,7 @@ let activePromos: any[] = [];
 if (supabase) {
 	const { data } = await supabase
 		.from("products")
-		.select("*, types(name), product_motifs(motifs(name))")
+		.select("*, types(name), product_motifs(motifs(name)), product_variants(*)")
 		.order("is_active", { ascending: false }) // Prioritize active products
 		.order("created_at", { ascending: false })
 		.limit(3);
@@ -496,7 +496,17 @@ if (supabase) {
 												</span>
 											)}
 											<span>
-												Rp {Number(p.price).toLocaleString("id-ID")}
+												{(() => {
+													let displayPrice = `Rp ${Number(p.price).toLocaleString("id-ID")}`;
+													if(p.product_variants && p.product_variants.length > 0) {
+														const vPrices = p.product_variants.map((v:any) => v.price);
+														const vMin = Math.min(...vPrices);
+														if (vMin > 0) {
+															displayPrice = `Rp ${vMin.toLocaleString("id-ID")}`;
+														}
+													}
+													return displayPrice;
+												})()}
 											</span>
 										</>
 									) : (

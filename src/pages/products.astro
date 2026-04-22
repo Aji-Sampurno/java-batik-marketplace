@@ -226,11 +226,20 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 	}
 
 	// Priority 2: User requested sort
+	const getEffectivePrice = (prod) => {
+		if (prod.product_variants && prod.product_variants.length > 0) {
+			const vPrices = prod.product_variants.map((v) => v.price);
+			const vMin = Math.min(...vPrices);
+			if (vMin > 0) return vMin;
+		}
+		return prod.price;
+	};
+
 	switch (sort) {
 		case "price-asc":
-			return a.price - b.price;
+			return getEffectivePrice(a) - getEffectivePrice(b);
 		case "price-desc":
-			return b.price - a.price;
+			return getEffectivePrice(b) - getEffectivePrice(a);
 		case "alphabetical":
 			return (a.name || "").localeCompare(b.name || "");
 		case "newest":
@@ -821,10 +830,7 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 													if(p.product_variants && p.product_variants.length > 0) {
 														const vPrices = p.product_variants.map((v:any) => v.price);
 														const vMin = Math.min(...vPrices);
-														const vMax = Math.max(...vPrices);
-														if (vMin > 0 && vMin < vMax) {
-															displayPrice = `Rp ${vMin.toLocaleString("id-ID")} - ${vMax.toLocaleString("id-ID")}`;
-														} else if (vMin > 0) {
+														if (vMin > 0) {
 															displayPrice = `Rp ${vMin.toLocaleString("id-ID")}`;
 														}
 													}

@@ -23,7 +23,7 @@ if (supabase) {
     // Fetch related products (same type, excluding current)
     const { data: related } = await supabase
       .from('products')
-      .select('*, types(name), product_motifs(motif_id, motifs(name))')
+      .select('*, types(name), product_motifs(motif_id, motifs(name)), product_variants(*)')
       .eq('type_id', p.type_id)
       .eq('is_active', true)
       .neq('id', id)
@@ -218,7 +218,19 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 								<h3 style="font-size: 1rem; font-weight: 500; margin-bottom: 0.5rem;">
 									<a href={`/products/${p.id}`}>{p.name}</a>
 								</h3>
-								<p class="price-tag" style="font-size: 0.95rem;">Rp {Number(p.price).toLocaleString('id-ID')}</p>
+								<p class="price-tag" style="font-size: 0.95rem;">
+									{(() => {
+										let displayPrice = `Rp ${Number(p.price).toLocaleString("id-ID")}`;
+										if(p.product_variants && p.product_variants.length > 0) {
+											const vPrices = p.product_variants.map((v:any) => v.price);
+											const vMin = Math.min(...vPrices);
+											if (vMin > 0) {
+												displayPrice = `Rp ${vMin.toLocaleString("id-ID")}`;
+											}
+										}
+										return displayPrice;
+									})()}
+								</p>
 							</div>
 						</div>
 					))}
