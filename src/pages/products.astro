@@ -101,7 +101,7 @@ if (supabase) {
 	let query = supabase
 		.from("products")
 		.select(
-			"*, types(name), product_motifs(motif_id, motifs(name)), product_categories(category_id, types(name))",
+			"*, types(name), product_motifs(motif_id, motifs(name)), product_categories(category_id, types(name)), product_variants(*)",
 		);
 
 	if (targetType) {
@@ -110,7 +110,7 @@ if (supabase) {
 		// but for simplicity here we will fetch then filter in JS to handle hierarchical "OR" logic easily
 	}
 
-	if (sizeFilter) query = query.contains("sizes", [sizeFilter]); // Proper array filter
+	// sizeFilter is handled in JS below since it's now in a related table
 
 	const { data: p, error: pError } = await query.order("created_at", {
 		ascending: false,
@@ -175,6 +175,11 @@ const filteredProducts =
 			p.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
 		const motifMatch = !motifFilter || productMotifs.includes(motifFilter);
 
+		// Size Filter
+		const variantSizes = p.product_variants?.map((v:any) => v.size_name) || [];
+		const legacySizes = p.sizes || [];
+		const sizeMatch = !sizeFilter || variantSizes.includes(sizeFilter) || legacySizes.includes(sizeFilter);
+
 		// Search Query
 		let searchMatch = true;
 		if (searchQuery) {
@@ -196,12 +201,21 @@ const filteredProducts =
 			});
 		}
 
-		// Price Range Filter
+		// Price Range Filter 
+		// Gunakan range dari product_variants jika ada, kalau tidak base price
+		let pMin = p.price;
+		let pMax = p.price;
+		if (p.product_variants && p.product_variants.length > 0) {
+			const vPrices = p.product_variants.map((v:any) => v.price);
+			pMin = Math.min(...vPrices);
+			pMax = Math.max(...vPrices);
+		}
+		
 		const priceMatch =
-			(!minPrice || p.price >= minPrice) &&
-			(!maxPrice || p.price <= maxPrice);
+			(!minPrice || pMax >= minPrice) &&
+			(!maxPrice || pMin <= maxPrice);
 
-		return typeMatch && motifMatch && searchMatch && priceMatch;
+		return typeMatch && motifMatch && sizeMatch && searchMatch && priceMatch;
 	}) || [];
 
 // Sort Logic
@@ -771,13 +785,19 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 													{p.code}
 												</code>
 											)}
-											{p.sizes &&
-												p.sizes.length > 0 &&
+											{p.product_variants && p.product_variants.length > 0 ? (
+												p.product_variants.map((v: any) => (
+													<span style="font-size: 0.65rem; border: 1px solid #eee; padding: 1px 6px; border-radius: 2px; color: var(--color-muted);">
+														{v.size_name}
+													</span>
+												))
+											) : p.sizes && p.sizes.length > 0 ? (
 												p.sizes.map((s: any) => (
 													<span style="font-size: 0.65rem; border: 1px solid #eee; padding: 1px 6px; border-radius: 2px; color: var(--color-muted);">
 														{s}
 													</span>
-												))}
+												))
+											) : null}
 										</div>
 
 										<div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -796,10 +816,20 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 												class="price-tag"
 												style="margin: 0;"
 											>
-												Rp{" "}
-												{Number(p.price).toLocaleString(
-													"id-ID",
-												)}
+												{(() => {
+													let displayPrice = `Rp ${Number(p.price).toLocaleString("id-ID")}`;
+													if(p.product_variants && p.product_variants.length > 0) {
+														const vPrices = p.product_variants.map((v:any) => v.price);
+														const vMin = Math.min(...vPrices);
+														const vMax = Math.max(...vPrices);
+														if (vMin > 0 && vMin < vMax) {
+															displayPrice = `Rp ${vMin.toLocaleString("id-ID")} - ${vMax.toLocaleString("id-ID")}`;
+														} else if (vMin > 0) {
+															displayPrice = `Rp ${vMin.toLocaleString("id-ID")}`;
+														}
+													}
+													return displayPrice;
+												})()}
 											</p>
 										</div>
 

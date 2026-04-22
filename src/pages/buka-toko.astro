@@ -237,7 +237,7 @@ if (Astro.request.method === "POST") {
 					const image_files = formData.getAll("image_file") as File[];
 					const tokopedia_url = formData.get("tokopedia_url");
 					const original_price = formData.get("original_price");
-					const sizes = formData.getAll("sizes"); // Get multiple sizes as array
+					const sizes = []; // Tidak lagi dipakai untuk insert di table products
 					const item_code = formData.get("item_code");
 
 					let image_url = "";
@@ -277,7 +277,7 @@ if (Astro.request.method === "POST") {
 								description,
 								code,
 								original_price,
-								sizes,
+								// sizes lama dihapus
 								item_code,
 								is_active: true,
 							},
@@ -307,6 +307,21 @@ if (Astro.request.method === "POST") {
 							await supabase
 								.from("product_categories")
 								.insert(catInserts);
+						}
+
+						// Insert Variants
+						const variant_sizes = formData.getAll("variant_size") as string[];
+						const variant_prices = formData.getAll("variant_price") as string[];
+						const variant_stocks = formData.getAll("variant_stock") as string[];
+						
+						if (variant_sizes.length > 0) {
+							const vInserts = variant_sizes.map((size, index) => ({
+								product_id: newP[0].id,
+								size_name: size,
+								price: parseFloat(variant_prices[index] || price?.toString() || "0"),
+								stock: parseInt(variant_stocks[index] || "0", 10)
+							}));
+							await supabase.from("product_variants").insert(vInserts);
 						}
 					}
 					return Astro.redirect("/buka-toko?success=product");
@@ -1285,13 +1300,15 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 										>Harga (Rp)</label
 									>
 									<input
-										name="price"
-										type="number"
+										type="text"
+										class="currency-mask"
+										data-hidden-id="product_price_input"
 										required
-										id="product_price_input"
-										placeholder="450000"
+										id="product_price_input_display"
+										placeholder="450.000"
 										style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
 									/>
+									<input type="hidden" name="price" id="product_price_input" />
 									<div
 										id="price_markup_preview"
 										style="font-size: 0.65rem; color: #10b981; margin-top: 0.4rem; font-weight: 600; display: none;"
@@ -1426,19 +1443,36 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								<label
 									class="text-uppercase opacity-50"
 									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
-									>Pilihan Size (Opsional)</label
+									>Ukuran & Variasi Harga</label
 								>
-								<div class="motif-style-container">
+								<p style="font-size: 0.7rem; color: var(--color-muted); margin-bottom: 1rem;">Centang ukuran yang tersedia, lalu isi harga khususnya jika berbeda.</p>
+								<div
+									style="display: flex; flex-direction: column; gap: 0.5rem; background: #fcfcfc; padding: 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+								>
 									{
 										sizesData.map((size) => (
-											<label class="motif-style-label">
+										<div class="variant-item-add" style="display: flex; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee;">
+											<label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; cursor: pointer; min-width: 60px;">
 												<input
 													type="checkbox"
-													name="sizes"
+													class="variant-cb-add"
 													value={size.name}
 												/>
 												{size.name}
 											</label>
+											<input type="hidden" name="variant_size" value={size.name} disabled class="v-size-input-add" />
+											<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: none;">
+												<div style="flex: 1;">
+													<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
+													<input type="text" placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-price-input-add currency-mask" />
+													<input type="hidden" name="variant_price" disabled class="v-price-hidden-add" />
+												</div>
+												<div style="width: 80px;">
+													<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
+													<input type="number" name="variant_stock" value="0" placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-stock-input-add" />
+												</div>
+											</div>
+										</div>
 										))
 									}
 									{
@@ -2459,15 +2493,15 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 		}
 
 		// Price Markup Logic (15% Discount Markup)
-		const priceInput = document.getElementById("product_price_input");
+		const priceInputHidden = document.getElementById("product_price_input");
 		const markupPreview = document.getElementById("price_markup_preview");
 		const markupVal = document.getElementById("markup_val");
 		const originalPriceInput = document.getElementById(
 			"original_price_input",
 		);
 
-		if (priceInput) {
-			priceInput.addEventListener("input", (e) => {
+		if (priceInputHidden) {
+			priceInputHidden.addEventListener("input", (e) => {
 				const val = parseFloat(e.target.value);
 				if (!isNaN(val) && val > 0) {
 					// P = O * 0.85 => O = P / 0.85
@@ -2505,5 +2539,63 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 		setupToggles();
 		initSearchableSelect();
 		setupNamingAutomation();
+
+		// Variasi UI Logic Tambah Produk
+		document.querySelectorAll('.variant-cb-add').forEach(cb => {
+			cb.addEventListener('change', (e) => {
+				const parent = e.target.closest('.variant-item-add');
+				const vSize = parent.querySelector('.v-size-input-add');
+				const vPriceDisp = parent.querySelector('.v-price-input-add');
+				const vPriceHid = parent.querySelector('.v-price-hidden-add');
+				const vStock = parent.querySelector('.v-stock-input-add');
+				const details = parent.querySelector('.v-details-add');
+				
+				const isChecked = e.target.checked;
+				vSize.disabled = !isChecked;
+				vPriceDisp.disabled = !isChecked;
+				if(vPriceHid) vPriceHid.disabled = !isChecked;
+				vStock.disabled = !isChecked;
+				details.style.display = isChecked ? 'flex' : 'none';
+
+				// Set default price based on main price input if empty
+				if (isChecked && !vPriceDisp.value) {
+					const mainPriceHid = document.getElementById("product_price_input");
+					if(mainPriceHid && mainPriceHid.value) {
+						vPriceHid.value = mainPriceHid.value;
+						vPriceDisp.value = new Intl.NumberFormat('id-ID').format(mainPriceHid.value);
+					}
+				}
+			});
+		});
+
+		// Currency Formatting Logic
+		function initCurrencyMasks() {
+			document.querySelectorAll('.currency-mask').forEach(input => {
+				const formatPrice = (val) => {
+					const num = val.toString().replace(/\D/g, '');
+					return num ? new Intl.NumberFormat('id-ID').format(num) : '';
+				};
+				const getHidden = () => {
+					if (input.dataset.hiddenId) return document.getElementById(input.dataset.hiddenId);
+					return input.parentElement.querySelector('input[type="hidden"]');
+				};
+
+				const hidden = getHidden();
+				input.addEventListener('input', (e) => {
+					const rawVal = e.target.value.replace(/\D/g, '');
+					e.target.value = formatPrice(e.target.value);
+					if (hidden) {
+						hidden.value = rawVal;
+						hidden.dispatchEvent(new Event('input', { bubbles: true }));
+					}
+				});
+				// Initial set on load
+				if (input.value) { 
+					input.value = formatPrice(input.value); 
+					if(hidden) hidden.value = input.value.replace(/\D/g, '');
+				}
+			});
+		}
+		initCurrencyMasks();
 	</script>
 </Layout>

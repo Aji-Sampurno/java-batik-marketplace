@@ -14,7 +14,7 @@ if (supabase) {
   // Fetch main product
   const { data: p, error } = await supabase
     .from('products')
-    .select('*, types(name), product_motifs(motif_id, motifs(name)), product_categories(category_id, types(name, category_level))')
+    .select('*, types(name), product_motifs(motif_id, motifs(name)), product_categories(category_id, types(name, category_level)), product_variants(*)')
     .eq('id', id)
     .single();
   
@@ -132,13 +132,31 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 								{productMotifs.map((m: string) => <span class="motif-tag">{m}</span>)}
 							</div>
 						</div>
-						{product.sizes && product.sizes.length > 0 && (
+						{product.product_variants && product.product_variants.length > 0 ? (
 							<div class="meta-item">
 								<span class="meta-label">Tersedia Ukuran</span>
-								<div class="size-chips">
-									{product.sizes.map((s: string) => <span class="size-chip">{s}</span>)}
+								<div class="size-chips" id="variant-selector">
+									{product.product_variants.map((v: any, i:number) => (
+										<button 
+											class={`size-chip variant-btn ${i===0 ? 'active' : ''}`}
+											data-price={v.price}
+											data-stock={v.stock}
+											style="outline: none; font-family: inherit;"
+										>
+											{v.size_name}
+										</button>
+									))}
 								</div>
 							</div>
+						) : (
+							product.sizes && product.sizes.length > 0 && (
+								<div class="meta-item">
+									<span class="meta-label">Tersedia Ukuran</span>
+									<div class="size-chips">
+										{product.sizes.map((s: string) => <span class="size-chip">{s}</span>)}
+									</div>
+								</div>
+							)
 						)}
 					</div>
 
@@ -393,6 +411,20 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 			background: #fafafa;
 		}
 
+		.variant-btn {
+			cursor: pointer;
+			transition: all 0.2s;
+			color: #333;
+		}
+		.variant-btn:hover {
+			border-color: #ccc;
+		}
+		.variant-btn.active {
+			background: var(--color-text);
+			color: white;
+			border-color: var(--color-text);
+		}
+
 		.description-section {
 			margin-bottom: var(--spacing-xl);
 		}
@@ -639,6 +671,49 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 					}
 				});
 			});
+		}
+
+		// Variant Selection Logic
+		const variantBtns = document.querySelectorAll('.variant-btn');
+		const priceDisplay = document.querySelector('.product-price');
+		const badgeDisplay = document.getElementById('stock-badge');
+		
+		if (variantBtns.length > 0 && priceDisplay) {
+			const checkVariantAvailability = (stock) => {
+				const isAvailable = stock > 0;
+				if (badgeDisplay) {
+					badgeDisplay.innerText = isAvailable ? 'In Stock' : 'Stok Habis';
+					badgeDisplay.className = `status-badge ${!isAvailable ? 'out-of-stock' : ''}`;
+				}
+				// Also update WA Button
+				const waBtn = document.getElementById('wa-btn');
+				if (waBtn && waBtn.getAttribute('target') !== '_self') { // Meaning the product itself is active globally
+					waBtn.classList.toggle('btn-disabled', !isAvailable);
+					const btnText = waBtn.querySelector('.btn-text');
+					if (btnText) btnText.innerText = isAvailable ? 'Chat Admin' : 'Stok Ukuran Habis';
+				}
+			}
+
+			variantBtns.forEach(btn => {
+				btn.addEventListener('click', () => {
+					variantBtns.forEach(b => b.classList.remove('active'));
+					btn.classList.add('active');
+					
+					const newPrice = parseInt(btn.getAttribute('data-price') || "0", 10);
+					if(newPrice > 0) {
+						priceDisplay.innerText = "Rp " + newPrice.toLocaleString('id-ID');
+					}
+
+					const stock = parseInt(btn.getAttribute('data-stock') || "0", 10);
+					checkVariantAvailability(stock);
+				});
+			});
+
+			// Trigger initial variant state
+			const initialStock = parseInt(variantBtns[0].getAttribute('data-stock') || "0", 10);
+			const initialPrice = parseInt(variantBtns[0].getAttribute('data-price') || "0", 10);
+			if(initialPrice > 0) priceDisplay.innerText = "Rp " + initialPrice.toLocaleString('id-ID');
+			checkVariantAvailability(initialStock);
 		}
 
 		// Start the real-time engine
