@@ -1,0 +1,267 @@
+---
+export const prerender = false;
+import Layout from "../../layouts/Layout.astro";
+import { apiFetch, uploadToLaravel } from "../../lib/api";
+
+// Check for session (Authentication Gate)
+const session = Astro.cookies.get("admin_session");
+if (session?.value !== "authenticated") {
+	return Astro.redirect("/login");
+}
+let settings: any = null;
+let message = "";
+
+try {
+	const sRes = await apiFetch<any>("settings");
+	settings = sRes?.data || sRes || { site_name: "Batik Nusantara" };
+} catch (e: any) {
+	console.error("API Fetch Error:", e.message);
+}
+
+// Handle Form Submission (Server Side)
+if (Astro.request.method === "POST") {
+	try {
+		const formData = await Astro.request.formData();
+		const action = formData.get("action");
+
+		if (action === "update_settings") {
+			const site_name = formData.get("site_name");
+			const address = formData.get("address");
+			const contact_whatsapp = formData.get("contact_whatsapp");
+			const url_instagram = formData.get("url_instagram");
+			const url_tiktok = formData.get("url_tiktok");
+			const url_tokopedia = formData.get("url_tokopedia");
+			const url_shopee = formData.get("url_shopee");
+			const logo_file = formData.get("logo_file") as File;
+			let logo_url = settings?.logo_url;
+
+			if (logo_file && logo_file.size > 0) {
+				logo_url = await uploadToLaravel(logo_file, "settings");
+			}
+
+			await apiFetch("settings", {
+				method: "PUT",
+				body: JSON.stringify({
+					site_name,
+					logo_url,
+					address,
+					contact_whatsapp,
+					url_instagram,
+					url_tiktok,
+					url_tokopedia,
+					url_shopee,
+				}),
+			});
+			return Astro.redirect("/buka-toko/info-toko?success=settings");
+		}
+	} catch (e: any) {
+		isError = true;
+		return Astro.redirect(`/buka-toko/info-toko?error=${encodeURIComponent(e.message || "Gagal memperbarui konfigurasi")}`);
+	}
+}
+
+const success = Astro.url.searchParams.get("success");
+const error = Astro.url.searchParams.get("error");
+if (success === "settings") message = "Identitas website dan link toko berhasil diperbarui!";
+---
+
+<Layout title={`Kelola Info Toko - ${settings?.site_name || "Batik Nusantara"}`}>
+	<section style="padding: 130px 0 var(--spacing-2xl) 0; background: #fdfcfb; min-height: 100vh;">
+		<div class="container" style="max-width: 1000px;">
+			<!-- Header -->
+			<div style="margin-bottom: var(--spacing-xl);">
+				<h1 style="font-family: var(--font-serif); font-size: 2.2rem; margin: 0; font-weight: 400;">
+					Identitas & <span style="font-style: italic;">Info Toko</span>
+				</h1>
+				<p style="opacity: 0.5; margin-top: 0.5rem; font-size: 0.9rem;">
+					Kelola profil website, tautan toko online, dan kontak WhatsApp toko Anda.
+				</p>
+			</div>
+
+			<!-- Flash Message -->
+			{
+				message && (
+					<div
+						style="background: #e6f9e9; color: #0d5a15; padding: 1rem 1.5rem; border-radius: 8px; margin-bottom: 2rem; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; border: 1px solid rgba(13, 90, 21, 0.1);"
+					>
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+						{message}
+					</div>
+				)
+			}
+
+			<!-- Error Message -->
+			{
+				error && (
+					<div
+						style="background: #fff5f5; color: #b91c1c; padding: 1rem 1.5rem; border-radius: 8px; margin-bottom: 2rem; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; border: 1px solid rgba(185, 28, 28, 0.1);"
+					>
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 8v4M12 16h.01"/></svg>
+						<strong>Error:</strong> {error}
+					</div>
+				)
+			}
+
+			<div style="background: white; border: 1px solid var(--color-border); padding: 2.5rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
+				<form
+					method="POST"
+					enctype="multipart/form-data"
+					style="display: flex; flex-direction: column; gap: 1.5rem;"
+				>
+					<input
+						type="hidden"
+						name="action"
+						value="update_settings"
+					/>
+
+					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+						<div>
+							<label class="input-label">Nama Website</label>
+							<input
+								name="site_name"
+								type="text"
+								required
+								value={settings?.site_name}
+								class="admin-input"
+							/>
+						</div>
+						<div>
+							<label class="input-label">Logo Website</label>
+							<input
+								name="logo_file"
+								type="file"
+								accept="image/*"
+								class="admin-input"
+								style="font-size: 0.8rem; padding: 0.5rem;"
+							/>
+						</div>
+					</div>
+
+					<div>
+						<label class="input-label">Alamat Toko Offline</label>
+						<textarea
+							name="address"
+							rows="3"
+							class="admin-input"
+							placeholder="Alamat fisik toko Anda..."
+						>{settings?.address}</textarea>
+					</div>
+
+					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+						<div>
+							<label class="input-label">WhatsApp Admin (Gunakan Kode Negara)</label>
+							<input
+								name="contact_whatsapp"
+								type="text"
+								placeholder="Contoh: 62812345678"
+								value={settings?.contact_whatsapp}
+								class="admin-input"
+							/>
+						</div>
+						<div>
+							<label class="input-label">Instagram URL</label>
+							<input
+								name="url_instagram"
+								type="text"
+								placeholder="https://instagram.com/akun-anda"
+								value={settings?.url_instagram}
+								class="admin-input"
+							/>
+						</div>
+					</div>
+
+					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+						<div>
+							<label class="input-label">TikTok URL</label>
+							<input
+								name="url_tiktok"
+								type="text"
+								placeholder="https://tiktok.com/@akun-anda"
+								value={settings?.url_tiktok}
+								class="admin-input"
+							/>
+						</div>
+						<div>
+							<label class="input-label">Tokopedia URL</label>
+							<input
+								name="url_tokopedia"
+								type="text"
+								placeholder="https://tokopedia.com/toko-anda"
+								value={settings?.url_tokopedia}
+								class="admin-input"
+							/>
+						</div>
+					</div>
+
+					<div>
+						<label class="input-label">Shopee URL</label>
+						<input
+							name="url_shopee"
+							type="text"
+							placeholder="https://shopee.co.id/toko-anda"
+							value={settings?.url_shopee}
+							class="admin-input"
+						/>
+					</div>
+
+					<button
+						type="submit"
+						class="btn-save"
+						style="margin-top: 1rem; width: 100%;"
+					>
+						Update Konfigurasi Toko
+					</button>
+				</form>
+			</div>
+		</div>
+	</section>
+</Layout>
+
+<style>
+	.input-label {
+		font-size: 0.65rem;
+		text-transform: uppercase;
+		letter-spacing: 1.5px;
+		opacity: 0.5;
+		font-weight: 700;
+		display: block;
+		margin-bottom: 0.5rem;
+	}
+
+	.admin-input {
+		width: 100%;
+		padding: 0.8rem 1rem;
+		border: 1px solid #e5e7eb;
+		border-radius: 8px;
+		font-size: 0.9rem;
+		transition: all 0.3s;
+		background: #fdfdfd;
+	}
+
+	.admin-input:focus {
+		border-color: var(--color-accent);
+		outline: none;
+		background: white;
+		box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.05);
+	}
+
+	.btn-save {
+		background: #111;
+		color: white;
+		border: none;
+		padding: 1rem;
+		border-radius: 8px;
+		font-size: 0.8rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 2px;
+		cursor: pointer;
+		transition: all 0.3s;
+	}
+
+	.btn-save:hover {
+		background: #000;
+		transform: translateY(-2px);
+		box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+	}
+</style>

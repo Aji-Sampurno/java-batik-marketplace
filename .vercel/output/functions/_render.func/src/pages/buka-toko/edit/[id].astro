@@ -26,7 +26,7 @@ try {
 	product = pRes?.data || pRes;
 
 	if (product) {
-		selectedMotifIds = (product.motifs || product.product_motifs || []).map((pm: any) => pm.id || pm.motif_id) || [];
+		selectedMotifIds = product.product_motifs?.map((pm: any) => pm.motif_id) || [];
 	}
 
 	// Fetch Types, Motifs and Sizes
@@ -59,8 +59,8 @@ let currentL1CatId = null;
 let currentCategoryIds: string[] = [];
 
 if (product) {
-	currentCategoryIds = (product.categories || product.product_categories || []).map(
-		(pc: any) => pc.id || pc.category_id,
+	currentCategoryIds = product.product_categories.map(
+		(pc: any) => pc.category_id,
 	);
 	// Find the Level 1 category among selection
 	const l1 = types.find(
@@ -97,21 +97,12 @@ if (Astro.request.method === "POST") {
 		let updatedImages = [...(product.images || [])];
 		let primaryImageUrl = product.image_url;
 
-		const category_ids = formData.getAll("category_ids");
-		const typeId = category_ids[0] || null;
-		const selectedType = hierarchicalTypes.find((t: any) => t.id === typeId);
-		let folderPath = "products";
-		if (selectedType) {
-			const slug = selectedType.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-			folderPath = `products/${slug}`;
-		}
-
 		// Handle new image uploads
 		if (image_files && image_files.length > 0 && image_files[0].size > 0) {
 			const newImages: string[] = [];
 			for (const file of image_files) {
 				if (file.size > 0) {
-					const publicUrl = await uploadToLaravel(file, folderPath);
+					const publicUrl = await uploadToLaravel(file, "products");
 					newImages.push(publicUrl);
 				}
 			}
@@ -122,15 +113,11 @@ if (Astro.request.method === "POST") {
 		const variant_sizes = formData.getAll("variant_size") as string[];
 		const variant_prices = formData.getAll("variant_price") as string[];
 		const variant_stocks = formData.getAll("variant_stock") as string[];
-		const variant_dalamans = formData.getAll("variant_dalaman") as string[];
 		const variants = variant_sizes.map((size, index) => ({
 			size_name: size,
 			price: parseFloat(variant_prices[index] || price?.toString() || "0"),
-			stock: parseInt(variant_stocks[index] || "0", 10),
-			dalaman: variant_dalamans[index] || null
+			stock: parseInt(variant_stocks[index] || "0", 10)
 		}));
-
-		console.log("DEBUG PUT variants payload:", JSON.stringify(variants, null, 2));
 
 		await apiFetch(`products/${id}`, {
 			method: "PUT",
@@ -161,11 +148,27 @@ if (Astro.request.method === "POST") {
 ---
 
 <Layout title={`Edit Produk - ${product.name}`}>
-	<section style="padding: 130px 0 var(--spacing-2xl) 0; background: #fdfcfb; min-height: 100vh;">
-		<div class="container" style="max-width: 1000px;">
-			<div style="margin-bottom: var(--spacing-xl);">
-				<h1 class="text-uppercase" style="font-size: 1.5rem; margin: 0; font-weight: 600;">Edit Produk</h1>
-				<p style="font-size: 0.8rem; opacity: 0.5;">Ubah detail produk</p>
+	<section style="padding: var(--spacing-xl) 0; min-height: 80vh;">
+		<div class="container" style="max-width: 800px;">
+			<div
+				style="margin-bottom: var(--spacing-xl); display: flex; justify-content: space-between; align-items: center;"
+			>
+				<div>
+					<h1
+						class="text-uppercase"
+						style="font-size: 1.5rem; margin: 0; font-weight: 600;"
+					>
+						Edit Produk
+					</h1>
+					<p style="font-size: 0.8rem; opacity: 0.5;">
+						Ubah detail produk
+					</p>
+				</div>
+				<a
+					href="/buka-toko"
+					style="font-size: 0.8rem; text-transform: uppercase; color: var(--color-muted); border-bottom: 1px solid #ccc; padding-bottom: 2px;"
+					>Kembali ke Dashboard</a
+				>
 			</div>
 
 			{
@@ -413,12 +416,12 @@ if (Astro.request.method === "POST") {
 
 							{(() => {
 								const sleeveKeywords = ['kemeja', 'baju', 'hem', 'atasan', 'blouse', 'tunik', 'gamis', 'koko', 'pdh', 'jaket'];
-								const categoryNames = (product.categories || product.product_categories || []).map((pc:any) => (pc.name || pc.types?.name || '').toLowerCase()) || [];
+								const categoryNames = product.product_categories?.map((pc:any) => pc.types?.name?.toLowerCase() || '') || [];
 								if (product.types?.name) categoryNames.push(product.types?.name?.toLowerCase());
 								const jenisStr = categoryNames.join(" ");
 								const needsSleeve = sleeveKeywords.some(kw => jenisStr.includes(kw));
 								
-								const hasLengan = (product.variants || product.product_variants || [])?.some((v:any) => v.size_name?.includes('Lengan Pendek') || v.size_name?.includes('Lengan Panjang'));
+								const hasLengan = product.product_variants?.some((v:any) => v.size_name?.includes('Lengan Pendek') || v.size_name?.includes('Lengan Panjang'));
 								
 								const showWrapper = hasLengan || needsSleeve;
 
@@ -435,28 +438,25 @@ if (Astro.request.method === "POST") {
 							>
 								{
 									sizesData.map((s) => {
-										const hasLengan = (product.variants || product.product_variants || [])?.some((v:any) => v.size_name?.includes('Lengan Pendek') || v.size_name?.includes('Lengan Panjang'));
+										const hasLengan = product.product_variants?.some((v:any) => v.size_name?.includes('Lengan Pendek') || v.size_name?.includes('Lengan Panjang'));
 										// Standard size mapping
-										const existingVarStd = (product.variants || product.product_variants || [])?.find((v:any) => v.size_name === s.name);
+										const existingVarStd = product.product_variants?.find((v:any) => v.size_name === s.name);
 										const isCheckedStd = !!existingVarStd;
 										const vPriceStd = isCheckedStd ? existingVarStd.price : product.price;
 										const vStockStd = isCheckedStd ? existingVarStd.stock : 0;
-										const vDalamanStd = isCheckedStd ? existingVarStd.dalaman || "" : "";
 
 										// Lengan split mapping
 										const vPendek = `${s.name} - Lengan Pendek`;
-										const existingVarPendek = (product.variants || product.product_variants || [])?.find((v:any) => v.size_name === vPendek);
+										const existingVarPendek = product.product_variants?.find((v:any) => v.size_name === vPendek);
 										const isCheckedPendek = !!existingVarPendek;
 										const vPricePendek = isCheckedPendek ? existingVarPendek.price : product.price;
 										const vStockPendek = isCheckedPendek ? existingVarPendek.stock : 0;
-										const vDalamanPendek = isCheckedPendek ? existingVarPendek.dalaman || "" : "";
 
 										const vPanjang = `${s.name} - Lengan Panjang`;
-										const existingVarPanjang = (product.variants || product.product_variants || [])?.find((v:any) => v.size_name === vPanjang);
+										const existingVarPanjang = product.product_variants?.find((v:any) => v.size_name === vPanjang);
 										const isCheckedPanjang = !!existingVarPanjang;
 										const vPricePanjang = isCheckedPanjang ? existingVarPanjang.price : product.price;
 										const vStockPanjang = isCheckedPanjang ? existingVarPanjang.stock : 0;
-										const vDalamanPanjang = isCheckedPanjang ? existingVarPanjang.dalaman || "" : "";
 
 										return (
 										<>
@@ -477,14 +477,6 @@ if (Astro.request.method === "POST") {
 												<div style="width: 80px;">
 													<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
 													<input type="number" name="variant_stock" value={vStockStd} placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedStd} class="v-stock-input" />
-												</div>
-												<div style="width: 120px;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Dalaman</span>
-													<select name="variant_dalaman" disabled={!isCheckedStd} class="v-dalaman-input" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px; background: white url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23777%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m6 9 6 6 6-6%22/></svg>') no-repeat right 0.6rem center; background-size: 10px; padding-right: 1.5rem; appearance: none; -webkit-appearance: none; -moz-appearance: none; cursor: pointer;">
-														<option value="" selected={vDalamanStd === ""}>Tanpa Dalaman</option>
-														<option value="F" selected={vDalamanStd === "F"}>Furing (F)</option>
-														<option value="TF" selected={vDalamanStd === "TF"}>Tanpa Furing (TF)</option>
-													</select>
 												</div>
 											</div>
 										</div>
@@ -508,14 +500,6 @@ if (Astro.request.method === "POST") {
 													<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
 													<input type="number" name="variant_stock" value={vStockPendek} placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedPendek} class="v-stock-input" />
 												</div>
-												<div style="width: 120px;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Dalaman</span>
-													<select name="variant_dalaman" disabled={!isCheckedPendek} class="v-dalaman-input" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px; background: white url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23777%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m6 9 6 6 6-6%22/></svg>') no-repeat right 0.6rem center; background-size: 10px; padding-right: 1.5rem; appearance: none; -webkit-appearance: none; -moz-appearance: none; cursor: pointer;">
-														<option value="" selected={vDalamanPendek === ""}>Tanpa Dalaman</option>
-														<option value="F" selected={vDalamanPendek === "F"}>Furing (F)</option>
-														<option value="TF" selected={vDalamanPendek === "TF"}>Tanpa Furing (TF)</option>
-													</select>
-												</div>
 											</div>
 										</div>
 
@@ -537,14 +521,6 @@ if (Astro.request.method === "POST") {
 												<div style="width: 80px;">
 													<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
 													<input type="number" name="variant_stock" value={vStockPanjang} placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedPanjang} class="v-stock-input" />
-												</div>
-												<div style="width: 120px;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Dalaman</span>
-													<select name="variant_dalaman" disabled={!isCheckedPanjang} class="v-dalaman-input" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px; background: white url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23777%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m6 9 6 6 6-6%22/></svg>') no-repeat right 0.6rem center; background-size: 10px; padding-right: 1.5rem; appearance: none; -webkit-appearance: none; -moz-appearance: none; cursor: pointer;">
-														<option value="" selected={vDalamanPanjang === ""}>Tanpa Dalaman</option>
-														<option value="F" selected={vDalamanPanjang === "F"}>Furing (F)</option>
-														<option value="TF" selected={vDalamanPanjang === "TF"}>Tanpa Furing (TF)</option>
-													</select>
 												</div>
 											</div>
 										</div>
@@ -1095,7 +1071,6 @@ if (Astro.request.method === "POST") {
 			const vPriceDisp = parent.querySelector('.v-price-input');
 			const vPriceHid = parent.querySelector('.v-price-hidden-input');
 			const vStock = parent.querySelector('.v-stock-input');
-			const vDalaman = parent.querySelector('.v-dalaman-input');
 			const details = parent.querySelector('.v-details');
 			
 			const isChecked = e.target.checked;
@@ -1103,7 +1078,6 @@ if (Astro.request.method === "POST") {
 			vPriceDisp.disabled = !isChecked;
 			if(vPriceHid) vPriceHid.disabled = !isChecked;
 			vStock.disabled = !isChecked;
-			if(vDalaman) vDalaman.disabled = !isChecked;
 			details.style.display = isChecked ? 'flex' : 'none';
 		});
 	});
@@ -1112,14 +1086,7 @@ if (Astro.request.method === "POST") {
 	function initCurrencyMasks() {
 		document.querySelectorAll('.currency-mask').forEach(input => {
 			const formatPrice = (val) => {
-				let str = val.toString();
-				if (str.indexOf('.') !== -1 && str.indexOf('.') === str.lastIndexOf('.')) {
-					const parts = str.split('.');
-					if (parts[1].length === 2) {
-						str = parts[0];
-					}
-				}
-				const num = str.replace(/\D/g, '');
+				const num = val.toString().replace(/\D/g, '');
 				return num ? new Intl.NumberFormat('id-ID').format(num) : '';
 			};
 			const getHidden = () => {

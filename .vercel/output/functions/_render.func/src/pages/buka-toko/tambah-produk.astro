@@ -1,8 +1,8 @@
 ---
 export const prerender = false;
-import Layout from "../layouts/Layout.astro";
-import { apiFetch, uploadToLaravel } from "../lib/api";
-import DeleteConfirmModal from "../components/DeleteConfirmModal.astro";
+import Layout from "../../layouts/Layout.astro";
+import { apiFetch, uploadToLaravel } from "../../lib/api";
+import DeleteConfirmModal from "../../components/DeleteConfirmModal.astro";
 
 // Check for session (Authentication Gate)
 const session = Astro.cookies.get("admin_session");
@@ -35,7 +35,7 @@ try {
 	const szRes = await apiFetch<any>("sizes");
 	sizesData = szRes?.data || szRes || [];
 
-	const pRes = await apiFetch<any>("products?per_page=1000");
+	const pRes = await apiFetch<any>("products");
 	productsData = pRes?.data || pRes || [];
 
 	const sRes = await apiFetch<any>("settings");
@@ -67,14 +67,16 @@ try {
 					c?.toLowerCase().includes(kw),
 				);
 
-				return nameMatch || codeMatch || motifMatch || categoryMatch;
+				return (
+					nameMatch || codeMatch || motifMatch || categoryMatch
+				);
 			});
 		});
 	}
 } catch (e: any) {
 	console.error("API Fetch Error, using mock fallback:", e.message);
 	// Mock data fallback
-	const { products: mockProducts } = await import("../data/products");
+	const { products: mockProducts } = await import("../../data/products");
 	const uniqueTypes = [...new Set(mockProducts.map((p) => p.type))];
 	types = uniqueTypes.map((t) => ({ name: t, id: t }));
 
@@ -86,20 +88,6 @@ try {
 		types: { name: p.name, id: p.id },
 		product_motifs: [{ motifs: { name: p.motif } }],
 	}));
-}
-
-// Fetch Total Pra-Produk Count
-let praProdukCount = 0;
-try {
-	const praRes = await fetch(
-		"https://noir.grace.gracianna.web.id/api/v1/beli1?per_page=1",
-	);
-	const praJson = await praRes.json();
-	if (praJson.success && praJson.meta) {
-		praProdukCount = praJson.meta.total || 0;
-	}
-} catch (e: any) {
-	console.error("Gagal mengambil total pra-produk:", e.message);
 }
 
 // Hierarchical Helper: Sort categories into a flat list with levels
@@ -126,8 +114,148 @@ if (Astro.request.method === "POST") {
 			const formData = await Astro.request.formData();
 			const action = formData.get("action");
 
+			// 5. Add Size
+			if (action === "add_size") {
+				const name = formData.get("size_name") as string;
+				if (!name)
+					return Astro.redirect("/buka-toko?error=missing");
+				await apiFetch("sizes", {
+					method: "POST",
+					body: JSON.stringify({ name }),
+				});
+				return Astro.redirect("/buka-toko?success=size");
+			}
+
+			// 6. Delete Size
+			if (action === "delete_size") {
+				const id = formData.get("size_id") as string;
+				await apiFetch(`sizes/${id}`, { method: "DELETE" });
+				return Astro.redirect("/buka-toko?success=deleted");
+			}
+
+			if (action === "update_settings") {
+				const site_name = formData.get("site_name");
+				const address = formData.get("address");
+				const contact_whatsapp = formData.get("contact_whatsapp");
+				const url_instagram = formData.get("url_instagram");
+				const url_tiktok = formData.get("url_tiktok");
+				const url_tokopedia = formData.get("url_tokopedia");
+				const url_shopee = formData.get("url_shopee");
+				const logo_file = formData.get("logo_file") as File;
+				let logo_url = settings?.logo_url;
+
+				if (logo_file && logo_file.size > 0) {
+					logo_url = await uploadToLaravel(logo_file, "settings");
+				}
+
+				await apiFetch("settings", {
+					method: "PUT",
+					body: JSON.stringify({
+						site_name,
+						logo_url,
+						address,
+						contact_whatsapp,
+						url_instagram,
+						url_tiktok,
+						url_tokopedia,
+						url_shopee,
+					}),
+				});
+				return Astro.redirect("/buka-toko?success=settings");
+			}
+
+			if (action === "add_type") {
+				const name = formData.get("name");
+				const parent_id = formData.get("parent_id") || null;
+				let category_level = 1;
+
+				if (parent_id) {
+					const parent = await apiFetch<any>(`types/${parent_id}`);
+					const parentData = parent?.data || parent;
+					if (parentData) {
+						category_level = (parentData.category_level || 1) + 1;
+					}
+				}
+
+				if (category_level > 3) {
+					throw new Error(
+						"Maksimal hirarki kategori adalah 3 level.",
+					);
+				}
+
+				await apiFetch("types", {
+					method: "POST",
+					body: JSON.stringify({ name, parent_id, category_level }),
+				});
+				return Astro.redirect("/buka-toko?success=type");
+			}
+
+			if (action === "add_motif") {
+				const name = formData.get("name");
+				await apiFetch("motifs", {
+					method: "POST",
+					body: JSON.stringify({ name }),
+				});
+				return Astro.redirect("/buka-toko?success=motif");
+			}
+
 			if (action === "add_product") {
-				return Astro.redirect("/buka-toko/tambah-produk");
+				const name = formData.get("name");
+				const price = formData.get("price");
+				const category_ids = formData.getAll("category_ids");
+				const type_id = category_ids[0] || null;
+				const motif_ids = formData.getAll("motif_ids");
+				const description = formData.get("description");
+				const code = formData.get("code");
+				const image_files = formData.getAll("image_file") as File[];
+				const tokopedia_url = formData.get("tokopedia_url");
+				const original_price = formData.get("original_price");
+				const item_code = formData.get("item_code");
+
+				let image_url = "";
+				let images: string[] = [];
+
+				if (image_files && image_files.length > 0) {
+					for (const file of image_files) {
+						if (file.size > 0) {
+							const publicUrl = await uploadToLaravel(file, "products");
+							images.push(publicUrl);
+						}
+					}
+					if (images.length > 0) image_url = images[0];
+				}
+
+				// Build variants array
+				const variant_sizes = formData.getAll("variant_size") as string[];
+				const variant_prices = formData.getAll("variant_price") as string[];
+				const variant_stocks = formData.getAll("variant_stock") as string[];
+				const variants = variant_sizes.map((size, index) => ({
+					size_name: size,
+					price: parseFloat(variant_prices[index] || price?.toString() || "0"),
+					stock: parseInt(variant_stocks[index] || "0", 10)
+				}));
+
+				await apiFetch("products", {
+					method: "POST",
+					body: JSON.stringify({
+						name,
+						price,
+						type_id,
+						category_ids,
+						motif_ids,
+						description,
+						code,
+						original_price,
+						item_code,
+						image_url,
+						images,
+						tokopedia_url,
+						variants,
+						is_active: true,
+					}),
+				});
+
+				return Astro.redirect("/buka-toko?success=product");
 			}
 
 			if (action === "toggle_status") {
@@ -145,6 +273,18 @@ if (Astro.request.method === "POST") {
 				const id = formData.get("id");
 				await apiFetch(`products/${id}`, { method: "DELETE" });
 				return Astro.redirect("/buka-toko?success=delete");
+			}
+
+			if (action === "delete_type") {
+				const id = formData.get("id");
+				await apiFetch(`types/${id}`, { method: "DELETE" });
+				return Astro.redirect("/buka-toko?success=delete_type");
+			}
+
+			if (action === "delete_motif") {
+				const id = formData.get("id");
+				await apiFetch(`motifs/${id}`, { method: "DELETE" });
+				return Astro.redirect("/buka-toko?success=delete_motif");
 			}
 		} catch (e: any) {
 			isError = true;
@@ -167,93 +307,32 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 ---
 
 <Layout title={`Admin Panel - ${settings?.site_name || "Batik Nusantara"}`}>
-	<section
-		style="padding: 130px 0 var(--spacing-2xl) 0; background: #fdfcfb; min-height: 100vh;"
-	>
+	<section style="padding: var(--spacing-xl) 0; min-height: 80vh;">
 		<div class="container">
-			<div
-				class="admin-header"
-				style="border-bottom: none; margin-bottom: var(--spacing-sm); margin-top: 0;"
-			>
+			<div class="admin-header">
 				<div
 					style="display: flex; align-items: center; gap: var(--spacing-md);"
 				>
 					<div>
 						<h1
 							class="text-uppercase"
-							style="font-size: 1.4rem; margin: 0; font-weight: 600;"
+							style="font-size: 1.2rem; margin: 0; font-weight: 600;"
 						>
 							{settings?.site_name || "Batik Nusantara"} Dashboard
 						</h1>
-						<p style="font-size: 0.85rem; opacity: 0.5;">
+						<p style="font-size: 0.8rem; opacity: 0.5;">
 							Kelola identitas dan katalog batik Anda.
 						</p>
 					</div>
 				</div>
-			</div>
-
-			<!-- Overview Stats -->
-			<div
-				style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl);"
-			>
 				<div
-					class="glass"
-					style="padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid var(--color-accent);"
+					style="display: flex; gap: var(--spacing-md); align-items: center;"
 				>
-					<p
-						class="text-uppercase opacity-50"
-						style="font-size: 0.65rem;"
+					<a
+						href="/buka-toko"
+						style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; text-decoration: none; padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm); color: var(--color-text);"
+						>&larr; Kembali ke Dashboard</a
 					>
-						Total Produk
-					</p>
-					<h2 style="font-size: 2rem; margin: 0;">
-						{productsData?.filter((p) => p.is_active).length || 0}
-						<span style="font-size: 1rem; opacity: 0.4;"
-							>/ {productsData?.length || 0}</span
-						>
-					</h2>
-				</div>
-				<div
-					class="glass"
-					style="padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid #03ac0e;"
-				>
-					<p
-						class="text-uppercase opacity-50"
-						style="font-size: 0.65rem;"
-					>
-						Kategori Jenis
-					</p>
-					<h2 style="font-size: 2rem; margin: 0;">
-						{types?.length || 0}
-					</h2>
-				</div>
-				<div
-					class="glass"
-					style="padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid #3b82f6;"
-				>
-					<p
-						class="text-uppercase opacity-50"
-						style="font-size: 0.65rem;"
-					>
-						Total Motif
-					</p>
-					<h2 style="font-size: 2rem; margin: 0;">
-						{motifs?.length || 0}
-					</h2>
-				</div>
-				<div
-					class="glass"
-					style="padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid #d97706;"
-				>
-					<p
-						class="text-uppercase opacity-50"
-						style="font-size: 0.65rem;"
-					>
-						Total Pra-Produk
-					</p>
-					<h2 style="font-size: 2rem; margin: 0;">
-						{praProdukCount.toLocaleString("id-ID")}
-					</h2>
 				</div>
 			</div>
 
@@ -274,305 +353,335 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 				)
 			}
 
-			<div class="admin-main-grid" id="adminMainGrid">
-				<!-- List Column -->
-				<div>
+			<div style="max-width: 900px; margin: 0 auto;">
+					<!-- Form Product -->
 					<div
-						style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-lg); flex-wrap: wrap; gap: 1rem;"
+						style="background: white; border: 1px solid var(--color-border); padding: var(--spacing-lg); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);"
 					>
 						<h2
-							style="font-size: 1.1rem; font-weight: 600; margin: 0;"
+							style="font-size: 1rem; margin-bottom: var(--spacing-lg); font-weight: 600;"
+							class="text-uppercase"
 						>
-							Daftar Produk Terdaftar
+							Tambah Produk Baru
 						</h2>
 
-						<!-- Admin Search -->
 						<form
-							method="GET"
-							style="position: relative; flex: 1; min-width: 200px; max-width: 400px;"
+							method="POST"
+							enctype="multipart/form-data"
+							style="display: flex; flex-direction: column; gap: var(--spacing-md);"
 						>
 							<input
-								name="q"
-								type="text"
-								value={adminSearchQuery || ""}
-								placeholder="Cari nama, SKU, atau motif..."
-								style="width: 100%; padding: 0.6rem 2.5rem 0.6rem 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm); font-size: 0.85rem;"
+								type="hidden"
+								name="action"
+								value="add_product"
 							/>
-							<button
-								type="submit"
-								style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; opacity: 0.4; cursor: pointer;"
-							>
-								<svg
-									width="16"
-									height="16"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									><circle cx="11" cy="11" r="8"
-									></circle><line
-										x1="21"
-										y1="21"
-										x2="16.65"
-										y2="16.65"></line>
-								</svg>
-							</button>
-						</form>
-
-						<span
-							class="text-uppercase opacity-50"
-							style="font-size: 0.6rem;"
-							>{productsData?.length || 0} Items</span
-						>
-					</div>
-
-					<div
-						style="background: white; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow-x: auto; box-shadow: var(--shadow-sm);"
-					>
-						<table style="width: 100%; border-collapse: collapse;">
-							<thead>
-								<tr
-									style="background: #f9f9f9; border-bottom: 1px solid var(--color-border); text-align: left;"
-									class="text-uppercase"
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Nama Produk</label
 								>
-									<th
-										style="padding: 1rem; font-size: 0.65rem; opacity: 0.6;"
-										>Produk</th
+								<input
+									name="name"
+									id="product_name_input"
+									type="text"
+									required
+									placeholder="Kemeja Batik Parang"
+									style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+								/>
+							</div>
+
+							<div
+								style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);"
+							>
+								<div>
+									<label
+										class="text-uppercase opacity-50"
+										style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+										>Kode SKU</label
 									>
-									<th
-										style="padding: 1rem; font-size: 0.65rem; opacity: 0.6;"
-										>Kategori</th
-									>
-									<th
-										style="padding: 1rem; font-size: 0.65rem; opacity: 0.6;"
-										>Harga</th
-									>
-									<th
-										style="padding: 1rem; font-size: 0.65rem; opacity: 0.6; text-align: center;"
-										>Status</th
-									>
-									<th
-										style="padding: 1rem; font-size: 0.65rem; opacity: 0.6; text-align: center;"
-										>Aksi</th
-									>
-								</tr>
-							</thead>
-							<tbody>
-								{
-									productsData?.map((p) => (
-										<tr
-											style="border-bottom: 1px solid #f0f0f0; transition: background 0.2s;"
-											class="table-row-hover"
-										>
-											<td style="padding: 1rem;">
-												<div style="display: flex; gap: 0.8rem; align-items: center;">
-													<div style="width: 40px; height: 40px; background: #eee; border-radius: 4px; overflow: hidden; flex-shrink: 0;">
-														<img
-															src={p.image_url}
-															style="width: 100%; height: 100%; object-fit: cover;"
-															alt=""
-														/>
-													</div>
-													<div>
-														<div style="font-weight: 500; font-size: 0.9rem;">
-															{p.name}
-														</div>
-														<div style="display: flex; gap: 0.4rem; align-items: center;">
-															<code style="font-size: 0.7rem; color: var(--color-muted);">
-																{p.code || "-"}
-															</code>
-															{p.sizes &&
-																p.sizes.length >
-																	0 && (
-																	<span style="font-size: 0.6rem; background: #eee; padding: 1px 4px; border-radius: 2px;">
-																		{p.sizes.join(
-																			", ",
-																		)}
-																	</span>
-																)}
-														</div>
-													</div>
-												</div>
-											</td>
-											<td style="padding: 1rem;">
-												<div style="display: flex; flex-wrap: wrap; gap: 4px;">
-													{p.product_categories?.map(
-														(pc: any) => (
-															<span style="font-size: 0.7rem; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; color: #555;">
-																{pc.types?.name}
-															</span>
-														),
-													)}
-													{(!p.product_categories ||
-														p.product_categories
-															.length === 0) && (
-														<span style="font-size: 0.75rem; opacity: 0.5;">
-															-
-														</span>
-													)}
-												</div>
-												<div style="font-size: 0.7rem; opacity: 0.5; margin-top: 4px;">
-													{p.product_motifs
-														?.map(
-															(pm: any) =>
-																pm.motifs?.name,
-														)
-														.join(", ") || "-"}
-												</div>
-											</td>
-											<td style="padding: 1rem; font-weight: 600; font-size: 0.85rem;">
-												Rp{" "}
-												{Number(p.price).toLocaleString(
-													"id-ID",
-												)}
-											</td>
-											<td style="padding: 1rem; text-align: center;">
-												<form
-													method="POST"
-													style="display: inline;"
-												>
-													<input
-														type="hidden"
-														name="action"
-														value="toggle_status"
-													/>
-													<input
-														type="hidden"
-														name="id"
-														value={p.id}
-													/>
-													<input
-														type="hidden"
-														name="current_status"
-														value={
-															p.is_active
-																? "true"
-																: "false"
-														}
-													/>
-													<button
-														type="submit"
-														title={
-															p.is_active
-																? "Sembunyikan dari Katalog"
-																: "Tampilkan di Katalog"
-														}
-														style={`border: none; background: none; cursor: pointer; color: ${
-															p.is_active
-																? "var(--color-accent)"
-																: "#ccc"
-														}; transition: 0.2s;`}
-													>
-														{p.is_active ? (
-															<svg
-																width="20"
-																height="20"
-																viewBox="0 0 24 24"
-																fill="none"
-																stroke="currentColor"
-																stroke-width="2"
-															>
-																<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-																<circle
-																	cx="12"
-																	cy="12"
-																	r="3"
-																/>
-															</svg>
-														) : (
-															<svg
-																width="20"
-																height="20"
-																viewBox="0 0 24 24"
-																fill="none"
-																stroke="currentColor"
-																stroke-width="2"
-															>
-																<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-																<line
-																	x1="1"
-																	y1="1"
-																	x2="23"
-																	y2="23"
-																/>
-															</svg>
-														)}
-													</button>
-												</form>
-											</td>
-											<td style="padding: 1rem; text-align: center;">
-												<div style="display: flex; gap: 0.4rem; justify-content: center;">
-													<a
-														href={`/buka-toko/edit/${p.id}`}
-														title="Edit Produk"
-														style="background: #f0f7ff; color: #0070f3; padding: 0.4rem; border-radius: 4px; display: inline-flex; align-items: center; transition: 0.2s;"
-													>
-														<svg
-															width="16"
-															height="16"
-															viewBox="0 0 24 24"
-															fill="none"
-															stroke="currentColor"
-															stroke-width="2"
-														>
-															<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-															<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4L18.5 2.5z" />
-														</svg>
-													</a>
-													<form
-														method="POST"
-														style="display: inline;"
-														onsubmit="return showDeleteConfirm(this, 'Apakah Anda yakin ingin menghapus produk ini secara permanen?')"
-													>
-														<input
-															type="hidden"
-															name="action"
-															value="delete_product"
-														/>
-														<input
-															type="hidden"
-															name="id"
-															value={p.id}
-														/>
-														<button
-															type="submit"
-															title="Hapus Permanen"
-															style="border: none; background: #fff5f5; color: #ff4d4d; padding: 0.4rem; border-radius: 4px; cursor: pointer; transition: 0.2s;"
-														>
-															<svg
-																xmlns="http://www.w3.org/2000/svg"
-																width="16"
-																height="16"
-																fill="currentColor"
-																viewBox="0 0 16 16"
-															>
-																<path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z" />
-																<path
-																	fill-rule="evenodd"
-																	d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"
-																/>
-															</svg>
-														</button>
-													</form>
-												</div>
-											</td>
-										</tr>
-									))
-								}
-							</tbody>
-						</table>
-						{
-							(!productsData || productsData.length === 0) && (
-								<div style="padding: var(--spacing-xl); text-align: center; opacity: 0.4;">
-									Belum ada produk.
+									<input
+										name="code"
+										id="product_sku_input"
+										type="text"
+										placeholder="BTK-001"
+										style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+									/>
 								</div>
-							)
-						}
+								<div>
+									<label
+										class="text-uppercase opacity-50"
+										style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+										>Kode Barang (Auto-Name)</label
+									>
+									<input
+										name="item_code"
+										id="product_item_code_input"
+										type="text"
+										placeholder="001"
+										style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+									/>
+								</div>
+								<div>
+									<label
+										class="text-uppercase opacity-50"
+										style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+										>Harga (Rp)</label
+									>
+									<input
+										type="text"
+										class="currency-mask"
+										data-hidden-id="product_price_input"
+										required
+										id="product_price_input_display"
+										placeholder="450.000"
+										style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+									/>
+									<input type="hidden" name="price" id="product_price_input" />
+									<div
+										id="price_markup_preview"
+										style="font-size: 0.65rem; color: #10b981; margin-top: 0.4rem; font-weight: 600; display: none;"
+									>
+										Harga Coret: Rp <span id="markup_val"
+											>0</span
+										> (Hemat Rp <span id="markup_pct">0</span>)
+									</div>
+									<input
+										type="hidden"
+										name="original_price"
+										id="original_price_input"
+									/>
+								</div>
+							</div>
+
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Kategori Produk</label
+								>
+								<div
+									class="searchable-select"
+									data-ss-type="product-l1"
+								>
+									<input
+										type="hidden"
+										name="category_ids"
+										id="l1_category_input"
+									/>
+									<input
+										type="text"
+										class="ss-input"
+										placeholder="Cari & Pilih Kategori Utama..."
+										readonly
+										style="background: #ffffff; border-style: solid;"
+									/>
+									<div class="ss-dropdown">
+										<div class="ss-search-container">
+											<svg
+												class="ss-search-icon"
+												width="14"
+												height="14"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												><circle cx="11" cy="11" r="8"
+												></circle><path
+													d="M21 21l-4.35-4.35"
+												></path></svg
+											>
+											<input
+												type="text"
+												class="ss-search"
+												placeholder="Cari kategori..."
+											/>
+										</div>
+										<div class="ss-options">
+											{
+												hierarchicalTypes
+													.filter(
+														(t) =>
+															t.parent_id ===
+															null,
+													)
+													.map((t) => (
+														<div
+															class="ss-option"
+															data-value={t.id}
+														>
+															<span>
+																{t.name}
+															</span>
+															<span class="lvl-badge lvl-1">
+																Root
+															</span>
+														</div>
+													))
+											}
+										</div>
+									</div>
+								</div>
+
+								<div
+									id="sub-category-checkboxes"
+									class="cascading-container"
+								>
+								</div>
+							</div>
+
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Motif (Multi-select)</label
+								>
+								<div class="motif-style-container" id="motif-grid">
+									{
+										motifs?.map((m) => (
+											<label class="motif-style-label">
+												<input
+													type="checkbox"
+													name="motif_ids"
+													value={m.id}
+												/>
+												{m.name}
+											</label>
+										))
+									}
+								</div>
+							</div>
+
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Foto Produk (Bisa Pilih Banyak)</label
+								>
+								<input
+									name="image_file"
+									type="file"
+									accept="image/*"
+									multiple
+									required
+									style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: var(--radius-sm); background: #fcfcfc; font-size: 0.75rem;"
+								/>
+							</div>
+
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Ukuran & Variasi Harga</label
+								>
+								<p style="font-size: 0.7rem; color: var(--color-muted); margin-bottom: 1rem;">Centang ukuran yang tersedia, lalu isi harga khususnya jika berbeda.</p>
+
+								<label id="sleeve_toggle_wrapper" style="display: none; align-items: center; gap: 0.5rem; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm); cursor: pointer; background: #fcfcfc; margin-bottom: 1rem;">
+									<input type="checkbox" id="toggle_sleeve_options_add" />
+									<span style="font-size: 0.85rem; font-weight: 500;">Aktifkan Pilihan Lengan (Pendek & Panjang)</span>
+								</label>
+
+								<div
+									style="display: flex; flex-direction: column; gap: 0.5rem; background: #fcfcfc; padding: 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+								>
+									{
+										sizesData.map((size) => (
+										<>
+											<div class="variant-item-add variant-standard" style="display: flex; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee;">
+												<label style="display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 60px;">
+													<input type="checkbox" class="variant-cb-add" value={size.name} style="margin-top: 2px;" />
+													<span style="display: flex; flex-direction: column;">
+														<strong style="font-weight: 500;">{size.name}</strong>
+													</span>
+												</label>
+												<input type="hidden" name="variant_size" value={size.name} disabled class="v-size-input-add" />
+												<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: none;">
+													<div style="flex: 1;">
+														<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
+														<input type="text" placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-price-input-add currency-mask" />
+														<input type="hidden" name="variant_price" disabled class="v-price-hidden-add" />
+													</div>
+													<div style="width: 80px;">
+														<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
+														<input type="number" name="variant_stock" value="0" placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-stock-input-add" />
+													</div>
+												</div>
+											</div>
+
+											{['Lengan Pendek', 'Lengan Panjang'].map(sleeve => (
+											<div class="variant-item-add variant-sleeve-split" style="display: none; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee; padding-left: 1.5rem;">
+												<label style="display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 120px;">
+													<input type="checkbox" class="variant-cb-add" value={`${size.name} - ${sleeve}`} style="margin-top: 2px;" />
+													<span style="display: flex; flex-direction: column;">
+														<strong style="font-weight: 500;">{size.name}</strong>
+														<span style="font-size: 0.7rem; opacity: 0.6;">{sleeve}</span>
+													</span>
+												</label>
+												<input type="hidden" name="variant_size" value={`${size.name} - ${sleeve}`} disabled class="v-size-input-add" />
+												<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: none;">
+													<div style="flex: 1;">
+														<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
+														<input type="text" placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-price-input-add currency-mask" />
+														<input type="hidden" name="variant_price" disabled class="v-price-hidden-add" />
+													</div>
+													<div style="width: 80px;">
+														<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
+														<input type="number" name="variant_stock" value="0" placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-stock-input-add" />
+													</div>
+												</div>
+											</div>
+											))}
+										</>
+										))
+									}
+									{
+										sizesData.length === 0 && (
+											<span style="font-size: 0.7rem; opacity: 0.5;">
+												Belum ada data ukuran.
+											</span>
+										)
+									}
+								</div>
+							</div>
+
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Link Tokopedia (Opsional)</label
+								>
+								<input
+									name="tokopedia_url"
+									type="url"
+									placeholder="https://www.tokopedia.com/..."
+									style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+								/>
+							</div>
+
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Deskripsi Produk</label
+								>
+								<textarea
+									name="description"
+									rows="2"
+									placeholder="Detail produk..."
+									style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+								></textarea>
+							</div>
+
+							<div style="margin-top: var(--spacing-sm);">
+								<button
+									type="submit"
+									style="background: var(--color-text); color: white; padding: 0.8rem; border: none; text-transform: uppercase; letter-spacing: 2px; width: 100%; cursor: pointer; font-weight: 600; font-size: 0.75rem; border-radius: var(--radius-sm); transition: var(--transition);"
+									>Simpan Produk</button
+								>
+							</div>
+						</form>
 					</div>
 				</div>
-			</div>
-		</div>
-	</section>
 
 	<style is:global>
 		.admin-header {
@@ -587,21 +696,9 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 
 		.admin-main-grid {
 			display: grid;
-			grid-template-columns: 1fr;
+			grid-template-columns: 1fr 1.5fr;
 			gap: var(--spacing-xl);
 			align-items: start;
-			transition: grid-template-columns 0.3s ease;
-		}
-
-		.admin-main-grid.has-active-form {
-			grid-template-columns: 1fr 1.5fr;
-		}
-
-		.admin-menu-buttons {
-			display: flex;
-			gap: var(--spacing-md);
-			align-items: center;
-			flex-wrap: wrap;
 		}
 
 		@media (max-width: 1024px) {
@@ -612,14 +709,6 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 			}
 			.admin-main-grid {
 				grid-template-columns: 1fr;
-			}
-			.admin-menu-buttons {
-				width: 100%;
-				gap: var(--spacing-sm);
-			}
-			.admin-toggle-btn {
-				flex: 1 1 auto;
-				min-width: 120px;
 			}
 		}
 
@@ -1148,6 +1237,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 				updateName(); // Trigger name update when L2 is changed
 			}
 
+
 			l2Children.forEach((c) => {
 				const label = document.createElement("label");
 				label.className = "motif-style-label";
@@ -1161,11 +1251,9 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 				cb.addEventListener("change", (e) => {
 					if (cb.checked) {
 						// Single-select behavior for Level 2
-						l2Row
-							.querySelectorAll("input:checked")
-							.forEach((other) => {
-								if (other !== cb) other.checked = false;
-							});
+						l2Row.querySelectorAll("input:checked").forEach((other) => {
+							if (other !== cb) other.checked = false;
+						});
 					}
 					updateL3Selection();
 					updateName();
@@ -1176,21 +1264,15 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 
 		// --- Product Naming Automation Logic ---
 		const nameInput = document.getElementById("product_name_input");
-		const itemCodeInput = document.getElementById(
-			"product_item_code_input",
-		);
-		const categoryContainer = document.getElementById(
-			"sub-category-checkboxes",
-		);
+		const itemCodeInput = document.getElementById("product_item_code_input");
+		const categoryContainer = document.getElementById("sub-category-checkboxes");
 
 		function updateName() {
 			if (!nameInput) return;
 
 			// 1. Get Category (Jenis) - ALL LEVELS
 			const selectedCategories = [];
-			const l1Text = document.querySelector(
-				'[data-ss-type="product-l1"] .ss-input',
-			);
+			const l1Text = document.querySelector('[data-ss-type="product-l1"] .ss-input');
 			if (l1Text && l1Text.value && l1Text.value !== "") {
 				selectedCategories.push(l1Text.value);
 			}
@@ -1222,6 +1304,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 					.join(", ");
 			}
 
+
 			// 3. Get Item Code
 			const itemCode = itemCodeInput?.value.trim() || "";
 
@@ -1234,40 +1317,58 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 			nameInput.value = parts.join(" ");
 
 			// --- Sleeve Toggle Visibility based on Category ---
-			const sleeveKeywords = [
-				"kemeja",
-				"baju",
-				"hem",
-				"atasan",
-				"blouse",
-				"tunik",
-				"gamis",
-				"koko",
-				"pdh",
-				"jaket",
-			];
+			const sleeveKeywords = ['kemeja', 'baju', 'hem', 'atasan', 'blouse', 'tunik', 'gamis', 'koko', 'pdh', 'jaket'];
 			const jenisLower = jenis.toLowerCase();
-			const needsSleeve = sleeveKeywords.some((kw) =>
-				jenisLower.includes(kw),
-			);
-
-			const sleeveWrapper = document.getElementById(
-				"sleeve_toggle_wrapper",
-			);
+			const needsSleeve = sleeveKeywords.some(kw => jenisLower.includes(kw));
+			
+			const sleeveWrapper = document.getElementById('sleeve_toggle_wrapper');
 			if (sleeveWrapper) {
 				if (needsSleeve) {
-					sleeveWrapper.style.display = "flex";
+					sleeveWrapper.style.display = 'flex';
 				} else {
-					sleeveWrapper.style.display = "none";
-					const toggleCb = document.getElementById(
-						"toggle_sleeve_options_add",
-					);
+					sleeveWrapper.style.display = 'none';
+					const toggleCb = document.getElementById('toggle_sleeve_options_add');
 					if (toggleCb && toggleCb.checked) {
 						toggleCb.checked = false;
-						toggleCb.dispatchEvent(new Event("change"));
+						toggleCb.dispatchEvent(new Event('change'));
 					}
 				}
 			}
+		}
+
+
+		function setupToggles() {
+			const configs = [
+				{ btnId: "toggleTypesBtn", containerId: "typesContainer" },
+				{ btnId: "toggleMotifsBtn", containerId: "motifsContainer" },
+				{ btnId: "toggleSiteBtn", containerId: "siteContainer" },
+				{ btnId: "toggleSizesBtn", containerId: "sizesContainer" },
+			];
+
+			configs.forEach((config) => {
+				const btn = document.getElementById(config.btnId);
+				const container = document.getElementById(config.containerId);
+
+				btn?.addEventListener("click", () => {
+					const isCurrentlyOpen = container.style.display !== "none";
+
+					// Close ALL first
+					configs.forEach((c) => {
+						const cContainer = document.getElementById(
+							c.containerId,
+						);
+						const cBtn = document.getElementById(c.btnId);
+						if (cContainer) cContainer.style.display = "none";
+						if (cBtn) cBtn.classList.remove("active");
+					});
+
+					// If it was NOT open, open it
+					if (!isCurrentlyOpen) {
+						if (container) container.style.display = "block";
+						if (btn) btn.classList.add("active");
+					}
+				});
+			});
 		}
 
 		// Price Markup Logic (15% Discount Markup)
@@ -1289,7 +1390,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 					markupVal.innerText = originalPrice.toLocaleString("id-ID");
 					originalPriceInput.value = originalPrice;
 					const markupPctEl = document.getElementById("markup_pct");
-					if (markupPctEl) markupPctEl.innerText = pct;
+					if(markupPctEl) markupPctEl.innerText = pct;
 					markupPreview.style.display = "block";
 				} else {
 					markupPreview.style.display = "none";
@@ -1300,12 +1401,8 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 
 		// Naming Listeners Setup
 		function setupNamingAutomation() {
-			const itemCodeInput = document.getElementById(
-				"product_item_code_input",
-			);
-			const categoryContainer = document.getElementById(
-				"sub-category-checkboxes",
-			);
+			const itemCodeInput = document.getElementById("product_item_code_input");
+			const categoryContainer = document.getElementById("sub-category-checkboxes");
 			const l1Input = document.getElementById("l1_category_input");
 
 			itemCodeInput?.addEventListener("input", updateName);
@@ -1314,43 +1411,41 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 			const motifGrid = document.getElementById("motif-grid");
 			motifGrid?.addEventListener("change", updateName);
 
+
 			if (l1Input) {
 				const observer = new MutationObserver(updateName);
 				observer.observe(l1Input, { attributes: true });
 			}
 		}
 
-		document.addEventListener("DOMContentLoaded", () => {
-			setupNamingAutomation();
-		});
+
+		setupToggles();
+		initSearchableSelect();
+		setupNamingAutomation();
 
 		// Variasi UI Logic Tambah Produk
-		document.querySelectorAll(".variant-cb-add").forEach((cb) => {
-			cb.addEventListener("change", (e) => {
-				const parent = e.target.closest(".variant-item-add");
-				const vSize = parent.querySelector(".v-size-input-add");
-				const vPriceDisp = parent.querySelector(".v-price-input-add");
-				const vPriceHid = parent.querySelector(".v-price-hidden-add");
-				const vStock = parent.querySelector(".v-stock-input-add");
-				const details = parent.querySelector(".v-details-add");
-
+		document.querySelectorAll('.variant-cb-add').forEach(cb => {
+			cb.addEventListener('change', (e) => {
+				const parent = e.target.closest('.variant-item-add');
+				const vSize = parent.querySelector('.v-size-input-add');
+				const vPriceDisp = parent.querySelector('.v-price-input-add');
+				const vPriceHid = parent.querySelector('.v-price-hidden-add');
+				const vStock = parent.querySelector('.v-stock-input-add');
+				const details = parent.querySelector('.v-details-add');
+				
 				const isChecked = e.target.checked;
 				vSize.disabled = !isChecked;
 				vPriceDisp.disabled = !isChecked;
-				if (vPriceHid) vPriceHid.disabled = !isChecked;
+				if(vPriceHid) vPriceHid.disabled = !isChecked;
 				vStock.disabled = !isChecked;
-				details.style.display = isChecked ? "flex" : "none";
+				details.style.display = isChecked ? 'flex' : 'none';
 
 				// Set default price based on main price input if empty
 				if (isChecked && !vPriceDisp.value) {
-					const mainPriceHid = document.getElementById(
-						"product_price_input",
-					);
-					if (mainPriceHid && mainPriceHid.value) {
+					const mainPriceHid = document.getElementById("product_price_input");
+					if(mainPriceHid && mainPriceHid.value) {
 						vPriceHid.value = mainPriceHid.value;
-						vPriceDisp.value = new Intl.NumberFormat(
-							"id-ID",
-						).format(mainPriceHid.value);
+						vPriceDisp.value = new Intl.NumberFormat('id-ID').format(mainPriceHid.value);
 					}
 				}
 			});
@@ -1358,185 +1453,126 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 
 		// Currency Formatting Logic
 		function initCurrencyMasks() {
-			document.querySelectorAll(".currency-mask").forEach((input) => {
+			document.querySelectorAll('.currency-mask').forEach(input => {
 				const formatPrice = (val) => {
-					const num = val.toString().replace(/\D/g, "");
-					return num
-						? new Intl.NumberFormat("id-ID").format(num)
-						: "";
+					const num = val.toString().replace(/\D/g, '');
+					return num ? new Intl.NumberFormat('id-ID').format(num) : '';
 				};
 				const getHidden = () => {
-					if (input.dataset.hiddenId)
-						return document.getElementById(input.dataset.hiddenId);
-					return input.parentElement.querySelector(
-						'input[type="hidden"]',
-					);
+					if (input.dataset.hiddenId) return document.getElementById(input.dataset.hiddenId);
+					return input.parentElement.querySelector('input[type="hidden"]');
 				};
 
 				const hidden = getHidden();
-				input.addEventListener("input", (e) => {
-					const rawVal = e.target.value.replace(/\D/g, "");
+				input.addEventListener('input', (e) => {
+					const rawVal = e.target.value.replace(/\D/g, '');
 					e.target.value = formatPrice(e.target.value);
 					if (hidden) {
 						hidden.value = rawVal;
-						hidden.dispatchEvent(
-							new Event("input", { bubbles: true }),
-						);
+						hidden.dispatchEvent(new Event('input', { bubbles: true }));
 					}
 				});
 				// Initial set on load
-				if (input.value) {
-					input.value = formatPrice(input.value);
-					if (hidden) hidden.value = input.value.replace(/\D/g, "");
+				if (input.value) { 
+					input.value = formatPrice(input.value); 
+					if(hidden) hidden.value = input.value.replace(/\D/g, '');
 				}
 			});
 		}
 		initCurrencyMasks();
 
 		// Sleeve Mode Toggle Logic
-		const sleeveToggleAdd = document.getElementById(
-			"toggle_sleeve_options_add",
-		);
-		if (sleeveToggleAdd) {
-			sleeveToggleAdd.addEventListener("change", (e) => {
+		const sleeveToggleAdd = document.getElementById('toggle_sleeve_options_add');
+		if(sleeveToggleAdd) {
+			sleeveToggleAdd.addEventListener('change', (e) => {
 				const isChecked = e.target.checked;
-				document.querySelectorAll(".variant-standard").forEach((el) => {
-					el.style.display = isChecked ? "none" : "flex";
-					if (isChecked) {
-						const cb = el.querySelector(".variant-cb-add");
-						if (cb && cb.checked) {
+				document.querySelectorAll('.variant-standard').forEach(el => {
+					el.style.display = isChecked ? 'none' : 'flex';
+					if(isChecked) {
+						const cb = el.querySelector('.variant-cb-add');
+						if(cb && cb.checked) {
 							cb.checked = false;
-							cb.dispatchEvent(new Event("change"));
+							cb.dispatchEvent(new Event('change'));
 						}
 					}
 				});
-				document
-					.querySelectorAll(".variant-sleeve-split")
-					.forEach((el) => {
-						el.style.display = isChecked ? "flex" : "none";
-						if (!isChecked) {
-							const cb = el.querySelector(".variant-cb-add");
-							if (cb && cb.checked) {
-								cb.checked = false;
-								cb.dispatchEvent(new Event("change"));
-							}
+				document.querySelectorAll('.variant-sleeve-split').forEach(el => {
+					el.style.display = isChecked ? 'flex' : 'none';
+					if(!isChecked) {
+						const cb = el.querySelector('.variant-cb-add');
+						if(cb && cb.checked) {
+							cb.checked = false;
+							cb.dispatchEvent(new Event('change'));
 						}
-					});
+					}
+				});
 			});
 		}
 
 		// Check URL for Pra-Produk selection
 		document.addEventListener("DOMContentLoaded", async () => {
 			const urlParams = new URLSearchParams(window.location.search);
-			const praProdukId = urlParams.get("use_praproduk");
-			if (praProdukId) {
+			const praProdukId = urlParams.get('use_praproduk');
+			if(praProdukId) {
 				try {
-					const res = await fetch(
-						"https://noir.grace.gracianna.web.id/api/v1/beli1",
-					);
+					const res = await fetch("https://noir.grace.gracianna.web.id/api/v1/beli1");
 					const json = await res.json();
-					if (json.success && json.data) {
-						const item = json.data.find((p) => p.id == praProdukId);
-						if (item) {
+					if(json.success && json.data) {
+						const item = json.data.find(p => p.id == praProdukId);
+						if(item) {
 							// Auto-fill form
-							const nameInput =
-								document.getElementById("product_name_input");
-							if (nameInput && item.nama)
-								nameInput.value = item.nama;
-
-							const skuInput =
-								document.getElementById("product_sku_input");
-							if (skuInput && item.counter)
-								skuInput.value = item.counter;
-
-							const itemCodeInput = document.getElementById(
-								"product_item_code_input",
-							);
-							if (itemCodeInput && item.kodeitem)
-								itemCodeInput.value = item.kodeitem;
-
-							if (item.hjual) {
-								const priceInputHidden =
-									document.getElementById(
-										"product_price_input",
-									);
-								const priceInputDisplay =
-									document.getElementById(
-										"product_price_input_display",
-									);
-								if (priceInputHidden) {
+							const nameInput = document.getElementById("product_name_input");
+							if(nameInput && item.nama) nameInput.value = item.nama;
+							
+							const skuInput = document.getElementById("product_sku_input");
+							if(skuInput && item.counter) skuInput.value = item.counter;
+							
+							const itemCodeInput = document.getElementById("product_item_code_input");
+							if(itemCodeInput && item.kodeitem) itemCodeInput.value = item.kodeitem;
+							
+							if(item.hjual) {
+								const priceInputHidden = document.getElementById("product_price_input");
+								const priceInputDisplay = document.getElementById("product_price_input_display");
+								if(priceInputHidden) {
 									priceInputHidden.value = item.hjual;
-									priceInputHidden.dispatchEvent(
-										new Event("input", { bubbles: true }),
-									);
+									priceInputHidden.dispatchEvent(new Event('input', { bubbles: true }));
 								}
-								if (priceInputDisplay) {
-									priceInputDisplay.value = parseInt(
-										item.hjual,
-									).toLocaleString("id-ID");
+								if(priceInputDisplay) {
+									priceInputDisplay.value = parseInt(item.hjual).toLocaleString('id-ID');
 								}
 							}
-
+							
 							setTimeout(() => {
-								if (item.old) {
-									const oldInput = document.getElementById(
-										"original_price_input",
-									);
-									const markupVal =
-										document.getElementById("markup_val");
-									const markupPctEl =
-										document.getElementById("markup_pct");
-									const markupPreview =
-										document.getElementById(
-											"price_markup_preview",
-										);
-
-									if (
-										oldInput &&
-										markupVal &&
-										markupPctEl &&
-										markupPreview
-									) {
+								if(item.old) {
+									const oldInput = document.getElementById("original_price_input");
+									const markupVal = document.getElementById("markup_val");
+									const markupPctEl = document.getElementById("markup_pct");
+									const markupPreview = document.getElementById("price_markup_preview");
+									
+									if(oldInput && markupVal && markupPctEl && markupPreview) {
 										oldInput.value = item.old;
-										markupVal.innerText = parseInt(
-											item.old,
-										).toLocaleString("id-ID");
-
-										const price = parseFloat(
-											item.hjual || 0,
-										);
+										markupVal.innerText = parseInt(item.old).toLocaleString("id-ID");
+										
+										const price = parseFloat(item.hjual || 0);
 										const oldPrice = parseFloat(item.old);
-										markupPctEl.innerText = (
-											oldPrice - price
-										).toLocaleString("id-ID");
-
+										markupPctEl.innerText = (oldPrice - price).toLocaleString("id-ID");
+										
 										markupPreview.style.display = "block";
 									}
 								}
 							}, 50);
 
 							// Scroll to form
-							if (nameInput) {
-								nameInput.scrollIntoView({
-									behavior: "smooth",
-									block: "center",
-								});
+							if(nameInput) {
+								nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
 							}
 
 							// Remove query param without reload
-							const newUrl =
-								window.location.protocol +
-								"//" +
-								window.location.host +
-								window.location.pathname;
-							window.history.pushState(
-								{ path: newUrl },
-								"",
-								newUrl,
-							);
+							const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+							window.history.pushState({path:newUrl}, '', newUrl);
 						}
 					}
-				} catch (e) {
+				} catch(e) {
 					console.error("Gagal mengambil data Pra-Produk", e);
 				}
 			}

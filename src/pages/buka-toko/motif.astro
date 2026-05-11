@@ -1,0 +1,366 @@
+---
+export const prerender = false;
+import Layout from "../../layouts/Layout.astro";
+import { apiFetch } from "../../lib/api";
+
+// Check for session (Authentication Gate)
+const session = Astro.cookies.get("admin_session");
+if (session?.value !== "authenticated") {
+	return Astro.redirect("/login");
+}
+let motifs: any[] = [];
+let settings: any = null;
+let message = "";
+
+try {
+	const mRes = await apiFetch<any>("motifs");
+	motifs = mRes?.data || mRes || [];
+
+	const sRes = await apiFetch<any>("settings");
+	settings = sRes?.data || sRes || { site_name: "Batik Nusantara" };
+} catch (e: any) {
+	console.error("API Fetch Error:", e.message);
+}
+
+// Handle Form Submission (Server Side)
+if (Astro.request.method === "POST") {
+	try {
+		const formData = await Astro.request.formData();
+		const action = formData.get("action");
+
+		if (action === "add_motif") {
+			const name = formData.get("name");
+			await apiFetch("motifs", {
+				method: "POST",
+				body: JSON.stringify({ name }),
+			});
+			return Astro.redirect("/buka-toko/motif?success=motif");
+		}
+
+		if (action === "delete_motif") {
+			const id = formData.get("id");
+			await apiFetch(`motifs/${id}`, { method: "DELETE" });
+			return Astro.redirect("/buka-toko/motif?success=deleted");
+		}
+	} catch (e: any) {
+		isError = true;
+		return Astro.redirect(`/buka-toko/motif?error=${encodeURIComponent(e.message || "Gagal memproses tindakan")}`);
+	}
+}
+
+const success = Astro.url.searchParams.get("success");
+const error = Astro.url.searchParams.get("error");
+if (success === "motif") message = "Motif baru berhasil ditambahkan!";
+if (success === "deleted") message = "Motif berhasil dihapus!";
+---
+
+<Layout title={`Kelola Motif - ${settings?.site_name || "Batik Nusantara"}`}>
+	<section style="padding: 130px 0 var(--spacing-2xl) 0; background: #fdfcfb; min-height: 100vh;">
+		<div class="container" style="max-width: 1000px;">
+			<!-- Header -->
+			<div style="margin-bottom: var(--spacing-xl);">
+				<h1 style="font-family: var(--font-serif); font-size: 2.2rem; margin: 0; font-weight: 400;">
+					Manajemen <span style="font-style: italic;">Motif Batik</span>
+				</h1>
+				<p style="opacity: 0.5; margin-top: 0.5rem; font-size: 0.9rem;">
+					Kelola koleksi ragam hias dan motif batik Anda.
+				</p>
+			</div>
+
+			<!-- Flash Message -->
+			{
+				message && (
+					<div
+						style="background: #e6f9e9; color: #0d5a15; padding: 1rem 1.5rem; border-radius: 8px; margin-bottom: 2rem; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; border: 1px solid rgba(13, 90, 21, 0.1);"
+					>
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+						{message}
+					</div>
+				)
+			}
+
+			<!-- Error Message -->
+			{
+				error && (
+					<div
+						style="background: #fff5f5; color: #b91c1c; padding: 1rem 1.5rem; border-radius: 8px; margin-bottom: 2rem; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; border: 1px solid rgba(185, 28, 28, 0.1);"
+					>
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 8v4M12 16h.01"/></svg>
+						<strong>Error:</strong> {error}
+					</div>
+				)
+			}
+
+			<div style="display: grid; grid-template-columns: 1fr; gap: var(--spacing-lg);">
+				<div style="background: white; border: 1px solid var(--color-border); padding: 2.5rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
+					<h3 style="font-size: 0.85rem; margin-bottom: 1.5rem; font-weight: 700; letter-spacing: 1px;" class="text-uppercase">
+						Tambah Motif Baru
+					</h3>
+					
+					<form
+						method="POST"
+						style="display: flex; flex-direction: column; gap: 1.2rem; margin-bottom: 2.5rem;"
+					>
+						<input
+							type="hidden"
+							name="action"
+							value="add_motif"
+						/>
+
+						<div>
+							<label class="input-label">Nama Motif</label>
+							<div style="display: flex; gap: var(--spacing-sm);">
+								<input
+									name="name"
+									type="text"
+									required
+									placeholder="Tambah Motif (Sogan, Mega Mendung, dll)..."
+									style="flex: 1; padding: 0.8rem; border: 1px solid #ddd; border-radius: 8px; font-size: 0.9rem;"
+								/>
+								<button
+									type="submit"
+									style="background: var(--color-text); color: white; padding: 0.8rem 1.5rem; border: none; font-size: 0.75rem; font-weight: 700; cursor: pointer; border-radius: 8px; text-transform: uppercase; letter-spacing: 1px; transition: 0.3s;"
+									onmouseover="this.style.background='#000'"
+									onmouseout="this.style.background='var(--color-text)'"
+								>
+									TAMBAH
+								</button>
+							</div>
+						</div>
+					</form>
+
+					<div style="border-top: 1px solid #f3f4f6; padding-top: 2rem;">
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+							<p class="text-uppercase opacity-50" style="font-size: 0.7rem; font-weight: 700; letter-spacing: 1.5px;">
+								Daftar Motif Terdaftar
+							</p>
+							<span style="font-size: 0.75rem; color: #9ca3af; font-weight: 600;">
+								{motifs?.length || 0} Motif
+							</span>
+						</div>
+
+						<div style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
+							{
+								motifs?.map((m) => (
+									<div style="display: flex; justify-content: space-between; align-items: center; padding: 0.8rem 1rem; background: #fdfdfd; border-radius: 8px; border: 1px solid #f1f1f1; transition: 0.2s;" class="motif-row">
+										<span style="font-size: 0.85rem; font-weight: 500; color: #111827;">
+											{m.name}
+										</span>
+										<form
+											method="POST"
+											class="delete-form"
+										>
+											<input
+												type="hidden"
+												name="action"
+												value="delete_motif"
+											/>
+											<input
+												type="hidden"
+												name="id"
+												value={m.id}
+											/>
+											<button
+												type="button"
+												class="btn-trash"
+												title="Hapus Motif"
+												onclick="openDeleteModal(this.form)"
+											>
+												<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+											</button>
+										</form>
+									</div>
+								))
+							}
+						</div>
+						{
+							(!motifs || motifs.length === 0) && (
+								<div style="padding: 4rem; text-align: center; border: 1px dashed #e5e7eb; border-radius: 12px;">
+									<p style="font-size: 0.9rem; color: #9ca3af; opacity: 0.6;">
+										Belum ada data motif.
+									</p>
+								</div>
+							)
+						}
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- Custom Delete Modal -->
+	<div id="delete-modal" class="modal-overlay">
+		<div class="modal-content">
+			<div class="modal-header">
+				<div class="warning-icon">
+					<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/></svg>
+				</div>
+				<h3 style="font-family: var(--font-serif); font-size: 1.5rem; font-weight: 400; margin: 0;">Konfirmasi <span style="font-style: italic;">Hapus</span></h3>
+			</div>
+			<p style="opacity: 0.6; line-height: 1.6; margin: 1.5rem 0; font-size: 0.95rem;">Apakah Anda yakin ingin menghapus motif ini? Pastikan tidak ada produk yang sedang menggunakannya.</p>
+			<div class="modal-footer">
+				<button type="button" id="cancel-btn" class="btn-admin-secondary">Batal</button>
+				<button type="button" id="confirm-btn" class="btn-admin-danger">Ya, Hapus</button>
+			</div>
+		</div>
+	</div>
+
+	<script is:inline>
+		// Delete Confirmation Modal
+		let currentForm = null;
+		const modal = document.getElementById('delete-modal');
+		const confirmBtn = document.getElementById('confirm-btn');
+		const cancelBtn = document.getElementById('cancel-btn');
+
+		window.openDeleteModal = function(form) {
+			currentForm = form;
+			modal.classList.add('active');
+			document.body.style.overflow = 'hidden';
+		}
+
+		function closeModal() {
+			modal.classList.remove('active');
+			document.body.style.overflow = '';
+			currentForm = null;
+		}
+
+		cancelBtn.addEventListener('click', closeModal);
+		
+		confirmBtn.addEventListener('click', () => {
+			if (currentForm) {
+				confirmBtn.disabled = true;
+				confirmBtn.innerText = "Menghapus...";
+				currentForm.submit();
+			}
+		});
+
+		modal.addEventListener('click', (e) => {
+			if (e.target === modal) closeModal();
+		});
+	</script>
+
+	<style>
+		.input-label {
+			font-size: 0.65rem;
+			text-transform: uppercase;
+			letter-spacing: 1.5px;
+			opacity: 0.5;
+			font-weight: 700;
+			display: block;
+			margin-bottom: 0.5rem;
+		}
+
+		.motif-row:hover {
+			background: #fbfbfb !important;
+			border-color: #e5e7eb !important;
+		}
+
+		.btn-trash {
+			background: none;
+			border: none;
+			color: #ff4d4d;
+			cursor: pointer;
+			opacity: 0.5;
+			padding: 4px;
+			display: flex;
+			align-items: center;
+			transition: 0.2s;
+			border-radius: 4px;
+		}
+		.btn-trash:hover {
+			opacity: 1;
+			background: #fff5f5;
+			transform: scale(1.1);
+		}
+
+		/* Modal Styles */
+		.modal-overlay {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background: rgba(0, 0, 0, 0.4);
+			backdrop-filter: blur(4px);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			z-index: 9999;
+			opacity: 0;
+			visibility: hidden;
+			transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+		}
+		.modal-overlay.active {
+			opacity: 1;
+			visibility: visible;
+		}
+		.modal-content {
+			background: white;
+			width: 100%;
+			max-width: 400px;
+			padding: 2.5rem;
+			border-radius: 16px;
+			box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+			transform: translateY(20px);
+			transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+		}
+		.modal-overlay.active .modal-content {
+			transform: translateY(0);
+		}
+		.modal-header {
+			display: flex;
+			align-items: center;
+			gap: 15px;
+			margin-bottom: 1rem;
+		}
+		.warning-icon {
+			width: 40px;
+			height: 40px;
+			background: #fff5f5;
+			color: #b91c1c;
+			border-radius: 12px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.modal-footer {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 12px;
+			margin-top: 0.5rem;
+		}
+		.btn-admin-secondary {
+			padding: 0.8rem;
+			border-radius: 8px;
+			font-size: 0.75rem;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+			cursor: pointer;
+			background: #f5f5f5;
+			border: 1px solid #eee;
+			color: #666;
+			transition: all 0.2s;
+		}
+		.btn-admin-secondary:hover {
+			background: #eee;
+		}
+		.btn-admin-danger {
+			padding: 0.8rem;
+			border-radius: 8px;
+			font-size: 0.75rem;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+			cursor: pointer;
+			background: #b91c1c;
+			border: none;
+			color: white;
+			transition: all 0.2s;
+		}
+		.btn-admin-danger:hover {
+			background: #991b1b;
+			box-shadow: 0 4px 12px rgba(185, 28, 28, 0.2);
+		}
+	</style>
+</Layout>

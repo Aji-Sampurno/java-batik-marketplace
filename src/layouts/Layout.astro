@@ -4,20 +4,19 @@ interface Props {
 }
 
 const { title } = Astro.props;
-import { supabase } from '../lib/supabase';
+import { apiFetch } from '../lib/api';
 import '../styles/index.css';
 import Analytics from '@vercel/analytics/astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
 
 // Fetch Site Settings
 let settings: any = { site_name: 'Batik Nusantara' };
-if (supabase) {
-  try {
-    const { data } = await supabase.from('settings').select('*').single();
-    if (data) settings = data;
-  } catch (e) {
-    console.error('Settings fetch error:', e);
-  }
+try {
+  const res = await apiFetch<any>('settings');
+  const data = res?.data || res;
+  if (data) settings = data;
+} catch (e: any) {
+  console.error('Settings fetch error:', e.message);
 }
 
 // WhatsApp Number Cleaning Logic (Ensures 08... becomes 628...)
@@ -57,6 +56,7 @@ const restWords = nameParts.slice(1).join(" ");
 
 // Admin Visibility Check
 const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
+const isBukaTokoPage = Astro.url.pathname.startsWith('/buka-toko');
 ---
 
 <!doctype html>
@@ -74,7 +74,7 @@ const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
 		<header id="main-header" style="position: absolute; top: 0; left: 0; right: 0; z-index: 100; transition: var(--transition); padding: 1.2rem 0;">
 			<nav class="container" style="display: flex; justify-content: space-between; align-items: center;">
 				<div class="logo">
-					<a href="/" style="display: flex; align-items: center; gap: 0.8rem;">
+					<a href={isBukaTokoPage ? "/buka-toko" : "/"} style="display: flex; align-items: center; gap: 0.8rem;">
 						{settings.logo_url ? (
 							<img src={settings.logo_url} alt={settings.site_name} style="height: 80px; width: auto;" />
 						) : (
@@ -86,16 +86,33 @@ const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
 				</div>
 
 				<!-- Desktop Navigation -->
-				<ul style="display: flex; gap: var(--spacing-lg); list-style: none;" class="text-uppercase nav-links hide-mobile">
-					<li><a href="/products" style="font-weight: 500; color: rgba(255,255,255,0.8);">Katalog</a></li>
-					<li>
-						<a href="/about" style="font-weight: 500; color: rgba(255,255,255,0.8);">Tentang</a>
-					</li>
+				<ul style="display: flex; gap: var(--spacing-md); list-style: none; align-items: center;" class="text-uppercase nav-links hide-mobile">
 					{
-						isAdmin && (
-							<li>
-								<a href="/buka-toko" style="opacity: 0.3; font-size: 0.6rem; color: white;">Admin</a>
-							</li>
+						isBukaTokoPage ? (
+							<>
+								<li><a href="/" style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px;">Lihat Toko</a></li>
+								<li><a href="/buka-toko/kategori" class="nav-admin-btn" style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;">Kategori</a></li>
+								<li><a href="/buka-toko/motif" class="nav-admin-btn" style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;">Motif</a></li>
+								<li><a href="/buka-toko/info-toko" class="nav-admin-btn" style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;">Info Toko</a></li>
+								<li><a href="/buka-toko/ukuran" class="nav-admin-btn" style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;">Ukuran</a></li>
+								<li><a href="/buka-toko/pra-produk" style="font-weight: 500; color: var(--color-accent-light); font-size: 0.75rem; letter-spacing: 0.5px;">Pra-Produk</a></li>
+								<li><a href="/buka-toko/promosi" style="font-weight: 500; color: #fbbf24; font-size: 0.75rem; letter-spacing: 0.5px;">Promo</a></li>
+								<li><a href="?logout=true" style="font-weight: 600; color: #ff4d4d; font-size: 0.75rem; letter-spacing: 0.5px; margin-left: var(--spacing-sm);">Logout</a></li>
+							</>
+						) : (
+							<>
+								<li><a href="/products" style="font-weight: 500; color: rgba(255,255,255,0.8);">Katalog</a></li>
+								<li>
+									<a href="/about" style="font-weight: 500; color: rgba(255,255,255,0.8);">Tentang</a>
+								</li>
+								{
+									isAdmin && (
+										<li>
+											<a href="/buka-toko" style="opacity: 0.3; font-size: 0.6rem; color: white;">Admin</a>
+										</li>
+									)
+								}
+							</>
 						)
 					}
 				</ul>
@@ -113,16 +130,33 @@ const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
 			<!-- Mobile Menu Overlay -->
 			<div id="mobile-menu" class="show-mobile" style="position: fixed; top: 0; left: 0; width: 100%; height: 100dvh; background: var(--color-bg); z-index: 1000; transform: translateY(-100%); transition: transform 0.6s cubic-bezier(0.85, 0, 0.15, 1); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: var(--spacing-xl); padding: var(--spacing-2xl);">
 				<ul style="list-style: none; text-align: center; display: flex; flex-direction: column; gap: var(--spacing-lg);" class="text-uppercase">
-					<li><a href="/" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Beranda</a></li>
-					<li><a href="/products" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Katalog</a></li>
-					<li>
-						<a href="/about" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Tentang Kami</a>
-					</li>
 					{
-						isAdmin && (
-							<li>
-								<a href="/buka-toko" style="opacity: 0.5; font-size: 0.8rem; color: var(--color-text);">Admin Panel</a>
-							</li>
+						isBukaTokoPage ? (
+							<>
+								<li><a href="/" style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);">Lihat Toko</a></li>
+								<li><a href="/buka-toko/kategori" style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);">Kategori</a></li>
+								<li><a href="/buka-toko/motif" style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);">Motif</a></li>
+								<li><a href="/buka-toko/info-toko" style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);">Info Toko</a></li>
+								<li><a href="/buka-toko/ukuran" style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);">Ukuran</a></li>
+								<li><a href="/buka-toko/pra-produk" style="font-size: 1.3rem; font-weight: 500; color: var(--color-accent);">Pra-Produk</a></li>
+								<li><a href="/buka-toko/promosi" style="font-size: 1.3rem; font-weight: 500; color: #fbbf24;">Promo</a></li>
+								<li><a href="?logout=true" style="font-size: 1.3rem; font-weight: 600; color: #ff4d4d; margin-top: 1rem;">Logout</a></li>
+							</>
+						) : (
+							<>
+								<li><a href="/" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Beranda</a></li>
+								<li><a href="/products" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Katalog</a></li>
+								<li>
+									<a href="/about" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Tentang Kami</a>
+								</li>
+								{
+									isAdmin && (
+										<li>
+											<a href="/buka-toko" style="opacity: 0.5; font-size: 0.8rem; color: var(--color-text);">Admin Panel</a>
+										</li>
+									)
+								}
+							</>
 						)
 					}
 				</ul>
@@ -171,6 +205,20 @@ const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
 		</div>
 
 		<style is:global>
+			.nav-admin-btn {
+				color: rgba(255, 255, 255, 0.8) !important;
+				transition: var(--transition);
+			}
+			.nav-admin-btn:hover {
+				color: var(--color-accent-light) !important;
+			}
+			.glass-header .nav-admin-btn {
+				color: var(--color-text) !important;
+			}
+			.glass-header .nav-admin-btn:hover {
+				color: var(--color-accent) !important;
+			}
+
 			@keyframes wa-fade-in {
 				from { opacity: 0; transform: translateY(20px); }
 				to { opacity: 1; transform: translateY(0); }
@@ -308,8 +356,10 @@ const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
 				}
 			};
 
+			const isBukaTokoPage = window.location.pathname.startsWith('/buka-toko');
+
 			const updateHeaderColors = () => {
-				const isGlass = window.scrollY > 50;
+				const isGlass = window.scrollY > 50 || isBukaTokoPage;
 				const color = isGlass ? 'var(--color-text)' : 'white';
 				
 				if (!isMenuOpen) {
@@ -321,7 +371,7 @@ const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
 			};
 
 			const handleHeader = () => {
-				if (window.scrollY > 50) {
+				if (window.scrollY > 50 || isBukaTokoPage) {
 					header.classList.add('glass-header');
 					header.style.position = 'fixed';
 				} else {
@@ -330,6 +380,8 @@ const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
 				}
 				updateHeaderColors();
 			};
+
+
 
 			mobileMenuToggle.addEventListener('click', toggleMenu);
 

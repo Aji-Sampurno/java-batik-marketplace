@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 import Layout from '../../layouts/Layout.astro';
-import { supabase } from '../../lib/supabase';
+import { apiFetch } from '../../lib/api';
 
 const { id } = Astro.params;
 
@@ -10,43 +10,92 @@ let relatedProducts: any[] = [];
 const waBaseUrl = "https://wa.me/";
 let settings: any = { contact_whatsapp: '628123456789' };
 
-if (supabase) {
+try {
   // Fetch main product
-  const { data: p, error } = await supabase
-    .from('products')
-    .select('*, types(name), product_motifs(motif_id, motifs(name)), product_categories(category_id, types(name, category_level)), product_variants(*)')
-    .eq('id', id)
-    .single();
+  const resProduct = await apiFetch<any>(`products/${id}`);
+  const p = resProduct?.data || resProduct;
   
   if (p) {
     product = p;
     // Fetch related products (same type, excluding current)
-    const { data: related } = await supabase
-      .from('products')
-      .select('*, types(name), product_motifs(motif_id, motifs(name)), product_variants(*)')
-      .eq('type_id', p.type_id)
-      .eq('is_active', true)
-      .neq('id', id)
-      .limit(4);
-    relatedProducts = related || [];
+    try {
+      const resProducts = await apiFetch<any>("products");
+      const allProducts = resProducts?.data || resProducts || [];
+      relatedProducts = allProducts
+        .filter((item: any) => item.type_id === p.type_id && item.is_active && item.id !== id)
+        .slice(0, 4);
+    } catch (e) {}
   }
 
-  const { data: s } = await supabase.from('settings').select('*').single();
+  const resSettings = await apiFetch<any>("settings");
+  const s = resSettings?.data || resSettings;
   if (s) settings = s;
+} catch (e: any) {
+  console.error("API Fetch Error:", e.message);
 }
 
 if (!product) {
   return Astro.redirect('/404');
 }
 
-const productMotifs = product.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
+const productMotifs = (product.motifs || product.product_motifs || []).map((pm: any) => pm.name || pm.motifs?.name || '').filter(Boolean) || [];
 // Get and sort categories by level
-const productCategories = product.product_categories
-  ?.map((pc: any) => pc.types)
-  .sort((a: any, b: any) => (a.category_level || 0) - (b.category_level || 0)) || [];
+const productCategories = (product.categories || product.product_categories || [])
+  ?.map((pc: any) => pc.name ? pc : pc.types)
+  .filter(Boolean)
+  .sort((a: any, b: any) => (a.category_level || a.level || 0) - (b.category_level || b.level || 0)) || [];
 
 const waNumber = settings.contact_whatsapp || "628123456789";
 const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${product.name} (${product.code || ''}). Apakah masih tersedia?`);
+const isOutOfStock = !product.is_active || product.total_stock === 0 || product.stock_status === 'habis';
+
+function renderMarkdown(md: string): string {
+  if (!md) return '';
+  
+  // Escape HTML to prevent XSS
+  let html = md
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Render Horizontal Lines: --- or ___ or ***
+  html = html.replace(/^\s*[-_*]{3,}\s*$/gm, '<hr style="border: 0; border-top: 1px solid #eee; margin: 1.5rem 0;" />');
+
+  // Render Bold: **text**
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong style="font-weight: 700; color: #1e293b;">$1</strong>');
+
+  // Render Italic: *text* or _text_
+  html = html.replace(/\*(.*?)\*/g, '<em style="font-style: italic;">$1</em>');
+  html = html.replace(/_(.*?)_/g, '<em style="font-style: italic;">$1</em>');
+
+  // Render Lists: * item or - item
+  const lines = html.split('\n');
+  let inList = false;
+  const processedLines = lines.map(line => {
+    const trimmed = line.trim();
+    const listMatch = line.match(/^\s*[-*]\s+(.*)$/);
+    if (listMatch) {
+      const content = listMatch[1];
+      if (!inList) {
+        inList = true;
+        return '<ul style="list-style-type: disc; margin-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem;">\n<li style="font-size: 1.05rem; line-height: 1.8; font-weight: 300; opacity: 0.85;">' + content + '</li>';
+      }
+      return '<li style="font-size: 1.05rem; line-height: 1.8; font-weight: 300; opacity: 0.85;">' + content + '</li>';
+    } else {
+      if (inList) {
+        inList = false;
+        return '</ul>\n' + (trimmed ? '<p style="margin-bottom: 1rem; font-size: 1.05rem; line-height: 1.8; font-weight: 300; opacity: 0.8;">' + line + '</p>' : '');
+      }
+      return trimmed ? '<p style="margin-bottom: 1rem; font-size: 1.05rem; line-height: 1.8; font-weight: 300; opacity: 0.8;">' + line + '</p>' : '';
+    }
+  });
+
+  if (inList) {
+    processedLines.push('</ul>');
+  }
+
+  return processedLines.join('\n');
+}
 ---
 
 <Layout title={product.name}>
@@ -64,9 +113,9 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 			<div class="detail-grid">
 				<!-- Left: Image Gallery -->
 				<div class="image-gallery reveal-left">
-					<div class="main-image-container" style="position: relative;">
+					<div class="main-image-container">
 						<img id="main-product-img" src={product.image_url} alt={product.name} class="main-image" />
-						{!product.is_active && (
+						{isOutOfStock && (
 							<div class="ribbon-wrapper">
 								<div class="ribbon">HABIS</div>
 							</div>
@@ -91,8 +140,8 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 					<div class="info-header">
 						<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
 							<p class="sku-code">{product.code || 'NO SKU'}</p>
-							<div id="stock-badge" class={`status-badge ${!product.is_active ? 'out-of-stock' : ''}`}>
-								{product.is_active ? 'In Stock' : 'Stok Habis'}
+							<div id="stock-badge" class={`status-badge ${isOutOfStock ? 'out-of-stock' : (product.total_stock > 0 && 5 >= product.total_stock) ? 'warning-stock' : ''}`}>
+								{isOutOfStock ? '🔴 HABIS' : (product.total_stock > 0 && 5 >= product.total_stock) ? `⚠️ Sisa ${product.total_stock} pcs` : '🟢 Ready Stock'}
 							</div>
 						</div>
 						<h1 class="product-name">{product.name}</h1>
@@ -108,6 +157,9 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 									</span>
 								</div>
 							)}
+						</div>
+						<div style="display: flex; gap: 0.75rem; align-items: center; margin-top: -0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+							<div id="dynamic-dalaman-info" style="font-size: 0.9rem; font-weight: 600;"></div>
 						</div>
 					</div>
 
@@ -132,20 +184,157 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 								{productMotifs.map((m: string) => <span class="motif-tag">{m}</span>)}
 							</div>
 						</div>
-						{product.product_variants && product.product_variants.length > 0 ? (
-							<div class="meta-item">
-								<span class="meta-label">Tersedia Ukuran</span>
-								<div class="size-chips" id="variant-selector">
-									{product.product_variants.map((v: any, i:number) => (
-										<button 
-											class={`size-chip variant-btn ${i===0 ? 'active' : ''}`}
-											data-price={v.price}
-											data-stock={v.stock}
-											style="outline: none; font-family: inherit;"
-										>
-											{v.size_name}
-										</button>
-									))}
+						{(product.variants || product.product_variants || []).length > 0 ? (
+							<div class="meta-item" style="margin-top: 1rem;">
+								<span class="meta-label" style="font-weight: 700; color: #1e293b;">Pilihan Ukuran & Model</span>
+								<div id="variant-group-selector" style="display: flex; flex-direction: column; gap: 1rem; width: 100%;">
+									
+									<!-- Base Sizes Selection -->
+									<div>
+										<span style="font-size: 0.75rem; color: #64748b; font-weight: 500; display: block; margin-bottom: 0.5rem;">1. Pilih Ukuran Utama:</span>
+										<div class="size-chips" id="base-size-options" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+											{(() => {
+												const variants = product.variants || product.product_variants || [];
+												const parsedVariants = variants.map((v: any) => {
+													let sizeName = v.size_name || '';
+													let baseSize = sizeName;
+													let isSF = false;
+													let sleeve = '';
+
+													if (sizeName.includes(' SF')) {
+														isSF = true;
+														sizeName = sizeName.replace(' SF', '');
+													}
+
+													if (sizeName.includes(' - ')) {
+														const parts = sizeName.split(' - ');
+														baseSize = parts[0].trim();
+														sleeve = parts[1].trim();
+													} else {
+														baseSize = sizeName.trim();
+													}
+
+													baseSize = baseSize.toUpperCase();
+
+													let subName = isSF ? 'Slim Fit' : 'Regular Fit';
+													if (sleeve) {
+														subName += ' - ' + sleeve;
+													}
+
+													return {
+														...v,
+														baseSize,
+														subName
+													};
+												});
+
+												const baseSizes = [...new Set(parsedVariants.map((v: any) => v.baseSize))].filter(Boolean);
+												const sizeOrder = ['S', 'M', 'L', 'XL', 'XXL', '3XL', 'ALL SIZE'];
+												baseSizes.sort((a: any, b: any) => {
+													const idxA = sizeOrder.indexOf(a);
+													const idxB = sizeOrder.indexOf(b);
+													if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+													if (idxA !== -1) return -1;
+													if (idxB !== -1) return 1;
+													return a.localeCompare(b);
+												});
+
+												const sizeStockMap: any = {};
+												parsedVariants.forEach((v: any) => {
+													const stock = parseInt(v.stock || 0);
+													sizeStockMap[v.baseSize] = (sizeStockMap[v.baseSize] || 0) + stock;
+												});
+
+												return baseSizes.map((sz, idx) => {
+													const isOutOfStock = sizeStockMap[sz as string] === 0;
+													return (
+														<button 
+															type="button"
+															class={`size-chip base-sz-btn ${idx === 0 ? 'active' : ''} ${isOutOfStock ? 'is-out' : ''}`}
+															data-size={sz}
+															style="position: relative; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 1px solid #e2e8f0; background: #fff; font-size: 0.85rem;"
+														>
+															{sz}
+															{isOutOfStock && (
+																<span style="position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; font-size: 0.55rem; padding: 1px 4px; border-radius: 4px; font-weight: 700; line-height: 1; border: 1px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">HABIS</span>
+															)}
+														</button>
+													);
+												});
+											})()}
+										</div>
+									</div>
+
+									<!-- Sub-variants Selection (Sleeve Type & Price info) -->
+									<div>
+										<span style="font-size: 0.75rem; color: #64748b; font-weight: 500; display: block; margin-bottom: 0.5rem;">2. Pilih Model & Detail Harga:</span>
+										<div id="sub-variant-options" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem;">
+											{(() => {
+												const variants = product.variants || product.product_variants || [];
+												const parsedVariants = variants.map((v: any) => {
+													let sizeName = v.size_name || '';
+													let baseSize = sizeName;
+													let isSF = false;
+													let sleeve = '';
+
+													if (sizeName.includes(' SF')) {
+														isSF = true;
+														sizeName = sizeName.replace(' SF', '');
+													}
+
+													if (sizeName.includes(' - ')) {
+														const parts = sizeName.split(' - ');
+														baseSize = parts[0].trim();
+														sleeve = parts[1].trim();
+													} else {
+														baseSize = sizeName.trim();
+													}
+
+													baseSize = baseSize.toUpperCase();
+
+													let subName = isSF ? 'Slim Fit' : 'Regular Fit';
+													if (sleeve) {
+														subName += ' - ' + sleeve;
+													}
+
+													return {
+														...v,
+														baseSize,
+														subName
+													};
+												});
+
+												return parsedVariants.map((v: any) => {
+													const isOutOfStock = parseInt(v.stock || 0) === 0;
+													const isPriceDifferent = parseInt(v.price || 0) !== parseInt(product.price || 0);
+													return (
+														<button 
+															type="button"
+															class={`sub-var-btn ${isOutOfStock ? 'is-out' : ''}`}
+															data-base-size={v.baseSize}
+															data-price={v.price}
+															data-stock={v.stock}
+															data-fullname={v.size_name}
+															data-dalaman={v.dalaman || ""}
+															style="display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1.2rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; transition: all 0.2s; position: relative; gap: 1rem;"
+														>
+															<span class="sub-var-name" style="font-weight: 600; font-size: 0.85rem; color: #1e293b;">
+																{v.subName}
+															</span>
+															{parseInt(v.stock || 0) === 0 ? (
+																<span class="status-badge-compact" style="font-size: 0.65rem; color: #ef4444; font-weight: 700; text-transform: uppercase; background: #fef2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.1);">HABIS</span>
+															) : 5 >= parseInt(v.stock || 0) ? (
+																<span class="status-badge-compact" style="font-size: 0.65rem; color: #f59e0b; font-weight: 700; background: #fffbeb; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.1);">Sisa {v.stock}</span>
+															) : (
+																<span class="status-badge-compact" style="font-size: 0.65rem; color: #10b981; font-weight: 700; background: #f0fdf4; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.1);">Ready</span>
+															)}
+														</button>
+													);
+												});
+											})()}
+										</div>
+									</div>
+
 								</div>
 							</div>
 						) : (
@@ -162,29 +351,27 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 
 					<div class="description-section">
 						<h3 class="section-subtitle">Deskripsi</h3>
-						<p class="description-text">
-							{product.description || 'Produk batik eksklusif hasil kerajinan tangan terbaik dengan motif autentik yang menceritakan filosofi mendalam budaya Nusantara.'}
-						</p>
+						<div class="description-text" set:html={renderMarkdown(product.description || 'Produk batik eksklusif hasil kerajinan tangan terbaik dengan motif autentik yang menceritakan filosofi mendalam budaya Nusantara.')} />
 					</div>
 
 					<div class="action-buttons">
 						<a 
 							id="wa-btn"
-							href={product.is_active ? `${waBaseUrl}${waNumber}?text=${waMessage}` : 'javascript:void(0)'} 
-							target={product.is_active ? "_blank" : "_self"} 
-							class={`btn-primary ${!product.is_active ? 'btn-disabled' : ''}`}
+							href={!isOutOfStock ? `${waBaseUrl}${waNumber}?text=${waMessage}` : 'javascript:void(0)'} 
+							target={!isOutOfStock ? "_blank" : "_self"} 
+							class={`btn-primary ${isOutOfStock ? 'btn-disabled' : ''}`}
 						>
 							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 10px;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-11.7.19.19 0 0 1 .1 0 8.38 8.38 0 0 1 3.8.9L21 3z"/></svg>
-							<span class="btn-text">{product.is_active ? 'Chat Admin' : 'CEK PRODUK LAIN'}</span>
+							<span class="btn-text">{!isOutOfStock ? 'Chat Admin' : 'CEK PRODUK LAIN'}</span>
 						</a>
 						{product.tokopedia_url && (
 							<a 
 								id="tokopedia-btn"
-								href={product.is_active ? product.tokopedia_url : 'javascript:void(0)'} 
-								target={product.is_active ? "_blank" : "_self"} 
-								class={`btn-secondary ${!product.is_active ? 'btn-disabled' : ''}`}
+								href={!isOutOfStock ? product.tokopedia_url : 'javascript:void(0)'} 
+								target={!isOutOfStock ? "_blank" : "_self"} 
+								class={`btn-secondary ${isOutOfStock ? 'btn-disabled' : ''}`}
 							>
-								<span class="btn-text">{product.is_active ? 'Beli di Tokopedia' : 'HABIS TERJUAL'}</span>
+								<span class="btn-text">{!isOutOfStock ? 'Beli di Tokopedia' : 'HABIS TERJUAL'}</span>
 							</a>
 						)}
 
@@ -213,7 +400,7 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 							</div>
 							<div class="product-info" style="padding: 1.5rem;">
 								<p class="text-uppercase opacity-50" style="font-size: 0.6rem; margin-bottom: 0.5rem;">
-									{p.types?.name} • {p.product_motifs?.map((pm: any) => pm.motifs?.name).join(', ') || '-'}
+									{p.types?.name || p.type?.name} • {(p.motifs || p.product_motifs || []).map((pm: any) => pm.name || pm.motifs?.name).filter(Boolean).join(', ') || '-'}
 								</p>
 								<h3 style="font-size: 1rem; font-weight: 500; margin-bottom: 0.5rem;">
 									<a href={`/products/${p.id}`}>{p.name}</a>
@@ -221,8 +408,9 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 								<p class="price-tag" style="font-size: 0.95rem;">
 									{(() => {
 										let displayPrice = `Rp ${Number(p.price).toLocaleString("id-ID")}`;
-										if(p.product_variants && p.product_variants.length > 0) {
-											const vPrices = p.product_variants.map((v:any) => v.price);
+										const pVariants = p.variants || p.product_variants || [];
+										if(pVariants && pVariants.length > 0) {
+											const vPrices = pVariants.map((v:any) => v.price);
 											const vMin = Math.min(...vPrices);
 											if (vMin > 0) {
 												displayPrice = `Rp ${vMin.toLocaleString("id-ID")}`;
@@ -335,7 +523,7 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 		}
 
 		.product-info-panel {
-			padding: var(--spacing-md) 0;
+			padding: 0;
 		}
 
 		.sku-code {
@@ -362,6 +550,12 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 			color: #b91c1c;
 			background: #fef2f2;
 			border: 1px solid rgba(185, 28, 28, 0.1);
+		}
+
+		.status-badge.warning-stock {
+			color: #d97706;
+			background: #fffbeb;
+			border: 1px solid rgba(217, 119, 6, 0.1);
 		}
 
 		.product-name {
@@ -435,6 +629,69 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 			background: var(--color-text);
 			color: white;
 			border-color: var(--color-text);
+		}
+
+		.base-sz-btn {
+			cursor: pointer;
+			transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+		}
+		.base-sz-btn:hover {
+			border-color: var(--color-accent) !important;
+			background: #fffcf8 !important;
+			transform: translateY(-1px);
+		}
+		.base-sz-btn.active {
+			background: var(--color-text) !important;
+			color: white !important;
+			border-color: var(--color-text) !important;
+			box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+		}
+
+		.sub-var-btn {
+			cursor: pointer;
+			transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+		}
+		.sub-var-btn:hover {
+			border-color: var(--color-accent) !important;
+			background: #fffcf8 !important;
+			transform: translateY(-1px);
+		}
+		.sub-var-btn.active {
+			border-color: var(--color-accent) !important;
+			background: #fffcf5 !important;
+			box-shadow: 0 0 0 1px var(--color-accent);
+		}
+
+		.base-sz-btn.is-out {
+			background: #f8fafc !important;
+			border-color: #cbd5e1 !important;
+			color: #cbd5e1 !important;
+			cursor: not-allowed;
+			opacity: 0.8;
+		}
+		.base-sz-btn.is-out:hover {
+			transform: none !important;
+			border-color: #cbd5e1 !important;
+			background: #f8fafc !important;
+		}
+
+		.sub-var-btn.is-out {
+			background: #f8fafc !important;
+			border-color: #cbd5e1 !important;
+			cursor: not-allowed;
+			opacity: 0.65;
+		}
+		.sub-var-btn.is-out:hover {
+			transform: none !important;
+			border-color: #cbd5e1 !important;
+			background: #f8fafc !important;
+		}
+		.sub-var-btn.is-out .sub-var-name {
+			color: #94a3b8 !important;
+			text-decoration: line-through;
+		}
+		.sub-var-btn.is-out .sub-var-price {
+			color: #94a3b8 !important;
 		}
 
 		.description-section {
@@ -523,6 +780,7 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 
 			.main-image-container {
 				position: static;
+				margin-top: 0;
 			}
 
 			.product-name {
@@ -589,85 +847,7 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 		}
 	</style>
 
-	<!-- Data for Real-time Updates -->
-	<div 
-		id="product-realtime-data" 
-		data-id={product.id} 
-		data-url={import.meta.env.PUBLIC_SUPABASE_URL} 
-		data-key={import.meta.env.PUBLIC_SUPABASE_ANON_KEY}
-		data-wa-base={`${waBaseUrl}${waNumber}?text=${waMessage}`}
-		data-tokopedia-url={product.tokopedia_url || ''}
-		style="display: none;"
-	></div>
-	<!-- Supabase JS Library for Client-side -->
-	<script is:inline src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-	
 	<script is:inline>
-		// Pass server-side values into the client-side script via DOM dataset
-		const rtData = document.getElementById('product-realtime-data').dataset;
-		const productId = rtData.id;
-		const supabaseUrl = rtData.url;
-		const supabaseKey = rtData.key;
-		const waBase = rtData.waBase;
-		const tokopediaUrl = rtData.tokopediaUrl;
-
-		function initRealtime() {
-			if (!window.supabase || typeof window.supabase.createClient !== 'function') {
-				console.warn('Real-time: Supabase library not ready yet, retrying in 500ms...');
-				setTimeout(initRealtime, 500);
-				return;
-			}
-			
-			console.log('%c Real-time Initializing ', 'background: #0d5a15; color: #fff', 'ID:', productId);
-			
-			const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
-			
-			const channel = supabaseClient
-				.channel(`product-${productId}`)
-				.on('postgres_changes', { 
-					event: 'UPDATE', 
-					schema: 'public', 
-					table: 'products', 
-					filter: `id=eq.${productId}` 
-				}, payload => {
-					console.log('%c Real-time Update Detected! ', 'background: #b91c1c; color: #fff', payload.new);
-					const isActive = payload.new.is_active;
-					
-					// Update Badge UI
-					const badge = document.getElementById('stock-badge');
-					if (badge) {
-						badge.innerText = isActive ? 'In Stock' : 'Stok Habis';
-						badge.className = `status-badge ${!isActive ? 'out-of-stock' : ''}`;
-					}
-					
-					// Update WhatsApp Button UI
-					const waBtn = document.getElementById('wa-btn');
-					if (waBtn) {
-						waBtn.href = isActive ? waBase : 'javascript:void(0)';
-						waBtn.target = isActive ? '_blank' : '_self';
-						waBtn.classList.toggle('btn-disabled', !isActive);
-						const btnText = waBtn.querySelector('.btn-text');
-						if (btnText) btnText.innerText = isActive ? 'Chat Admin' : 'Stok Habis';
-					}
-					
-					// Update Tokopedia Button UI
-					const tokBtn = document.getElementById('tokopedia-btn');
-					if (tokBtn) {
-						tokBtn.href = isActive ? tokopediaUrl : 'javascript:void(0)';
-						tokBtn.target = isActive ? '_blank' : '_self';
-						tokBtn.classList.toggle('btn-disabled', !isActive);
-						const btnText = tokBtn.querySelector('.btn-text');
-						if (btnText) btnText.innerText = isActive ? 'Beli di Tokopedia' : 'Produk Tidak Tersedia';
-					}
-				})
-				.subscribe((status) => {
-					console.log('%c Real-time Status: ', 'color: #0d5a15; font-weight: bold;', status);
-					if (status === 'CHANNEL_ERROR') {
-						console.error('%c Real-time Error: ', 'color: red', 'Pastikan SQL Editor di Supabase sudah dijalankan untuk mengaktifkan replication.');
-					}
-				});
-		}
-
 		// Gallery Switcher Logic
 		const mainImg = document.getElementById('main-product-img');
 		const thumbs = document.querySelectorAll('.thumb-item');
@@ -683,52 +863,132 @@ const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${produc
 					}
 				});
 			});
-		}
-
-		// Variant Selection Logic
-		const variantBtns = document.querySelectorAll('.variant-btn');
+		}		// Variant Selection Logic
+		const baseSzBtns = document.querySelectorAll('.base-sz-btn');
+		const subVarBtns = document.querySelectorAll('.sub-var-btn');
 		const priceDisplay = document.querySelector('.product-price');
 		const badgeDisplay = document.getElementById('stock-badge');
-		
-		if (variantBtns.length > 0 && priceDisplay) {
-			const checkVariantAvailability = (stock) => {
+		const waBtn = document.getElementById('wa-btn');
+
+		if (baseSzBtns.length > 0 && subVarBtns.length > 0 && priceDisplay) {
+			const updateAvailability = (stock) => {
 				const isAvailable = stock > 0;
 				if (badgeDisplay) {
-					badgeDisplay.innerText = isAvailable ? 'In Stock' : 'Stok Habis';
-					badgeDisplay.className = `status-badge ${!isAvailable ? 'out-of-stock' : ''}`;
+					badgeDisplay.className = `status-badge ${stock === 0 ? 'out-of-stock' : stock <= 5 ? 'warning-stock' : ''}`;
+					if (stock === 0) {
+						badgeDisplay.innerHTML = '🔴 HABIS';
+					} else if (stock <= 5) {
+						badgeDisplay.innerHTML = '⚠️ Sisa ' + stock + ' pcs';
+					} else {
+						badgeDisplay.innerHTML = '🟢 Ready Stock';
+					}
 				}
-				// Also update WA Button
-				const waBtn = document.getElementById('wa-btn');
-				if (waBtn && waBtn.getAttribute('target') !== '_self') { // Meaning the product itself is active globally
+				if (waBtn && waBtn.getAttribute('target') !== '_self') {
 					waBtn.classList.toggle('btn-disabled', !isAvailable);
 					const btnText = waBtn.querySelector('.btn-text');
 					if (btnText) btnText.innerText = isAvailable ? 'Chat Admin' : 'Stok Ukuran Habis';
 				}
-			}
+			};
 
-			variantBtns.forEach(btn => {
-				btn.addEventListener('click', () => {
-					variantBtns.forEach(b => b.classList.remove('active'));
-					btn.classList.add('active');
-					
-					const newPrice = parseInt(btn.getAttribute('data-price') || "0", 10);
-					if(newPrice > 0) {
-						priceDisplay.innerText = "Rp " + newPrice.toLocaleString('id-ID');
+			const updateDalaman = (dalaman) => {
+				const dynamicDalamanInfo = document.getElementById('dynamic-dalaman-info');
+				if (dynamicDalamanInfo) {
+					if (dalaman === 'F') {
+						dynamicDalamanInfo.innerHTML = '<span style="color: #8b5a2b; background: #fff8f0; border: 1px solid #e1d3c1; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">✨ Furing (F)</span>';
+					} else {
+						dynamicDalamanInfo.innerHTML = '';
 					}
+				}
+			};
 
-					const stock = parseInt(btn.getAttribute('data-stock') || "0", 10);
-					checkVariantAvailability(stock);
+			const updateWAMessage = (selectedVar, dalaman) => {
+				if (waBtn) {
+					const code = `${product.code || ''}`;
+					const name = `${product.name || ''}`;
+					let varText = selectedVar;
+					if (dalaman === 'F') {
+						varText += ' - Dengan Furing';
+					} else if (dalaman === 'TF') {
+						varText += ' - Tanpa Furing';
+					} else if (dalaman === 'null' || !dalaman) {
+						varText += ' - Tanpa Dalaman';
+					} else {
+						varText += ` - ${dalaman}`;
+					}
+					const msg = encodeURIComponent(`Halo, saya tertarik dengan produk ${name} (${code}) variasi ${varText}. Apakah masih tersedia?`);
+					waBtn.setAttribute('href', `https://wa.me/${waNumber}?text=${msg}`);
+				}
+			};
+
+			const selectBaseSize = (size) => {
+				let visibleCount = 0;
+				// Hide all sub-variants first
+				subVarBtns.forEach(btn => {
+					if (btn.getAttribute('data-base-size') === size) {
+						btn.style.display = 'flex';
+						visibleCount++;
+					} else {
+						btn.style.display = 'none';
+					}
+					btn.classList.remove('active');
+				});
+
+				// Dynamic Hide Step 2 if only 1 sub-variant exists
+				const subVarContainer = document.getElementById('sub-variant-options')?.parentElement;
+				if (subVarContainer) {
+					if (visibleCount <= 1) {
+						subVarContainer.style.display = 'none';
+					} else {
+						subVarContainer.style.display = 'block';
+					}
+				}
+
+				// Auto-select the first visible sub-variant
+				const firstVisible = Array.from(subVarBtns).find(btn => btn.getAttribute('data-base-size') === size);
+				if (firstVisible) {
+					firstVisible.classList.add('active');
+					const price = parseInt(firstVisible.getAttribute('data-price') || '0', 10);
+					if (price > 0) priceDisplay.innerText = "Rp " + price.toLocaleString('id-ID');
+					const stock = parseInt(firstVisible.getAttribute('data-stock') || '0', 10);
+					const dalaman = firstVisible.getAttribute('data-dalaman') || "";
+					updateAvailability(stock);
+					updateDalaman(dalaman);
+					updateWAMessage(firstVisible.getAttribute('data-fullname'), dalaman);
+				}
+			};
+
+			baseSzBtns.forEach(btn => {
+				btn.addEventListener('click', () => {
+					baseSzBtns.forEach(b => b.classList.remove('active'));
+					btn.classList.add('active');
+					selectBaseSize(btn.getAttribute('data-size'));
 				});
 			});
 
-			// Trigger initial variant state
-			const initialStock = parseInt(variantBtns[0].getAttribute('data-stock') || "0", 10);
-			const initialPrice = parseInt(variantBtns[0].getAttribute('data-price') || "0", 10);
-			if(initialPrice > 0) priceDisplay.innerText = "Rp " + initialPrice.toLocaleString('id-ID');
-			checkVariantAvailability(initialStock);
+			subVarBtns.forEach(btn => {
+				btn.addEventListener('click', () => {
+					subVarBtns.forEach(b => {
+						if (b.getAttribute('data-base-size') === btn.getAttribute('data-base-size')) {
+							b.classList.remove('active');
+						}
+					});
+					btn.classList.add('active');
+					
+					const price = parseInt(btn.getAttribute('data-price') || '0', 10);
+					if (price > 0) priceDisplay.innerText = "Rp " + price.toLocaleString('id-ID');
+					const stock = parseInt(btn.getAttribute('data-stock') || '0', 10);
+					const dalaman = btn.getAttribute('data-dalaman') || "";
+					updateAvailability(stock);
+					updateDalaman(dalaman);
+					updateWAMessage(btn.getAttribute('data-fullname'), dalaman);
+				});
+			});
+
+			// Initial state
+			const initialSize = baseSzBtns[0].getAttribute('data-size');
+			selectBaseSize(initialSize);
 		}
 
-		// Start the real-time engine
-		initRealtime();
+		// Start the engines
 	</script>
 </Layout>

@@ -1,0 +1,2002 @@
+---
+export const prerender = false;
+import Layout from "../../layouts/Layout.astro";
+import { apiFetch, uploadToLaravel } from "../../lib/api";
+import DeleteConfirmModal from "../../components/DeleteConfirmModal.astro";
+
+// Check for session (Authentication Gate)
+const session = Astro.cookies.get("admin_session");
+if (session?.value !== "authenticated") {
+	return Astro.redirect("/login");
+}
+
+// Handle Logout & Search
+const { searchParams } = Astro.url;
+if (searchParams.get("logout")) {
+	Astro.cookies.delete("admin_session");
+	return Astro.redirect("/login");
+}
+const adminSearchQuery = searchParams.get("q");
+
+// Fetch Types and Motifs for the dropdowns
+let types: any[] = [];
+let motifs: any[] = [];
+let sizesData: any[] = [];
+let productsData: any[] = [];
+let settings: any = null;
+
+try {
+	const tRes = await apiFetch<any>("types");
+	types = tRes?.data || tRes || [];
+
+	const mRes = await apiFetch<any>("motifs");
+	motifs = mRes?.data || mRes || [];
+
+	const szRes = await apiFetch<any>("sizes");
+	sizesData = szRes?.data || szRes || [];
+
+	// Sort sizes from smallest to largest
+	const sizeOrder = ["ALL SIZE", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL"];
+	sizesData.sort((a, b) => {
+		const nameA = (a.name || '').trim().toUpperCase();
+		const nameB = (b.name || '').trim().toUpperCase();
+		let idxA = sizeOrder.indexOf(nameA);
+		let idxB = sizeOrder.indexOf(nameB);
+		if (idxA === -1) idxA = 999;
+		if (idxB === -1) idxB = 999;
+		return idxA - idxB;
+	});
+
+	const pRes = await apiFetch<any>("products");
+	productsData = pRes?.data || pRes || [];
+
+	const sRes = await apiFetch<any>("settings");
+	settings = sRes?.data || sRes || { site_name: "Batik Nusantara" };
+
+	// Filter products by search query (In-memory)
+	if (adminSearchQuery) {
+		const q = adminSearchQuery.toLowerCase().trim();
+		const keywords = q.split(/\s+/).filter((kw) => kw.length > 0);
+
+		productsData = productsData.filter((p) => {
+			// Get all category names for this product
+			const productCategoryNames =
+				p.product_categories?.map((pc: any) => pc.types?.name) || [];
+			if (p.types?.name) productCategoryNames.push(p.types.name);
+
+			// Get all motif names for this product
+			const productMotifs =
+				p.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
+
+			// ALL keywords must match at least one search surface
+			return keywords.every((kw) => {
+				const nameMatch = p.name?.toLowerCase().includes(kw);
+				const codeMatch = p.code?.toLowerCase().includes(kw);
+				const motifMatch = productMotifs.some((m: any) =>
+					m?.toLowerCase().includes(kw),
+				);
+				const categoryMatch = productCategoryNames.some((c: any) =>
+					c?.toLowerCase().includes(kw),
+				);
+
+				return (
+					nameMatch || codeMatch || motifMatch || categoryMatch
+				);
+			});
+		});
+	}
+} catch (e: any) {
+	console.error("API Fetch Error, using mock fallback:", e.message);
+	// Mock data fallback
+	const { products: mockProducts } = await import("../../data/products");
+	const uniqueTypes = [...new Set(mockProducts.map((p) => p.type))];
+	types = uniqueTypes.map((t) => ({ name: t, id: t }));
+
+	const uniqueMotifs = [...new Set(mockProducts.map((p) => p.motif))];
+	motifs = uniqueMotifs.map((m) => ({ name: m, id: m }));
+
+	productsData = mockProducts.map((p) => ({
+		...p,
+		types: { name: p.name, id: p.id },
+		product_motifs: [{ motifs: { name: p.motif } }],
+	}));
+}
+
+// Hierarchical Helper: Sort categories into a flat list with levels
+const buildCategoryTree = (list: any[], parentId = null, depth = 0): any[] => {
+	let result: any[] = [];
+	list.filter((item) => item.parent_id === parentId).forEach((item) => {
+		result.push({ ...item, depth });
+		const children = buildCategoryTree(list, item.id, depth + 1);
+		result = result.concat(children);
+	});
+	return result;
+};
+
+const hierarchicalTypes = buildCategoryTree(types);
+
+let message = "";
+let isError = false;
+
+// Handle Form Submission (Server Side)
+if (Astro.request.method === "POST") {
+	const contentType = Astro.request.headers.get("content-type");
+	if (contentType?.includes("form")) {
+		try {
+			const formData = await Astro.request.formData();
+			const action = formData.get("action");
+
+			// 5. Add Size
+			if (action === "add_size") {
+				const name = formData.get("size_name") as string;
+				if (!name)
+					return Astro.redirect("/buka-toko?error=missing");
+				await apiFetch("sizes", {
+					method: "POST",
+					body: JSON.stringify({ name }),
+				});
+				return Astro.redirect("/buka-toko?success=size");
+			}
+
+			// 6. Delete Size
+			if (action === "delete_size") {
+				const id = formData.get("size_id") as string;
+				await apiFetch(`sizes/${id}`, { method: "DELETE" });
+				return Astro.redirect("/buka-toko?success=deleted");
+			}
+
+			if (action === "update_settings") {
+				const site_name = formData.get("site_name");
+				const address = formData.get("address");
+				const contact_whatsapp = formData.get("contact_whatsapp");
+				const url_instagram = formData.get("url_instagram");
+				const url_tiktok = formData.get("url_tiktok");
+				const url_tokopedia = formData.get("url_tokopedia");
+				const url_shopee = formData.get("url_shopee");
+				const logo_file = formData.get("logo_file") as File;
+				let logo_url = settings?.logo_url;
+
+				if (logo_file && logo_file.size > 0) {
+					logo_url = await uploadToLaravel(logo_file, "settings");
+				}
+
+				await apiFetch("settings", {
+					method: "PUT",
+					body: JSON.stringify({
+						site_name,
+						logo_url,
+						address,
+						contact_whatsapp,
+						url_instagram,
+						url_tiktok,
+						url_tokopedia,
+						url_shopee,
+					}),
+				});
+				return Astro.redirect("/buka-toko?success=settings");
+			}
+
+			if (action === "add_type") {
+				const name = formData.get("name");
+				const parent_id = formData.get("parent_id") || null;
+				let category_level = 1;
+
+				if (parent_id) {
+					const parent = await apiFetch<any>(`types/${parent_id}`);
+					const parentData = parent?.data || parent;
+					if (parentData) {
+						category_level = (parentData.category_level || 1) + 1;
+					}
+				}
+
+				if (category_level > 3) {
+					throw new Error(
+						"Maksimal hirarki kategori adalah 3 level.",
+					);
+				}
+
+				await apiFetch("types", {
+					method: "POST",
+					body: JSON.stringify({ name, parent_id, category_level }),
+				});
+				return Astro.redirect("/buka-toko?success=type");
+			}
+
+			if (action === "add_motif") {
+				const name = formData.get("name");
+				await apiFetch("motifs", {
+					method: "POST",
+					body: JSON.stringify({ name }),
+				});
+				return Astro.redirect("/buka-toko?success=motif");
+			}
+
+			if (action === "add_product") {
+				const name = formData.get("name");
+				const price = formData.get("price");
+				const category_ids = formData.getAll("category_ids");
+				const type_id = category_ids[0] || null;
+				const motif_ids = formData.getAll("motif_ids");
+				const description = formData.get("description");
+				const code = formData.get("code");
+				const image_files = formData.getAll("image_file") as File[];
+				const tokopedia_url = formData.get("tokopedia_url");
+				const original_price = formData.get("original_price");
+				const item_code = formData.get("item_code");
+				const selectedType = hierarchicalTypes.find((t: any) => t.id === type_id);
+				let folderPath = "products";
+				if (selectedType) {
+					const slug = selectedType.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+					folderPath = `products/${slug}`;
+				}
+
+				let image_url = "";
+				let images: string[] = [];
+
+				if (image_files && image_files.length > 0) {
+					for (const file of image_files) {
+						if (file.size > 0) {
+							const publicUrl = await uploadToLaravel(file, folderPath);
+							images.push(publicUrl);
+						}
+					}
+					if (images.length > 0) image_url = images[0];
+				}
+
+				// Build variants array
+				const variant_sizes = formData.getAll("variant_size") as string[];
+				const variant_prices = formData.getAll("variant_price") as string[];
+				const variant_stocks = formData.getAll("variant_stock") as string[];
+				const variant_dalamans = formData.getAll("variant_dalaman") as string[];
+				const variants = variant_sizes.map((size, index) => ({
+					size_name: size,
+					price: parseFloat(variant_prices[index] || price?.toString() || "0"),
+					stock: parseInt(variant_stocks[index] || "0", 10),
+					dalaman: variant_dalamans[index] || null
+				}));
+
+				console.log("DEBUG POST variants payload:", JSON.stringify(variants, null, 2));
+
+				await apiFetch("products", {
+					method: "POST",
+					body: JSON.stringify({
+						name,
+						price,
+						type_id,
+						category_ids,
+						motif_ids,
+						description,
+						code,
+						original_price,
+						item_code,
+						image_url,
+						images,
+						tokopedia_url,
+						variants,
+						is_active: true,
+					}),
+				});
+
+				const fromPraproduk = formData.get("from_praproduk") === "true";
+				if (fromPraproduk) {
+					return Astro.redirect("/buka-toko/pra-produk?success=product");
+				}
+
+				return Astro.redirect("/buka-toko?success=product");
+			}
+
+			if (action === "toggle_status") {
+				const id = formData.get("id");
+				const current_status =
+					formData.get("current_status") === "true";
+				await apiFetch(`products/${id}`, {
+					method: "PUT",
+					body: JSON.stringify({ is_active: !current_status }),
+				});
+				return Astro.redirect("/buka-toko?success=status");
+			}
+
+			if (action === "delete_product") {
+				const id = formData.get("id");
+				await apiFetch(`products/${id}`, { method: "DELETE" });
+				return Astro.redirect("/buka-toko?success=delete");
+			}
+
+			if (action === "delete_type") {
+				const id = formData.get("id");
+				await apiFetch(`types/${id}`, { method: "DELETE" });
+				return Astro.redirect("/buka-toko?success=delete_type");
+			}
+
+			if (action === "delete_motif") {
+				const id = formData.get("id");
+				await apiFetch(`motifs/${id}`, { method: "DELETE" });
+				return Astro.redirect("/buka-toko?success=delete_motif");
+			}
+		} catch (e: any) {
+			isError = true;
+			message = "Gagal: " + e.message;
+		}
+	}
+}
+
+const success = Astro.url.searchParams.get("success");
+if (success === "product") message = "Produk berhasil ditambahkan!";
+if (success === "type") message = "Jenis produk baru berhasil disimpan!";
+if (success === "motif") message = "Motif baru berhasil ditambahkan!";
+if (success === "settings") message = "Identitas website berhasil diperbarui!";
+if (success === "status") message = "Status visibilitas produk diperbarui!";
+if (success === "delete") message = "Produk berhasil dihapus!";
+if (success === "delete_type") message = "Jenis produk berhasil dihapus!";
+if (success === "delete_motif") message = "Motif berhasil dihapus!";
+if (success === "size") message = "Ukuran berhasil ditambahkan!";
+if (success === "deleted") message = "Data berhasil dihapus!";
+---
+
+<Layout title={`Admin Panel - ${settings?.site_name || "Batik Nusantara"}`}>
+	<section style="padding: var(--spacing-xl) 0; min-height: 80vh;">
+		<div class="container">
+			<div class="admin-header">
+				<div
+					style="display: flex; align-items: center; gap: var(--spacing-md);"
+				>
+					<div>
+						<h1
+							class="text-uppercase"
+							style="font-size: 1.2rem; margin: 0; font-weight: 600;"
+						>
+							{settings?.site_name || "Batik Nusantara"} Dashboard
+						</h1>
+						<p style="font-size: 0.8rem; opacity: 0.5;">
+							Kelola identitas dan katalog batik Anda.
+						</p>
+					</div>
+				</div>
+				<div
+					style="display: flex; gap: var(--spacing-md); align-items: center;"
+				>
+					<a
+						href="/buka-toko/pra-produk"
+						style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; text-decoration: none; padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm); color: var(--color-text);"
+						>&larr; Kembali ke Pra-Produk</a
+					>
+				</div>
+			</div>
+
+			{
+				message && (
+					<div
+						class="animate-fade-in"
+						style={`padding: 1rem; margin-bottom: 2rem; border-radius: var(--radius-sm); border: 1px solid ${
+							isError ? "#ff4d4d" : "#03ac0e"
+						}; background: ${
+							isError ? "#fff5f5" : "#f5fff5"
+						}; color: ${
+							isError ? "#ff4d4d" : "#03ac0e"
+						}; text-align: center; font-size: 0.9rem; font-weight: 500;`}
+					>
+						{message}
+					</div>
+				)
+			}
+
+			<div style="max-width: 900px; margin: 0 auto;">
+					<!-- Form Product -->
+					<div
+						style="background: white; border: 1px solid var(--color-border); padding: var(--spacing-lg); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);"
+					>
+						<h2
+							style="font-size: 1rem; margin-bottom: var(--spacing-lg); font-weight: 600;"
+							class="text-uppercase"
+						>
+							Tambah Produk Baru
+						</h2>
+
+						<form
+							method="POST"
+							enctype="multipart/form-data"
+							style="display: flex; flex-direction: column; gap: var(--spacing-md);"
+						>
+							<input
+								type="hidden"
+								name="action"
+								value="add_product"
+							/>
+							<input
+								type="hidden"
+								name="from_praproduk"
+								id="from_praproduk_input"
+								value="false"
+							/>
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Nama Produk</label
+								>
+								<input
+									name="name"
+									id="product_name_input"
+									type="text"
+									required
+									placeholder="Kemeja Batik Parang"
+									style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+								/>
+							</div>
+
+							<div
+								style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);"
+							>
+								<div>
+									<label
+										class="text-uppercase opacity-50"
+										style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+										>Kode SKU</label
+									>
+									<input
+										name="code"
+										id="product_sku_input"
+										type="text"
+										placeholder="BTK-001"
+										style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+									/>
+								</div>
+								<div>
+									<label
+										class="text-uppercase opacity-50"
+										style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+										>Kode Barang (Auto-Name)</label
+									>
+									<input
+										name="item_code"
+										id="product_item_code_input"
+										type="text"
+										placeholder="001"
+										style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+									/>
+								</div>
+								<div>
+									<label
+										class="text-uppercase opacity-50"
+										style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+										>Harga (Rp)</label
+									>
+									<input
+										type="text"
+										class="currency-mask"
+										data-hidden-id="product_price_input"
+										required
+										id="product_price_input_display"
+										placeholder="450.000"
+										style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+									/>
+									<input type="hidden" name="price" id="product_price_input" />
+									<div
+										id="price_markup_preview"
+										style="font-size: 0.65rem; color: #10b981; margin-top: 0.4rem; font-weight: 600; display: none;"
+									>
+										Harga Coret: Rp <span id="markup_val"
+											>0</span
+										> (Hemat Rp <span id="markup_pct">0</span>)
+									</div>
+									<input
+										type="hidden"
+										name="original_price"
+										id="original_price_input"
+									/>
+								</div>
+							</div>
+
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Kategori Produk</label
+								>
+								<div
+									class="searchable-select"
+									data-ss-type="product-l1"
+								>
+									<input
+										type="hidden"
+										name="category_ids"
+										id="l1_category_input"
+									/>
+									<input
+										type="text"
+										class="ss-input"
+										placeholder="Cari & Pilih Kategori Utama..."
+										readonly
+										style="background: #ffffff; border-style: solid;"
+									/>
+									<div class="ss-dropdown">
+										<div class="ss-search-container">
+											<svg
+												class="ss-search-icon"
+												width="14"
+												height="14"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												><circle cx="11" cy="11" r="8"
+												></circle><path
+													d="M21 21l-4.35-4.35"
+												></path></svg
+											>
+											<input
+												type="text"
+												class="ss-search"
+												placeholder="Cari kategori..."
+											/>
+										</div>
+										<div class="ss-options">
+											{
+												hierarchicalTypes
+													.filter(
+														(t) =>
+															t.parent_id ===
+															null,
+													)
+													.map((t) => (
+														<div
+															class="ss-option"
+															data-value={t.id}
+														>
+															<span>
+																{t.name}
+															</span>
+															<span class="lvl-badge lvl-1">
+																Root
+															</span>
+														</div>
+													))
+											}
+										</div>
+									</div>
+								</div>
+
+								<div
+									id="sub-category-checkboxes"
+									class="cascading-container"
+								>
+								</div>
+							</div>
+
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Motif (Multi-select)</label
+								>
+								<div class="motif-style-container" id="motif-grid">
+									{
+										motifs?.map((m) => (
+											<label class="motif-style-label">
+												<input
+													type="checkbox"
+													name="motif_ids"
+													value={m.id}
+												/>
+												{m.name}
+											</label>
+										))
+									}
+								</div>
+							</div>
+
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Foto Produk (Bisa Pilih Banyak)</label
+								>
+								<input
+									name="image_file"
+									type="file"
+									accept="image/*"
+									multiple
+									required
+									style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: var(--radius-sm); background: #fcfcfc; font-size: 0.75rem;"
+								/>
+							</div>
+
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Ukuran & Variasi Harga</label
+								>
+								<p style="font-size: 0.7rem; color: var(--color-muted); margin-bottom: 1rem;">Centang ukuran yang tersedia, lalu isi harga khususnya jika berbeda.</p>
+
+								<label id="sleeve_toggle_wrapper" style="display: none; align-items: center; gap: 0.5rem; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm); cursor: pointer; background: #fcfcfc; margin-bottom: 1rem;">
+									<input type="checkbox" id="toggle_sleeve_options_add" />
+									<span style="font-size: 0.85rem; font-weight: 500;">Aktifkan Pilihan Lengan (Pendek & Panjang)</span>
+								</label>
+
+								<div
+									style="display: flex; flex-direction: column; gap: 0.5rem; background: #fcfcfc; padding: 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+								>
+									{
+										sizesData.map((size) => (
+										<div style="display: flex; flex-direction: column; gap: 0.5rem; border-bottom: 1px solid #eee; padding-bottom: 0.75rem;">
+											{/* Standard Variant (Regular vs Slim Fit) */}
+											{['', ' SF'].map(fit => (
+												<div 
+													class="variant-item-add variant-standard" 
+													style="display: flex; align-items: center; gap: 1rem; padding-top: 0.25rem;"
+												>
+													<label style="display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 180px;">
+														<input type="checkbox" class="variant-cb-add" value={size.name + fit} style="margin: 0;" />
+														<span style="display: flex; flex-direction: column;">
+															<strong style="font-weight: 500;">{size.name}{fit}</strong>
+															<span style={`font-size: 0.6rem; font-weight: 600; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1; color: ${fit === ' SF' ? '#0369a1' : '#64748b'};`}>
+																{fit === ' SF' ? 'Slim Fit' : 'Regular Fit'}
+															</span>
+														</span>
+													</label>
+													<input type="hidden" name="variant_size" value={size.name + fit} disabled class="v-size-input-add" />
+													<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: none;">
+														<div style="flex: 1;">
+															<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
+															<input type="text" placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-price-input-add currency-mask" />
+															<input type="hidden" name="variant_price" disabled class="v-price-hidden-add" />
+														</div>
+														<div style="width: 80px;">
+															<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
+															<input type="number" name="variant_stock" value="0" placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-stock-input-add" />
+														</div>
+														<div style="width: 120px;">
+															<span style="font-size: 0.6rem; opacity: 0.5;">Dalaman</span>
+															<select name="variant_dalaman" disabled class="v-dalaman-input-add" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px; background: white url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23777%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m6 9 6 6 6-6%22/></svg>') no-repeat right 0.6rem center; background-size: 10px; padding-right: 1.5rem; appearance: none; -webkit-appearance: none; -moz-appearance: none; cursor: pointer;">
+																<option value="">Tanpa Dalaman</option>
+																<option value="F">Furing (F)</option>
+																<option value="TF">Tanpa Furing (TF)</option>
+															</select>
+														</div>
+													</div>
+												</div>
+											))}
+
+											{/* Sleeve Split Variant (Regular vs Slim Fit grouped by Sleeve) */}
+											{['Lengan Pendek', 'Lengan Panjang'].map(sleeve => (
+												['', ' SF'].map(fit => (
+												<div 
+													class="variant-item-add variant-sleeve-split" 
+													style="display: none; align-items: center; gap: 1rem; padding-top: 0.25rem;"
+												>
+													<label style="display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 180px;">
+														<input type="checkbox" class="variant-cb-add" value={`${size.name}${fit} - ${sleeve}`} style="margin: 0;" />
+														<span style="display: flex; flex-direction: column;">
+															<strong style="font-weight: 500;">{size.name}{fit} <span style="font-size: 0.75rem; color: #64748b; font-weight: 400;">({sleeve})</span></strong>
+															<span style={`font-size: 0.6rem; font-weight: 600; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1; color: ${fit === ' SF' ? '#0369a1' : '#64748b'};`}>
+																{fit === ' SF' ? 'Slim Fit' : 'Regular Fit'}
+															</span>
+														</span>
+													</label>
+													<input type="hidden" name="variant_size" value={`${size.name}${fit} - ${sleeve}`} disabled class="v-size-input-add" />
+													<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: none;">
+														<div style="flex: 1;">
+															<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
+															<input type="text" placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-price-input-add currency-mask" />
+															<input type="hidden" name="variant_price" disabled class="v-price-hidden-add" />
+														</div>
+														<div style="width: 80px;">
+															<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
+															<input type="number" name="variant_stock" value="0" placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-stock-input-add" />
+														</div>
+														<div style="width: 120px;">
+															<span style="font-size: 0.6rem; opacity: 0.5;">Dalaman</span>
+															<select name="variant_dalaman" disabled class="v-dalaman-input-add" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px; background: white url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23777%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m6 9 6 6 6-6%22/></svg>') no-repeat right 0.6rem center; background-size: 10px; padding-right: 1.5rem; appearance: none; -webkit-appearance: none; -moz-appearance: none; cursor: pointer;">
+																<option value="">Tanpa Dalaman</option>
+																<option value="F">Furing (F)</option>
+																<option value="TF">Tanpa Furing (TF)</option>
+															</select>
+														</div>
+													</div>
+												</div>
+												))
+											))}
+										</div>
+										))
+									}
+									{
+										sizesData.length === 0 && (
+											<span style="font-size: 0.7rem; opacity: 0.5;">
+												Belum ada data ukuran.
+											</span>
+										)
+									}
+								</div>
+							</div>
+
+
+
+							<div>
+								<label
+									class="text-uppercase opacity-50"
+									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+									>Link Tokopedia (Opsional)</label
+								>
+								<input
+									name="tokopedia_url"
+									type="url"
+									placeholder="https://www.tokopedia.com/..."
+									style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+								/>
+							</div>
+
+							<div>
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+									<label
+										class="text-uppercase opacity-50"
+										style="font-size: 0.6rem; display: block; margin-bottom: 0;"
+										>Deskripsi Produk</label
+									>
+									<button
+										type="button"
+										id="btn_generate_desc"
+										style="background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; font-size: 0.65rem; padding: 2px 8px; border-radius: 4px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.2s;"
+										onmouseover="this.style.background='#dcfce7'"
+										onmouseout="this.style.background='#f0fdf4'"
+									>
+										<span>✨ Tulis dengan Gemini</span>
+									</button>
+								</div>
+								<textarea
+									name="description"
+									id="description_input"
+									rows="6"
+									placeholder="Tulis detail produk atau klik tombol di atas untuk membuat deskripsi otomatis menggunakan Gemini AI..."
+									style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+								></textarea>
+							</div>
+
+							<div style="margin-top: var(--spacing-sm);">
+								<button
+									type="submit"
+									style="background: var(--color-text); color: white; padding: 0.8rem; border: none; text-transform: uppercase; letter-spacing: 2px; width: 100%; cursor: pointer; font-weight: 600; font-size: 0.75rem; border-radius: var(--radius-sm); transition: var(--transition);"
+									>Simpan Produk</button
+								>
+							</div>
+						</form>
+					</div>
+				</div>
+
+				<!-- Loading Overlay -->
+				<div id="loadingOverlay" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); z-index: 9999; align-items: center; justify-content: center; flex-direction: column; color: white; transition: opacity 0.3s ease;">
+					<div style="background: white; padding: 2.5rem; border-radius: var(--radius-md); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; align-items: center; gap: 1.25rem; max-width: 400px; width: 90%; text-align: center;">
+						<div class="spinner" style="width: 50px; height: 50px; border: 4px solid #f3f3f3; border-top: 4px solid var(--color-text, #1e293b); border-radius: 50%; animation: spinOverlay 1s linear infinite;"></div>
+						<h3 style="color: #0f172a; font-size: 1.15rem; font-weight: 700; margin: 0;">Sedang Menyimpan Produk...</h3>
+						<p style="color: #64748b; font-size: 0.85rem; margin: 0; line-height: 1.5;">Proses ini memerlukan waktu beberapa saat untuk mengunggah gambar dan menyimpan data ke server.</p>
+					</div>
+				</div>
+
+	<style is:global>
+		@keyframes spinOverlay {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
+
+		.admin-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: var(--spacing-xl);
+			border-bottom: 1px solid var(--color-border);
+			padding-bottom: var(--spacing-md);
+			margin-top: 60px;
+		}
+
+		.admin-main-grid {
+			display: grid;
+			grid-template-columns: 1fr 1.5fr;
+			gap: var(--spacing-xl);
+			align-items: start;
+		}
+
+		@media (max-width: 1024px) {
+			.admin-header {
+				flex-direction: column;
+				align-items: flex-start;
+				gap: var(--spacing-md);
+			}
+			.admin-main-grid {
+				grid-template-columns: 1fr;
+			}
+		}
+
+		.table-row-hover:hover {
+			background-color: #f9f9f9;
+		}
+
+		select:focus,
+		input:focus,
+		textarea:focus {
+			border-color: var(--color-accent) !important;
+			outline: none;
+		}
+
+		/* Responsive table text */
+		@media (max-width: 640px) {
+			th,
+			td {
+				font-size: 0.75rem !important;
+				padding: 0.5rem !important;
+			}
+		}
+
+		.admin-toggle-btn {
+			flex: 1;
+			min-width: 100px;
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			background: transparent;
+			border: 1px dashed #ccc;
+			color: #666;
+			padding: 0.6rem 0.8rem;
+			border-radius: var(--radius-sm);
+			cursor: pointer;
+			font-size: 0.65rem;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+			transition: all 0.2s ease;
+			justify-content: center;
+		}
+
+		.admin-toggle-btn:hover {
+			background: #f9f9f9;
+			border-color: var(--color-accent);
+			color: var(--color-accent);
+		}
+
+		.admin-toggle-btn.active {
+			background: var(--color-text) !important;
+			border: 1px solid var(--color-text) !important;
+			color: white !important;
+			box-shadow: var(--shadow-sm);
+		}
+
+		/* Searchable Select Styles - Luxury Overhaul */
+		.searchable-select {
+			position: relative;
+			width: 100%;
+		}
+
+		.ss-input {
+			width: 100%;
+			padding: 0.8rem 1rem;
+			border: 1px solid #e5e7eb;
+			border-radius: var(--radius-sm);
+			background: #ffffff;
+			cursor: pointer;
+			font-size: 0.85rem;
+			color: #374151;
+			transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+			box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+		}
+
+		.ss-input:hover {
+			border-color: #d1d5db;
+			background: #fafafa;
+		}
+
+		.ss-dropdown {
+			position: absolute;
+			top: calc(100% + 8px);
+			left: 0;
+			width: 100%;
+			background: white;
+			border: 1px solid rgba(0, 0, 0, 0.08);
+			border-radius: var(--radius-md);
+			box-shadow:
+				0 10px 25px -5px rgba(0, 0, 0, 0.1),
+				0 8px 10px -6px rgba(0, 0, 0, 0.1);
+			z-index: 1100;
+			max-height: 300px;
+			overflow: hidden;
+			display: none;
+			animation: ssFadeIn 0.2s ease-out;
+		}
+
+		@keyframes ssFadeIn {
+			from {
+				opacity: 0;
+				transform: translateY(-10px);
+			}
+			to {
+				opacity: 1;
+				transform: translateY(0);
+			}
+		}
+
+		.ss-dropdown.show {
+			display: block;
+		}
+
+		.ss-search-container {
+			position: relative;
+			padding: 12px;
+			background: #fdfcfb;
+			border-bottom: 1px solid #f3f4f6;
+		}
+
+		.ss-search {
+			width: 100%;
+			padding: 10px 12px 10px 35px;
+			border: 1px solid #e5e7eb;
+			border-radius: 6px;
+			font-size: 0.85rem;
+			background: white;
+			outline: none;
+			transition: border-color 0.2s;
+		}
+
+		.ss-search:focus {
+			border-color: var(--color-accent);
+		}
+
+		.ss-search-icon {
+			position: absolute;
+			left: 24px;
+			top: 50%;
+			transform: translateY(-50%);
+			color: #9ca3af;
+			pointer-events: none;
+		}
+
+		.ss-options {
+			max-height: 220px;
+			overflow-y: auto;
+		}
+
+		.ss-option {
+			padding: 10px 16px;
+			cursor: pointer;
+			font-size: 0.85rem;
+			transition: all 0.2s;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			border-bottom: 1px solid #f9fafb;
+		}
+
+		.ss-option:last-child {
+			border-bottom: none;
+		}
+
+		.ss-option:hover,
+		.ss-option.focused {
+			background: #f5f5f5;
+			color: var(--color-accent);
+			padding-left: 20px;
+		}
+
+		.ss-option.selected {
+			background: #fdf2f2;
+			color: var(--color-accent);
+			font-weight: 600;
+		}
+
+		.ss-no-results {
+			padding: 20px;
+			text-align: center;
+			font-size: 0.8rem;
+			color: #6b7280;
+			font-style: italic;
+		}
+
+		/* Category List Tree Enhancement - Luxury Editorial */
+		.category-tree-wrapper {
+			display: flex;
+			flex-direction: column;
+			gap: 6px;
+			margin-top: 10px;
+		}
+
+		.category-item {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 10px 14px;
+			background: #ffffff;
+			border: 1px solid transparent;
+			border-radius: 8px;
+			transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+			position: relative;
+		}
+
+		.category-item:hover {
+			border-color: #f3f4f6;
+			background: #fafafa;
+			transform: translateX(4px);
+			box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+		}
+
+		.tree-connector {
+			position: absolute;
+			left: -18px;
+			top: 0;
+			bottom: 50%;
+			width: 14px;
+			border-left: 1px solid #e5e7eb;
+			border-bottom: 1px solid #e5e7eb;
+			border-bottom-left-radius: 6px;
+		}
+
+		.cat-content {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+		}
+
+		.lvl-badge {
+			font-size: 0.6rem;
+			padding: 3px 8px;
+			border-radius: 4px;
+			text-transform: uppercase;
+			font-weight: 700;
+			letter-spacing: 0.5px;
+			min-width: 32px;
+			text-align: center;
+		}
+
+		.lvl-1 {
+			background: #111827;
+			color: #ffffff;
+		}
+		.lvl-2 {
+			background: #f3f4f6;
+			color: #4b5563;
+			border: 1px solid #e5e7eb;
+		}
+		.lvl-3 {
+			background: #ffffff;
+			color: #9ca3af;
+			border: 1px solid #f3f4f6;
+		}
+
+		.cat-name {
+			font-size: 0.9rem;
+			letter-spacing: 0.3px;
+		}
+
+		.cat-actions {
+			opacity: 0;
+			transition: opacity 0.2s;
+		}
+
+		.category-item:hover .cat-actions {
+			opacity: 1;
+		}
+
+		.btn-trash {
+			background: #fee2e2;
+			color: #ef4444;
+			border: none;
+			width: 28px;
+			height: 28px;
+			border-radius: 6px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			cursor: pointer;
+			transition: all 0.2s;
+		}
+
+		.btn-trash:hover {
+			background: #ef4444;
+			color: #ffffff;
+			transform: scale(1.1);
+		}
+
+		#sub-category-checkboxes.cascading-container {
+			margin-top: 1rem;
+		}
+
+		.motif-style-container {
+			display: grid !important;
+			grid-template-columns: repeat(
+				auto-fill,
+				minmax(110px, 1fr)
+			) !important;
+			gap: 0.75rem 1rem !important;
+			background: #fdfdfd !important;
+			padding: 1.2rem !important;
+			border: 1px solid #e2e8f0 !important;
+			border-radius: var(--radius-sm) !important;
+			max-height: 250px !important;
+			overflow-y: auto !important;
+			box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+			margin-bottom: 2rem !important;
+		}
+
+		.motif-style-label {
+			display: flex !important;
+			align-items: center !important;
+			gap: 0.75rem !important;
+			font-size: 0.85rem !important;
+			cursor: pointer !important;
+			margin: 0 !important;
+			padding: 0.4rem 0.6rem !important;
+			color: #334155 !important;
+			border-radius: 6px !important;
+			transition:
+				background 0.2s,
+				color 0.2s !important;
+			white-space: nowrap !important;
+			width: auto !important;
+		}
+
+		.motif-style-label:hover {
+			background: #f1f5f9 !important;
+			color: #0f172a !important;
+		}
+
+		.motif-style-label input {
+			width: 16px !important;
+			height: 16px !important;
+			margin: 0 !important;
+			cursor: pointer !important;
+			accent-color: var(--color-accent) !important;
+		}
+
+		.l3-divider-premium {
+			margin: 2rem 0 1rem 0 !important;
+			border-top: 1px dashed #e2e8f0 !important;
+			position: relative !important;
+		}
+
+		/* Step Label */
+		.step-label {
+			font-size: 0.65rem !important;
+			color: #64748b !important;
+			display: block !important;
+			margin-bottom: 0.6rem !important;
+			letter-spacing: 0.5px !important;
+			text-transform: uppercase !important;
+			opacity: 0.8 !important;
+		}
+	</style>
+	<DeleteConfirmModal />
+
+	<script is:inline define:vars={{ hierarchicalTypes }}>
+		function initSearchableSelect() {
+			const selectContainers =
+				document.querySelectorAll(".searchable-select");
+
+			selectContainers.forEach((container) => {
+				const input = container.querySelector(".ss-input");
+				const hiddenInput = container.querySelector(
+					'input[type="hidden"]',
+				);
+				const dropdown = container.querySelector(".ss-dropdown");
+				const searchInput = container.querySelector(".ss-search");
+				const options = container.querySelectorAll(".ss-option");
+				const optionsContainer = container.querySelector(".ss-options");
+				const ssType = container.getAttribute("data-ss-type");
+
+				// Open/Close
+				input.addEventListener("click", (e) => {
+					e.stopPropagation();
+					dropdown.classList.toggle("show");
+					if (dropdown.classList.contains("show")) {
+						searchInput.focus();
+					}
+				});
+
+				// Search Logic
+				searchInput.addEventListener("input", (e) => {
+					const term = e.target.value.toLowerCase();
+					let hasResults = false;
+
+					options.forEach((opt) => {
+						const text = opt.textContent.toLowerCase();
+						if (text.includes(term)) {
+							opt.style.display = "block";
+							hasResults = true;
+						} else {
+							opt.style.display = "none";
+						}
+					});
+
+					// Handle "No results"
+					const noRes =
+						optionsContainer.querySelector(".ss-no-results");
+					if (!hasResults) {
+						if (!noRes) {
+							const div = document.createElement("div");
+							div.className = "ss-no-results";
+							div.textContent = "Kategori tidak ditemukan";
+							optionsContainer.appendChild(div);
+						}
+					} else if (noRes) {
+						noRes.remove();
+					}
+				});
+
+				// Selection
+				options.forEach((opt) => {
+					opt.addEventListener("click", (e) => {
+						e.stopPropagation();
+						const val = opt.getAttribute("data-value");
+						const text =
+							opt.querySelector("span")?.textContent.trim() ||
+							opt.textContent.trim();
+
+						hiddenInput.value = val;
+						input.value = text;
+
+						options.forEach((o) => o.classList.remove("selected"));
+						opt.classList.add("selected");
+
+						dropdown.classList.remove("show");
+						searchInput.value = "";
+						options.forEach((o) => (o.style.display = "block"));
+
+						// HYBRID CALLBACK: If this is Product Level 1, render checkboxes
+						if (ssType === "product-l1") {
+							renderSubCategoriesFromList([val]);
+						}
+					});
+				});
+
+				// Close when clicking outside
+				document.addEventListener("click", (e) => {
+					if (!container.contains(e.target)) {
+						dropdown.classList.remove("show");
+					}
+				});
+			});
+		}
+
+		function renderSubCategoriesFromList(parentIds) {
+			const container = document.getElementById(
+				"sub-category-checkboxes",
+			);
+			if (!container) return;
+
+			if (parentIds.length === 0) {
+				container.innerHTML = "";
+				container.style.display = "none";
+				return;
+			}
+
+			// Clear container
+			container.innerHTML = "";
+			const l2Children = hierarchicalTypes.filter((t) =>
+				parentIds.includes(t.parent_id),
+			);
+
+			if (l2Children.length === 0) {
+				container.style.display = "none";
+				return;
+			}
+
+			container.style.display = "block";
+			container.innerHTML = `
+				<div style="margin-top: 1rem;">
+					<label class="text-uppercase opacity-50" style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;">Jenis Produk (Level 2)</label>
+					<div class="motif-style-container" id="l2-selection-row"></div>
+				</div>
+				<div id="l3-selection-area" style="display: none; margin-top: 1rem;">
+					<label class="text-uppercase opacity-50" style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;">Pilihan Detail (Level 3)</label>
+					<div class="motif-style-container" id="l3-grid"></div>
+				</div>
+			`;
+
+			const l2Row = container.querySelector("#l2-selection-row");
+			const l3Area = container.querySelector("#l3-selection-area");
+			const l3Grid = container.querySelector("#l3-grid");
+
+			function updateL3Selection() {
+				const checkedL2s = Array.from(
+					l2Row.querySelectorAll("input:checked"),
+				);
+				l3Grid.innerHTML = ""; // Clear previous L3s
+
+				if (checkedL2s.length === 0) {
+					l3Area.style.display = "none";
+					updateName(); // Trigger update name when L2 is unchecked
+					return;
+				}
+
+				let hasL3 = false;
+				checkedL2s.forEach((l2) => {
+					const l2Id = l2.getAttribute("data-id");
+					const l3s = hierarchicalTypes.filter(
+						(t) => String(t.parent_id) === String(l2Id),
+					);
+					if (l3s.length > 0) {
+						hasL3 = true;
+						l3s.forEach((cc) => {
+							const label = document.createElement("label");
+							label.className = "motif-style-label";
+							label.innerHTML = `
+								<input type="checkbox" name="category_ids" value="${cc.id}" data-id="${cc.id}" data-parent="${l2Id}" />
+								${cc.name}
+							`;
+							l3Grid.appendChild(label);
+
+							// Trigger name update when L3 is changed
+							const cb = label.querySelector("input");
+							cb.addEventListener("change", updateName);
+						});
+					}
+				});
+
+				l3Area.style.display = hasL3 ? "block" : "none";
+				updateName(); // Trigger name update when L2 is changed
+			}
+
+
+			l2Children.forEach((c) => {
+				const label = document.createElement("label");
+				label.className = "motif-style-label";
+				label.innerHTML = `
+					<input type="checkbox" name="category_ids" value="${c.id}" data-id="${c.id}" data-parent="${c.parent_id}" />
+					${c.name}
+				`;
+				l2Row.appendChild(label);
+
+				const cb = label.querySelector("input");
+				cb.addEventListener("change", (e) => {
+					if (cb.checked) {
+						// Single-select behavior for Level 2
+						l2Row.querySelectorAll("input:checked").forEach((other) => {
+							if (other !== cb) other.checked = false;
+						});
+					}
+					updateL3Selection();
+					updateName();
+				});
+			});
+			updateName(); // Initial update when L2s appear
+		}
+
+		// --- Product Naming Automation Logic ---
+		const nameInput = document.getElementById("product_name_input");
+		const itemCodeInput = document.getElementById("product_item_code_input");
+		const categoryContainer = document.getElementById("sub-category-checkboxes");
+
+		function updateName() {
+			if (!nameInput) return;
+
+			// 1. Get Category (Jenis) - ALL LEVELS
+			const selectedCategories = [];
+			const l1Text = document.querySelector('[data-ss-type="product-l1"] .ss-input');
+			if (l1Text && l1Text.value && l1Text.value !== "") {
+				selectedCategories.push(l1Text.value);
+			}
+
+			// Get L2 and L3 from checkboxes within sub-category container
+			if (categoryContainer) {
+				const checkedSubCats = Array.from(
+					categoryContainer.querySelectorAll("input:checked"),
+				);
+				checkedSubCats.forEach((cb) => {
+					const catName = cb.parentElement.textContent.trim();
+					if (catName && !selectedCategories.includes(catName)) {
+						selectedCategories.push(catName);
+					}
+				});
+			}
+
+			const jenis = selectedCategories.join(" ");
+
+			// 2. Get Motifs
+			let motifStr = "";
+			const motifGrid = document.getElementById("motif-grid");
+			if (motifGrid) {
+				const checkedMotifs = Array.from(
+					motifGrid.querySelectorAll("input:checked"),
+				);
+				motifStr = checkedMotifs
+					.map((m) => m.parentElement.textContent.trim())
+					.join(", ");
+			}
+
+
+			// 3. Get Item Code
+			const itemCode = itemCodeInput?.value.trim() || "";
+
+			// Combine
+			const parts = [];
+			if (jenis) parts.push(jenis);
+			if (motifStr) parts.push(motifStr);
+			if (itemCode) parts.push(itemCode);
+
+			nameInput.value = parts.join(" ");
+
+			// --- Sleeve Toggle Visibility based on Category ---
+			const sleeveKeywords = ['kemeja', 'baju', 'hem', 'atasan', 'blouse', 'tunik', 'gamis', 'koko', 'pdh', 'jaket'];
+			const jenisLower = jenis.toLowerCase();
+			const needsSleeve = sleeveKeywords.some(kw => jenisLower.includes(kw));
+			
+			const sleeveWrapper = document.getElementById('sleeve_toggle_wrapper');
+			if (sleeveWrapper) {
+				if (needsSleeve) {
+					sleeveWrapper.style.display = 'flex';
+				} else {
+					sleeveWrapper.style.display = 'none';
+					const toggleCb = document.getElementById('toggle_sleeve_options_add');
+					if (toggleCb && toggleCb.checked) {
+						toggleCb.checked = false;
+						toggleCb.dispatchEvent(new Event('change'));
+					}
+				}
+			}
+		}
+
+
+		function setupToggles() {
+			const configs = [
+				{ btnId: "toggleTypesBtn", containerId: "typesContainer" },
+				{ btnId: "toggleMotifsBtn", containerId: "motifsContainer" },
+				{ btnId: "toggleSiteBtn", containerId: "siteContainer" },
+				{ btnId: "toggleSizesBtn", containerId: "sizesContainer" },
+			];
+
+			configs.forEach((config) => {
+				const btn = document.getElementById(config.btnId);
+				const container = document.getElementById(config.containerId);
+
+				btn?.addEventListener("click", () => {
+					const isCurrentlyOpen = container.style.display !== "none";
+
+					// Close ALL first
+					configs.forEach((c) => {
+						const cContainer = document.getElementById(
+							c.containerId,
+						);
+						const cBtn = document.getElementById(c.btnId);
+						if (cContainer) cContainer.style.display = "none";
+						if (cBtn) cBtn.classList.remove("active");
+					});
+
+					// If it was NOT open, open it
+					if (!isCurrentlyOpen) {
+						if (container) container.style.display = "block";
+						if (btn) btn.classList.add("active");
+					}
+				});
+			});
+		}
+
+		// Price Markup Logic (15% Discount Markup)
+		const priceInputHidden = document.getElementById("product_price_input");
+		const markupPreview = document.getElementById("price_markup_preview");
+		const markupVal = document.getElementById("markup_val");
+		const originalPriceInput = document.getElementById(
+			"original_price_input",
+		);
+
+		if (priceInputHidden) {
+			priceInputHidden.addEventListener("input", (e) => {
+				const val = parseFloat(e.target.value);
+				if (!isNaN(val) && val > 0) {
+					// P = O * 0.85 => O = P / 0.85
+					let originalPrice = Math.round(val / 0.85);
+					originalPrice = Math.ceil(originalPrice / 10000) * 10000;
+					const pct = (originalPrice - val).toLocaleString("id-ID");
+					markupVal.innerText = originalPrice.toLocaleString("id-ID");
+					originalPriceInput.value = originalPrice;
+					const markupPctEl = document.getElementById("markup_pct");
+					if(markupPctEl) markupPctEl.innerText = pct;
+					markupPreview.style.display = "block";
+				} else {
+					markupPreview.style.display = "none";
+					originalPriceInput.value = "";
+				}
+			});
+		}
+
+		// Naming Listeners Setup
+		function setupNamingAutomation() {
+			const itemCodeInput = document.getElementById("product_item_code_input");
+			const categoryContainer = document.getElementById("sub-category-checkboxes");
+			const l1Input = document.getElementById("l1_category_input");
+
+			itemCodeInput?.addEventListener("input", updateName);
+			categoryContainer?.addEventListener("change", updateName);
+
+			const motifGrid = document.getElementById("motif-grid");
+			motifGrid?.addEventListener("change", updateName);
+
+
+			if (l1Input) {
+				const observer = new MutationObserver(updateName);
+				observer.observe(l1Input, { attributes: true });
+			}
+		}
+
+
+		setupToggles();
+		initSearchableSelect();
+		setupNamingAutomation();
+
+		// Variasi UI Logic Tambah Produk
+		document.querySelectorAll('.variant-cb-add').forEach(cb => {
+			cb.addEventListener('change', (e) => {
+				const parent = e.target.closest('.variant-item-add');
+				const vSize = parent.querySelector('.v-size-input-add');
+				const vPriceDisp = parent.querySelector('.v-price-input-add');
+				const vPriceHid = parent.querySelector('.v-price-hidden-add');
+				const vStock = parent.querySelector('.v-stock-input-add');
+				const vDalaman = parent.querySelector('.v-dalaman-input-add');
+				const details = parent.querySelector('.v-details-add');
+				
+				const isChecked = e.target.checked;
+				vSize.disabled = !isChecked;
+				vPriceDisp.disabled = !isChecked;
+				if(vPriceHid) vPriceHid.disabled = !isChecked;
+				vStock.disabled = !isChecked;
+				if(vDalaman) vDalaman.disabled = !isChecked;
+				details.style.display = isChecked ? 'flex' : 'none';
+
+				// Set default price based on main price input if empty
+				if (isChecked && !vPriceDisp.value) {
+					const mainPriceHid = document.getElementById("product_price_input");
+					if(mainPriceHid && mainPriceHid.value) {
+						vPriceHid.value = mainPriceHid.value;
+						vPriceDisp.value = new Intl.NumberFormat('id-ID').format(mainPriceHid.value);
+					}
+				}
+			});
+		});
+
+		// Currency Formatting Logic
+		function initCurrencyMasks() {
+			document.querySelectorAll('.currency-mask').forEach(input => {
+				const formatPrice = (val) => {
+					let str = val.toString();
+					if (str.indexOf('.') !== -1 && str.indexOf('.') === str.lastIndexOf('.')) {
+						const parts = str.split('.');
+						if (parts[1].length === 2) {
+							str = parts[0];
+						}
+					}
+					const num = str.replace(/\D/g, '');
+					return num ? new Intl.NumberFormat('id-ID').format(num) : '';
+				};
+				const getHidden = () => {
+					if (input.dataset.hiddenId) return document.getElementById(input.dataset.hiddenId);
+					return input.parentElement.querySelector('input[type="hidden"]');
+				};
+
+				const hidden = getHidden();
+				input.addEventListener('input', (e) => {
+					const rawVal = e.target.value.replace(/\D/g, '');
+					e.target.value = formatPrice(e.target.value);
+					if (hidden) {
+						hidden.value = rawVal;
+						hidden.dispatchEvent(new Event('input', { bubbles: true }));
+					}
+				});
+				// Initial set on load
+				if (input.value) { 
+					input.value = formatPrice(input.value); 
+					if(hidden) hidden.value = input.value.replace(/\D/g, '');
+				}
+			});
+		}
+		initCurrencyMasks();
+
+		// Sleeve Mode Toggle Logic with Smart Autofill Migration
+		const sleeveToggleAdd = document.getElementById('toggle_sleeve_options_add');
+		if(sleeveToggleAdd) {
+			sleeveToggleAdd.addEventListener('change', (e) => {
+				const isChecked = e.target.checked;
+				
+				if (isChecked) {
+					// 1. Collect standard checked data
+					const standardData = {};
+					document.querySelectorAll('.variant-item-add.variant-standard').forEach(el => {
+						const cb = el.querySelector('.variant-cb-add');
+						if (cb && cb.checked) {
+							const sizeVal = cb.value; // e.g. "M" or "M SF"
+							const priceDisp = el.querySelector('.v-price-input-add')?.value || '';
+							const priceHid = el.querySelector('.v-price-hidden-add')?.value || '';
+							const stock = el.querySelector('.v-stock-input-add')?.value || '0';
+							const dalaman = el.querySelector('.v-dalaman-input-add')?.value || '';
+							standardData[sizeVal] = { priceDisp, priceHid, stock, dalaman };
+						}
+					});
+
+					// 2. Hide and reset standard items
+					document.querySelectorAll('.variant-standard').forEach(el => {
+						el.style.display = 'none';
+						const cb = el.querySelector('.variant-cb-add');
+						if (cb && cb.checked) {
+							cb.checked = false;
+							cb.dispatchEvent(new Event('change'));
+						}
+					});
+
+					// 3. Show and pre-populate sleeve split items
+					document.querySelectorAll('.variant-item-add.variant-sleeve-split').forEach(el => {
+						el.style.display = 'flex';
+						const cb = el.querySelector('.variant-cb-add');
+						if (cb) {
+							const cbVal = cb.value; // e.g. "M - Lengan Pendek"
+							const baseSize = cbVal.split(' - ')[0].trim();
+							if (standardData[baseSize]) {
+								const data = standardData[baseSize];
+								cb.checked = true;
+								cb.dispatchEvent(new Event('change'));
+
+								const vPriceDisp = el.querySelector('.v-price-input-add');
+								const vPriceHid = el.querySelector('.v-price-hidden-add');
+								const vStock = el.querySelector('.v-stock-input-add');
+								const vDalaman = el.querySelector('.v-dalaman-input-add');
+
+								if (vPriceDisp) vPriceDisp.value = data.priceDisp;
+								if (vPriceHid) vPriceHid.value = data.priceHid;
+								if (vStock) vStock.value = data.stock;
+								if (vDalaman) vDalaman.value = data.dalaman;
+							}
+						}
+					});
+				} else {
+					// 1. Collect sleeve split checked data
+					const sleeveData = {};
+					document.querySelectorAll('.variant-item-add.variant-sleeve-split').forEach(el => {
+						const cb = el.querySelector('.variant-cb-add');
+						if (cb && cb.checked) {
+							const cbVal = cb.value; // e.g. "M - Lengan Pendek"
+							const baseSize = cbVal.split(' - ')[0].trim();
+							const priceDisp = el.querySelector('.v-price-input-add')?.value || '';
+							const priceHid = el.querySelector('.v-price-hidden-add')?.value || '';
+							const stock = el.querySelector('.v-stock-input-add')?.value || '0';
+							const dalaman = el.querySelector('.v-dalaman-input-add')?.value || '';
+
+							if (!sleeveData[baseSize]) {
+								sleeveData[baseSize] = { priceDisp, priceHid, stock: parseInt(stock), dalaman };
+							} else {
+								sleeveData[baseSize].stock += parseInt(stock);
+								if (parseFloat(priceHid) > parseFloat(sleeveData[baseSize].priceHid)) {
+									sleeveData[baseSize].priceDisp = priceDisp;
+									sleeveData[baseSize].priceHid = priceHid;
+								}
+							}
+						}
+					});
+
+					// 2. Hide and reset sleeve split items
+					document.querySelectorAll('.variant-sleeve-split').forEach(el => {
+						el.style.display = 'none';
+						const cb = el.querySelector('.variant-cb-add');
+						if (cb && cb.checked) {
+							cb.checked = false;
+							cb.dispatchEvent(new Event('change'));
+						}
+					});
+
+					// 3. Show and pre-populate standard items
+					document.querySelectorAll('.variant-item-add.variant-standard').forEach(el => {
+						el.style.display = 'flex';
+						const cb = el.querySelector('.variant-cb-add');
+						if (cb) {
+							const sizeVal = cb.value; // e.g. "M"
+							if (sleeveData[sizeVal]) {
+								const data = sleeveData[sizeVal];
+								cb.checked = true;
+								cb.dispatchEvent(new Event('change'));
+
+								const vPriceDisp = el.querySelector('.v-price-input-add');
+								const vPriceHid = el.querySelector('.v-price-hidden-add');
+								const vStock = el.querySelector('.v-stock-input-add');
+								const vDalaman = el.querySelector('.v-dalaman-input-add');
+
+								if (vPriceDisp) vPriceDisp.value = data.priceDisp;
+								if (vPriceHid) vPriceHid.value = data.priceHid;
+								if (vStock) vStock.value = data.stock.toString();
+								if (vDalaman) vDalaman.value = data.dalaman;
+							}
+						}
+					});
+				}
+			});
+		}
+
+		// Check URL for Pra-Produk selection
+		document.addEventListener("DOMContentLoaded", async () => {
+			const urlParams = new URLSearchParams(window.location.search);
+			const praProdukId = urlParams.get('use_praproduk');
+			console.log("DEBUG: DOMContentLoaded triggered. use_praproduk ID:", praProdukId);
+			if(praProdukId) {
+				const fromPraprodukInput = document.getElementById("from_praproduk_input");
+				if (fromPraprodukInput) fromPraprodukInput.value = "true";
+				try {
+					let item = null;
+					const stored = localStorage.getItem('selected_praproduk');
+					console.log("DEBUG: Checking localStorage key 'selected_praproduk'. Content exists:", !!stored);
+					if (stored) {
+						try {
+							const parsed = JSON.parse(stored);
+							console.log("DEBUG: Parsed stored item:", parsed);
+							if (parsed && parsed.id == praProdukId) {
+								item = parsed;
+								console.log("DEBUG: Found matching item in localStorage:", item);
+							} else {
+								console.log("DEBUG: ID mismatch in localStorage. URL ID: " + praProdukId + ", Local ID: " + (parsed ? parsed.id : ""));
+							}
+						} catch (e) {
+							console.error("DEBUG: Failed to parse item from localStorage:", e);
+						}
+					}
+
+					if (!item) {
+						const qParam = urlParams.get('q');
+						console.log("DEBUG: LocalStorage empty or mismatched. Fetching from API with qParam:", qParam);
+						if (qParam) {
+							const apiUrl = "https://noir.grace.gracianna.web.id/api/v1/beli1?per_page=12&q=" + encodeURIComponent(qParam);
+							console.log("DEBUG: Fetching API URL:", apiUrl);
+							const res = await fetch(apiUrl);
+							const json = await res.json();
+							console.log("DEBUG: API Response JSON:", json);
+							if(json.success && json.data) {
+								item = json.data.find(p => p.id == praProdukId);
+								console.log("DEBUG: Found matched item in API data:", item);
+							}
+						} else {
+							console.log("DEBUG: No q parameter found in URL query string.");
+						}
+					}
+
+					function selectCategoryByName(catName) {
+						const l1Select = document.querySelector('.searchable-select[data-ss-type="product-l1"]');
+						if (!l1Select) return;
+						const options = l1Select.querySelectorAll('.ss-option');
+						for (const opt of options) {
+							const text = opt.querySelector('span')?.textContent?.trim()?.toLowerCase() || opt.textContent?.trim()?.toLowerCase();
+							if (text === catName.toLowerCase() || text.includes(catName.toLowerCase())) {
+								opt.click();
+								break;
+							}
+						}
+					}
+
+					if(item) {
+							console.log("DEBUG: Item loaded successfully. Starting form auto-fill...");
+							// Auto-fill form
+							const nameInput = document.getElementById("product_name_input");
+							if(nameInput && item.nama) nameInput.value = item.nama;
+							
+							const skuInput = document.getElementById("product_sku_input");
+							if(skuInput && item.counter) skuInput.value = item.counter;
+							
+							const itemCodeInput = document.getElementById("product_item_code_input");
+							if(itemCodeInput && item.kodeitem) {
+								itemCodeInput.value = item.kodeitem;
+								itemCodeInput.dispatchEvent(new Event('input', { bubbles: true }));
+							}
+
+							const activeCode = item.kode || item.kodeitem;
+							if(activeCode && activeCode.length >= 2) {
+								const typeLetter = activeCode.charAt(1).toUpperCase();
+								const t2Map = {
+									'C': 'CELANA',
+									'K': 'KEMEJA',
+									'J': 'JAKET',
+									'R': 'ROK',
+									'T': 'T - SHIRT',
+									'B': 'BLUES',
+									'S': 'STELAN',
+									'N': 'TANK TOP',
+									'A': 'JAS',
+									'M': 'SARIMBIT',
+									'L': 'SYAL',
+									'U': 'JUMPSUIT',
+									'G': 'GAUN',
+									'P': 'DRESS',
+									'O': 'OUTER',
+									'F': 'SARUNG',
+									'V': 'KEBAYA',
+									'X': 'GAMIS'
+								};
+								const categoryName = t2Map[typeLetter];
+								if(categoryName) {
+									console.log("DEBUG: Auto-detecting category based on second letter of " + activeCode + ":", typeLetter, "->", categoryName);
+									selectCategoryByName(categoryName);
+								}
+							}
+							
+							if(item.hjual) {
+								const priceInputHidden = document.getElementById("product_price_input");
+								const priceInputDisplay = document.getElementById("product_price_input_display");
+								if(priceInputHidden) {
+									priceInputHidden.value = item.hjual;
+									priceInputHidden.dispatchEvent(new Event('input', { bubbles: true }));
+								}
+								if(priceInputDisplay) {
+									priceInputDisplay.value = parseInt(item.hjual).toLocaleString('id-ID');
+								}
+							}
+
+							// Auto-fill variants price and stock from item.details
+							if (item.details) {
+								try {
+									const detailsArray = typeof item.details === 'string' ? JSON.parse(item.details) : item.details;
+									if (Array.isArray(detailsArray)) {
+										const sizeMap = {};
+										detailsArray.forEach(detail => {
+											let sz = (detail.size || '').trim().toUpperCase();
+											if (sz === '00') sz = 'ALL SIZE';
+											const isSF = /\bSF\b/i.test(detail.nama || '') || (detail.nama || '').trim().toUpperCase().endsWith('SF');
+											if (isSF) {
+												sz = sz + ' SF';
+											}
+
+											const price = parseFloat(detail.hjual || 0);
+											const stock = parseInt(detail.stok || 0);
+											const dalaman = detail.dalaman || "";
+											
+											if (!sizeMap[sz]) {
+												sizeMap[sz] = { 
+													price: price, 
+													stock: stock, 
+													dalaman: dalaman
+												};
+											} else {
+												sizeMap[sz].stock += stock;
+												if (price > sizeMap[sz].price) {
+													sizeMap[sz].price = price;
+												}
+												if (dalaman) {
+													sizeMap[sz].dalaman = dalaman;
+												}
+											}
+										});
+
+										// Now find all variant-item-add elements and fill them
+										const isSleeveSplitEnabled = document.getElementById('toggle_sleeve_options_add')?.checked;
+
+										document.querySelectorAll('.variant-item-add').forEach(parent => {
+											const cb = parent.querySelector('.variant-cb-add');
+											if (!cb) return;
+
+											const isSleeveSplitItem = parent.classList.contains('variant-sleeve-split');
+											const isStandardItem = parent.classList.contains('variant-standard');
+
+											// Only process if the item matches the current toggle mode
+											const shouldProcess = (isSleeveSplitEnabled && isSleeveSplitItem) || (!isSleeveSplitEnabled && isStandardItem);
+
+											const checkboxVal = cb.value.trim().toUpperCase();
+											let baseSize = checkboxVal;
+											if (checkboxVal.includes(' - LENGAN')) {
+												baseSize = checkboxVal.split(' - LENGAN')[0].trim();
+											}
+
+											if (shouldProcess && sizeMap[baseSize]) {
+												const data = sizeMap[baseSize];
+												cb.checked = true;
+												cb.dispatchEvent(new Event('change'));
+
+												const vPriceDisp = parent.querySelector('.v-price-input-add');
+												const vPriceHid = parent.querySelector('.v-price-hidden-add');
+												const vStock = parent.querySelector('.v-stock-input-add');
+												const vDalaman = parent.querySelector('.v-dalaman-input-add');
+
+												if (vPriceHid) vPriceHid.value = data.price;
+												if (vPriceDisp) vPriceDisp.value = new Intl.NumberFormat('id-ID').format(data.price);
+												if (vStock) vStock.value = data.stock;
+												if (vDalaman) {
+													vDalaman.value = data.dalaman || "";
+												}
+											} else {
+												cb.checked = false;
+												cb.dispatchEvent(new Event('change'));
+											}
+										});
+									}
+								} catch (err) {
+									console.error("Gagal memproses details variasi harga", err);
+								}
+							}
+							
+							setTimeout(() => {
+								if(item.old) {
+									const oldInput = document.getElementById("original_price_input");
+									const markupVal = document.getElementById("markup_val");
+									const markupPctEl = document.getElementById("markup_pct");
+									const markupPreview = document.getElementById("price_markup_preview");
+									
+									if(oldInput && markupVal && markupPctEl && markupPreview) {
+										oldInput.value = item.old;
+										markupVal.innerText = parseInt(item.old).toLocaleString("id-ID");
+										
+										const price = parseFloat(item.hjual || 0);
+										const oldPrice = parseFloat(item.old);
+										markupPctEl.innerText = (oldPrice - price).toLocaleString("id-ID");
+										
+										markupPreview.style.display = "block";
+									}
+								}
+							}, 50);
+
+							// Scroll to form
+							if(nameInput) {
+								nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+							}
+
+							// Remove query param without reload
+							const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+							window.history.pushState({path:newUrl}, '', newUrl);
+						}
+					} catch(e) {
+						console.error("Gagal mengambil data Pra-Produk", e);
+					}
+			}
+		});
+
+		// Show loading overlay on form submission
+		const productForm = document.querySelector('form');
+		if (productForm) {
+			productForm.addEventListener('submit', () => {
+				const overlay = document.getElementById('loadingOverlay');
+				if (overlay) {
+					overlay.style.display = 'flex';
+				}
+			});
+		}
+
+		// Gemini AI Description Generator
+		const btnGenerateDesc = document.getElementById('btn_generate_desc');
+		const descInput = document.getElementById('description_input');
+
+		if (btnGenerateDesc && descInput) {
+			btnGenerateDesc.addEventListener('click', async () => {
+				const nameVal = document.getElementById('product_name_input')?.value?.trim();
+				const priceVal = document.getElementById('product_price_input')?.value?.trim();
+				const categoryVal = document.querySelector('.searchable-select[data-ss-type="product-l1"] .ss-input')?.value?.trim();
+				
+				const selectedMotifs = Array.from(document.querySelectorAll('input[name="motif_ids"]:checked'))
+					.map(cb => cb.parentElement?.textContent?.trim())
+					.filter(Boolean)
+					.join(', ');
+
+				if (!nameVal) {
+					alert('Silakan masukkan Nama Produk terlebih dahulu agar Gemini dapat menulis deskripsi yang sesuai.');
+					return;
+				}
+
+				const originalText = btnGenerateDesc.innerHTML;
+				btnGenerateDesc.disabled = true;
+				btnGenerateDesc.style.opacity = '0.7';
+				btnGenerateDesc.innerHTML = '<span>⏳ Menulis deskripsi...</span>';
+				descInput.setAttribute('placeholder', 'Gemini sedang memikirkan & menulis deskripsi terbaik untuk produk batik Anda...');
+				descInput.value = '';
+
+				try {
+					const response = await fetch('/api/generate-description', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							name: nameVal,
+							price: priceVal,
+							category: categoryVal,
+							motif: selectedMotifs
+						})
+					});
+
+					const result = await response.json();
+					if (!response.ok) {
+						throw new Error(result.error || 'Gagal generate deskripsi.');
+					}
+
+					descInput.value = result.description;
+				} catch (err) {
+					alert('Gagal membuat deskripsi otomatis: ' + err.message);
+					descInput.setAttribute('placeholder', 'Tulis detail produk atau klik tombol di atas untuk membuat deskripsi otomatis menggunakan Gemini AI...');
+				} finally {
+					btnGenerateDesc.disabled = false;
+					btnGenerateDesc.style.opacity = '1';
+					btnGenerateDesc.innerHTML = originalText;
+				}
+			});
+		}
+	</script>
+</Layout>

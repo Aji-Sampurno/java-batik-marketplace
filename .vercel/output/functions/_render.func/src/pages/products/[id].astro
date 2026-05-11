@@ -1,0 +1,654 @@
+---
+export const prerender = false;
+import Layout from '../../layouts/Layout.astro';
+import { apiFetch } from '../../lib/api';
+
+const { id } = Astro.params;
+
+let product: any = null;
+let relatedProducts: any[] = [];
+const waBaseUrl = "https://wa.me/";
+let settings: any = { contact_whatsapp: '628123456789' };
+
+try {
+  // Fetch main product
+  const resProduct = await apiFetch<any>(`products/${id}`);
+  const p = resProduct?.data || resProduct;
+  
+  if (p) {
+    product = p;
+    // Fetch related products (same type, excluding current)
+    try {
+      const resProducts = await apiFetch<any>("products");
+      const allProducts = resProducts?.data || resProducts || [];
+      relatedProducts = allProducts
+        .filter((item: any) => item.type_id === p.type_id && item.is_active && item.id !== id)
+        .slice(0, 4);
+    } catch (e) {}
+  }
+
+  const resSettings = await apiFetch<any>("settings");
+  const s = resSettings?.data || resSettings;
+  if (s) settings = s;
+} catch (e: any) {
+  console.error("API Fetch Error:", e.message);
+}
+
+if (!product) {
+  return Astro.redirect('/404');
+}
+
+const productMotifs = product.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
+// Get and sort categories by level
+const productCategories = product.product_categories
+  ?.map((pc: any) => pc.types)
+  .sort((a: any, b: any) => (a.category_level || 0) - (b.category_level || 0)) || [];
+
+const waNumber = settings.contact_whatsapp || "628123456789";
+const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${product.name} (${product.code || ''}). Apakah masih tersedia?`);
+---
+
+<Layout title={product.name}>
+	<section class="product-detail-section" style="padding: 140px 0 0 0; background: #fff;">
+		<div class="container">
+			<!-- Breadcrumbs -->
+			<nav class="breadcrumb-nav">
+				<a href="/" class="breadcrumb-link">Home</a> 
+				<span class="sep">|</span> 
+				<a href="/products" class="breadcrumb-link">Katalog</a> 
+				<span class="sep">|</span> 
+				<span class="current-crumb">{product.name}</span>
+			</nav>
+
+			<div class="detail-grid">
+				<!-- Left: Image Gallery -->
+				<div class="image-gallery reveal-left">
+					<div class="main-image-container" style="position: relative;">
+						<img id="main-product-img" src={product.image_url} alt={product.name} class="main-image" />
+						{!product.is_active && (
+							<div class="ribbon-wrapper">
+								<div class="ribbon">HABIS</div>
+							</div>
+						)}
+
+					</div>
+
+					
+					{product.images && product.images.length > 1 && (
+						<div class="thumbnail-strip">
+							{product.images.map((img: string, i: number) => (
+								<div class={`thumb-item ${i === 0 ? 'active' : ''}`} data-src={img}>
+									<img src={img} alt={`${product.name} view ${i+1}`} />
+								</div>
+							))}
+						</div>
+					)}
+				</div>
+
+				<!-- Right: Product Info -->
+				<div class="product-info-panel reveal-right">
+					<div class="info-header">
+						<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+							<p class="sku-code">{product.code || 'NO SKU'}</p>
+							<div id="stock-badge" class={`status-badge ${!product.is_active ? 'out-of-stock' : ''}`}>
+								{product.is_active ? 'In Stock' : 'Stok Habis'}
+							</div>
+						</div>
+						<h1 class="product-name">{product.name}</h1>
+						<div style="display: flex; align-items: center; gap: 1rem; margin-bottom: var(--spacing-lg);">
+							<p class="product-price" style="margin: 0;">Rp {Number(product.price).toLocaleString('id-ID')}</p>
+							{product.original_price && product.original_price > product.price && (
+								<div style="display: flex; flex-direction: column;">
+									<span style="text-decoration: line-through; color: #999; font-size: 0.9rem;">
+										Rp {Number(product.original_price).toLocaleString('id-ID')}
+									</span>
+									<span style="color: #10b981; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
+										Hemat Rp {Number(product.original_price - product.price).toLocaleString("id-ID")}
+									</span>
+								</div>
+							)}
+						</div>
+					</div>
+
+					<div class="meta-section">
+						<div class="meta-item">
+							<span class="meta-label">Jenis Produk</span>
+							<div class="tag-container" style="gap: 10px;">
+								{productCategories.map((cat: any, i: number) => (
+									<>
+										<span class="meta-value" style={i > 0 ? "opacity: 0.8; font-weight: 400;" : "font-weight: 600;"}>
+											{cat.name}
+										</span>
+										{i < productCategories.length - 1 && <span style="opacity: 0.3; align-self: center;">&rsaquo;</span>}
+									</>
+								))}
+								{productCategories.length === 0 && <span class="meta-value">{product.types?.name || '-'}</span>}
+							</div>
+						</div>
+						<div class="meta-item">
+							<span class="meta-label">Motif Batik</span>
+							<div class="tag-container">
+								{productMotifs.map((m: string) => <span class="motif-tag">{m}</span>)}
+							</div>
+						</div>
+						{product.product_variants && product.product_variants.length > 0 ? (
+							<div class="meta-item">
+								<span class="meta-label">Tersedia Ukuran</span>
+								<div class="size-chips" id="variant-selector">
+									{product.product_variants.map((v: any, i:number) => (
+										<button 
+											class={`size-chip variant-btn ${i===0 ? 'active' : ''}`}
+											data-price={v.price}
+											data-stock={v.stock}
+											style="outline: none; font-family: inherit;"
+										>
+											{v.size_name}
+										</button>
+									))}
+								</div>
+							</div>
+						) : (
+							product.sizes && product.sizes.length > 0 && (
+								<div class="meta-item">
+									<span class="meta-label">Tersedia Ukuran</span>
+									<div class="size-chips">
+										{product.sizes.map((s: string) => <span class="size-chip">{s}</span>)}
+									</div>
+								</div>
+							)
+						)}
+					</div>
+
+					<div class="description-section">
+						<h3 class="section-subtitle">Deskripsi</h3>
+						<p class="description-text">
+							{product.description || 'Produk batik eksklusif hasil kerajinan tangan terbaik dengan motif autentik yang menceritakan filosofi mendalam budaya Nusantara.'}
+						</p>
+					</div>
+
+					<div class="action-buttons">
+						<a 
+							id="wa-btn"
+							href={product.is_active ? `${waBaseUrl}${waNumber}?text=${waMessage}` : 'javascript:void(0)'} 
+							target={product.is_active ? "_blank" : "_self"} 
+							class={`btn-primary ${!product.is_active ? 'btn-disabled' : ''}`}
+						>
+							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 10px;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-11.7.19.19 0 0 1 .1 0 8.38 8.38 0 0 1 3.8.9L21 3z"/></svg>
+							<span class="btn-text">{product.is_active ? 'Chat Admin' : 'CEK PRODUK LAIN'}</span>
+						</a>
+						{product.tokopedia_url && (
+							<a 
+								id="tokopedia-btn"
+								href={product.is_active ? product.tokopedia_url : 'javascript:void(0)'} 
+								target={product.is_active ? "_blank" : "_self"} 
+								class={`btn-secondary ${!product.is_active ? 'btn-disabled' : ''}`}
+							>
+								<span class="btn-text">{product.is_active ? 'Beli di Tokopedia' : 'HABIS TERJUAL'}</span>
+							</a>
+						)}
+
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- Related Products Section -->
+	{relatedProducts.length > 0 && (
+		<section style="padding: var(--spacing-2xl) 0; background: #fafafa; border-top: 1px solid #eee;">
+			<div class="container">
+				<div style="text-align: center; margin-bottom: var(--spacing-xl);">
+					<p class="text-uppercase opacity-50" style="font-size: 0.7rem; letter-spacing: 3px; margin-bottom: 0.5rem;">Discover More</p>
+					<h2 class="section-title" style="font-size: 2.5rem;">Koleksi <span style="font-style: italic;">Serupa</span></h2>
+				</div>
+
+				<div class="product-grid">
+					{relatedProducts.map((p, index) => (
+						<div class="product-card reveal-up" data-delay={index * 100}>
+							<div class="product-image" style="aspect-ratio: 4/5;">
+								<a href={`/products/${p.id}`}>
+									<img src={p.image_url} alt={p.name} loading="lazy" />
+								</a>
+							</div>
+							<div class="product-info" style="padding: 1.5rem;">
+								<p class="text-uppercase opacity-50" style="font-size: 0.6rem; margin-bottom: 0.5rem;">
+									{p.types?.name} • {p.product_motifs?.map((pm: any) => pm.motifs?.name).join(', ') || '-'}
+								</p>
+								<h3 style="font-size: 1rem; font-weight: 500; margin-bottom: 0.5rem;">
+									<a href={`/products/${p.id}`}>{p.name}</a>
+								</h3>
+								<p class="price-tag" style="font-size: 0.95rem;">
+									{(() => {
+										let displayPrice = `Rp ${Number(p.price).toLocaleString("id-ID")}`;
+										if(p.product_variants && p.product_variants.length > 0) {
+											const vPrices = p.product_variants.map((v:any) => v.price);
+											const vMin = Math.min(...vPrices);
+											if (vMin > 0) {
+												displayPrice = `Rp ${vMin.toLocaleString("id-ID")}`;
+											}
+										}
+										return displayPrice;
+									})()}
+								</p>
+							</div>
+						</div>
+					))}
+				</div>
+			</div>
+		</section>
+	)}
+
+	<style>
+		.detail-grid {
+			display: grid;
+			grid-template-columns: 1.2fr 1fr;
+			gap: var(--spacing-2xl);
+			align-items: start;
+			padding-bottom: var(--spacing-2xl);
+		}
+
+		.main-image-container {
+			background: #fdfcfb;
+			border-radius: var(--radius-sm);
+			overflow: hidden;
+			position: sticky;
+			top: 100px;
+			aspect-ratio: 4/5;
+		}
+
+		.main-image {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			display: block;
+			transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+		}
+
+		/* Diagonal Ribbon */
+		.ribbon-wrapper {
+			width: 150px;
+			height: 150px;
+			overflow: hidden;
+			position: absolute;
+			top: -5px;
+			right: -5px;
+			z-index: 10;
+			pointer-events: none;
+		}
+
+		.ribbon {
+			font-family: var(--font-main);
+			font-weight: 800;
+			color: #fff;
+			text-align: center;
+			transform: rotate(45deg);
+			position: absolute;
+			padding: 8px 0;
+			top: 35px;
+			right: -60px;
+			width: 240px;
+			background-color: #b91c1c;
+			box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+			font-size: 1rem;
+			letter-spacing: 4px;
+			text-transform: uppercase;
+		}
+
+
+
+
+		.main-image:hover {
+			transform: scale(1.05);
+		}
+
+		.thumbnail-strip {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+			gap: 10px;
+			margin-top: 15px;
+		}
+
+		.thumb-item {
+			aspect-ratio: 1;
+			border-radius: 4px;
+			overflow: hidden;
+			cursor: pointer;
+			border: 2px solid transparent;
+			transition: all 0.3s;
+			opacity: 0.6;
+		}
+
+		.thumb-item:hover {
+			opacity: 1;
+		}
+
+		.thumb-item.active {
+			border-color: var(--color-accent);
+			opacity: 1;
+		}
+
+		.thumb-item img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+		}
+
+		.product-info-panel {
+			padding: var(--spacing-md) 0;
+		}
+
+		.sku-code {
+			font-size: 0.7rem;
+			text-transform: uppercase;
+			letter-spacing: 2px;
+			opacity: 0.4;
+			font-weight: 600;
+		}
+
+		.status-badge {
+			font-size: 0.65rem;
+			text-transform: uppercase;
+			letter-spacing: 1.2px;
+			color: #0d5a15;
+			background: #e6f9e9;
+			padding: 0.25rem 0.7rem;
+			border-radius: 100px;
+			font-weight: 800;
+			border: 1px solid rgba(13, 90, 21, 0.1);
+		}
+
+		.status-badge.out-of-stock {
+			color: #b91c1c;
+			background: #fef2f2;
+			border: 1px solid rgba(185, 28, 28, 0.1);
+		}
+
+		.product-name {
+			font-family: var(--font-serif);
+			font-size: clamp(1.2rem, 3vw, 1.8rem);
+			line-height: 1.3;
+			margin-bottom: var(--spacing-sm);
+			font-weight: 400;
+			color: var(--color-text);
+		}
+
+		.product-price {
+			font-size: 1.5rem;
+			font-weight: 300;
+			color: var(--color-accent);
+			margin-bottom: var(--spacing-lg);
+		}
+
+		.meta-section {
+			border-top: 1px solid #eee;
+			border-bottom: 1px solid #eee;
+			padding: var(--spacing-lg) 0;
+			margin-bottom: var(--spacing-xl);
+			display: flex;
+			flex-direction: column;
+			gap: var(--spacing-lg);
+		}
+
+		.meta-item {
+			display: flex;
+			flex-direction: column;
+			gap: 0.5rem;
+		}
+
+		.meta-label {
+			font-size: 0.65rem;
+			text-transform: uppercase;
+			letter-spacing: 1.5px;
+			opacity: 0.5;
+			font-weight: 600;
+		}
+
+		.meta-value {
+			font-size: 1.1rem;
+			font-weight: 500;
+		}
+
+		.tag-container, .size-chips {
+			display: flex;
+			gap: 0.5rem;
+			flex-wrap: wrap;
+		}
+
+		.motif-tag, .size-chip {
+			font-size: 0.8rem;
+			padding: 0.4rem 0.8rem;
+			border: 1px solid #eee;
+			border-radius: var(--radius-sm);
+			background: #fafafa;
+		}
+
+		.variant-btn {
+			cursor: pointer;
+			transition: all 0.2s;
+			color: #333;
+		}
+		.variant-btn:hover {
+			border-color: #ccc;
+		}
+		.variant-btn.active {
+			background: var(--color-text);
+			color: white;
+			border-color: var(--color-text);
+		}
+
+		.description-section {
+			margin-bottom: var(--spacing-xl);
+		}
+
+		.section-subtitle {
+			font-size: 0.9rem;
+			text-transform: uppercase;
+			letter-spacing: 1.5px;
+			margin-bottom: 1rem;
+			font-weight: 600;
+		}
+
+		.description-text {
+			font-size: 1.05rem;
+			line-height: 1.8;
+			opacity: 0.8;
+			font-family: var(--font-main);
+			font-weight: 300;
+			white-space: pre-wrap;
+		}
+
+		.action-buttons {
+			display: flex;
+			flex-direction: column;
+			gap: 1rem;
+			margin-top: var(--spacing-xl);
+		}
+
+		.btn-primary {
+			background: var(--color-text);
+			color: white;
+			padding: 1.2rem;
+			text-align: center;
+			text-transform: uppercase;
+			letter-spacing: 2px;
+			font-weight: 600;
+			font-size: 0.85rem;
+			transition: var(--transition);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.btn-primary:hover {
+			background: #000;
+			transform: translateY(-2px);
+			box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+		}
+
+		.btn-secondary {
+			background: white;
+			color: #03ac0e;
+			border: 1px solid #03ac0e;
+			padding: 1.2rem;
+			text-align: center;
+			text-transform: uppercase;
+			letter-spacing: 2px;
+			font-weight: 600;
+			font-size: 0.85rem;
+			transition: var(--transition);
+		}
+
+		.btn-secondary:hover {
+			background: #fafffa;
+			transform: translateY(-2px);
+		}
+
+		.btn-disabled {
+			opacity: 0.4 !important;
+			cursor: not-allowed !important;
+			pointer-events: none !important;
+			background: #eee !important;
+			color: #999 !important;
+			border-color: #ddd !important;
+			transform: none !important;
+			box-shadow: none !important;
+		}
+
+		@media (max-width: 900px) {
+			.detail-grid {
+				grid-template-columns: 1fr;
+				gap: var(--spacing-xl);
+			}
+
+			.main-image-container {
+				position: static;
+			}
+
+			.product-name {
+				font-size: 1.8rem;
+			}
+		}
+
+		.breadcrumb-nav {
+			margin-bottom: 3rem;
+			font-size: 0.65rem;
+			text-transform: uppercase;
+			letter-spacing: 0.25em;
+			display: flex;
+			align-items: center;
+			gap: 0.8rem;
+			opacity: 0.8;
+			font-weight: 500;
+			position: relative;
+			z-index: 10;
+			flex-wrap: wrap;
+		}
+
+		.breadcrumb-link {
+			color: var(--color-text);
+			text-decoration: none;
+			transition: all 0.3s ease;
+			position: relative;
+			padding-bottom: 2px;
+		}
+
+		.breadcrumb-link::after {
+			content: "";
+			position: absolute;
+			bottom: 0;
+			left: 0;
+			width: 0;
+			height: 1px;
+			background: var(--color-accent);
+			transition: width 0.3s ease;
+		}
+
+		.breadcrumb-link:hover {
+			color: var(--color-accent);
+		}
+
+		.breadcrumb-link:hover::after {
+			width: 100%;
+		}
+
+		.breadcrumb-nav .sep {
+			opacity: 0.2;
+			font-weight: 200;
+			font-size: 0.8rem;
+			margin: 0 0.5rem;
+		}
+
+		.breadcrumb-nav .current-crumb {
+			color: var(--color-accent);
+			font-weight: 600;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			max-width: 300px;
+		}
+	</style>
+
+	<script is:inline>
+		// Gallery Switcher Logic
+		const mainImg = document.getElementById('main-product-img');
+		const thumbs = document.querySelectorAll('.thumb-item');
+
+		if (thumbs) {
+			thumbs.forEach(thumb => {
+				thumb.addEventListener('click', () => {
+					const newSrc = thumb.getAttribute('data-src');
+					if (mainImg && newSrc) {
+						mainImg.src = newSrc;
+						thumbs.forEach(t => t.classList.remove('active'));
+						thumb.classList.add('active');
+					}
+				});
+			});
+		}
+
+		// Variant Selection Logic
+		const variantBtns = document.querySelectorAll('.variant-btn');
+		const priceDisplay = document.querySelector('.product-price');
+		const badgeDisplay = document.getElementById('stock-badge');
+		
+		if (variantBtns.length > 0 && priceDisplay) {
+			const checkVariantAvailability = (stock) => {
+				const isAvailable = stock > 0;
+				if (badgeDisplay) {
+					badgeDisplay.innerText = isAvailable ? 'In Stock' : 'Stok Habis';
+					badgeDisplay.className = `status-badge ${!isAvailable ? 'out-of-stock' : ''}`;
+				}
+				// Also update WA Button
+				const waBtn = document.getElementById('wa-btn');
+				if (waBtn && waBtn.getAttribute('target') !== '_self') { // Meaning the product itself is active globally
+					waBtn.classList.toggle('btn-disabled', !isAvailable);
+					const btnText = waBtn.querySelector('.btn-text');
+					if (btnText) btnText.innerText = isAvailable ? 'Chat Admin' : 'Stok Ukuran Habis';
+				}
+			}
+
+			variantBtns.forEach(btn => {
+				btn.addEventListener('click', () => {
+					variantBtns.forEach(b => b.classList.remove('active'));
+					btn.classList.add('active');
+					
+					const newPrice = parseInt(btn.getAttribute('data-price') || "0", 10);
+					if(newPrice > 0) {
+						priceDisplay.innerText = "Rp " + newPrice.toLocaleString('id-ID');
+					}
+
+					const stock = parseInt(btn.getAttribute('data-stock') || "0", 10);
+					checkVariantAvailability(stock);
+				});
+			});
+
+			// Trigger initial variant state
+			const initialStock = parseInt(variantBtns[0].getAttribute('data-stock') || "0", 10);
+			const initialPrice = parseInt(variantBtns[0].getAttribute('data-price') || "0", 10);
+			if(initialPrice > 0) priceDisplay.innerText = "Rp " + initialPrice.toLocaleString('id-ID');
+			checkVariantAvailability(initialStock);
+		}
+
+		// Start the engines
+	</script>
+</Layout>

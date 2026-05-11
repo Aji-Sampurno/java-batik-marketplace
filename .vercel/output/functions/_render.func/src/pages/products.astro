@@ -22,54 +22,6 @@ const getSortUrl = (newSort: string) => {
 	return `?${p.toString()}`;
 };
 
-const getProductDisplaySizes = (p: any) => {
-	const variants = p.variants || p.product_variants || [];
-	if (variants.length > 0) {
-		const mappedSizes = variants.map((v: any) => {
-			let sizeName = v.size_name || "";
-			let baseSize = sizeName.trim();
-			if (sizeName.includes(" - ")) {
-				baseSize = sizeName.split(" - ")[0].trim();
-			}
-			const sfRegex = /\bSF\b|\bSlim\s*Fit\b|\bSlim\b/i;
-			if (sfRegex.test(baseSize)) {
-				baseSize = baseSize
-					.replace(sfRegex, "")
-					.replace(/[-_\s/]+$/, "")
-					.trim();
-			}
-			return baseSize.toUpperCase();
-		});
-		const uniqueSizes = [...new Set(mappedSizes)].filter(
-			(sz: any) => (isNaN(Number(sz)) || sz.length <= 3) && sz,
-		);
-		const sizeOrder = ["S", "M", "L", "XL", "XXL", "3XL", "ALL SIZE"];
-		uniqueSizes.sort((a, b) => {
-			const idxA = sizeOrder.indexOf(a);
-			const idxB = sizeOrder.indexOf(b);
-			if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-			if (idxA !== -1) return -1;
-			if (idxB !== -1) return 1;
-			return a.localeCompare(b);
-		});
-		return uniqueSizes;
-	} else if (p.sizes && p.sizes.length > 0) {
-		const mappedSizes = p.sizes.map((s: any) => {
-			const sfRegex = /\bSF\b|\bSlim\s*Fit\b|\bSlim\b/i;
-			return s
-				.replace(sfRegex, "")
-				.replace(/[-_\s/]+$/, "")
-				.trim()
-				.toUpperCase();
-		});
-		const uniqueSizes = [...new Set(mappedSizes)].filter(
-			(s: any) => (isNaN(Number(s)) || s.length <= 3) && s,
-		);
-		return uniqueSizes;
-	}
-	return [];
-};
-
 console.log("DEBUG: products.astro", {
 	typeFilter,
 	motifFilter,
@@ -193,18 +145,13 @@ const filteredProducts =
 	productsData?.filter((p: any) => {
 		// Hierarchical Type Match: Check if the filtered ID matches ANY associated category
 		const productCategoryIds =
-			(p.categories || p.product_categories || [])?.map(
-				(pc: any) => pc.id || pc.category_id,
-			) || [];
+			p.product_categories?.map((pc: any) => pc.category_id) || [];
 		if (p.type_id) productCategoryIds.push(p.type_id);
 
 		// Also keep names for legacy/search support if needed, but ID is primary
 		const productCategoryNames =
-			(p.categories || p.product_categories || [])?.map(
-				(pc: any) => pc.name || pc.types?.name,
-			) || [];
+			p.product_categories?.map((pc: any) => pc.types?.name) || [];
 		if (p.types?.name) productCategoryNames.push(p.types.name);
-		if (p.type?.name) productCategoryNames.push(p.type.name);
 
 		// Match by ID primarily (from resolved targetType), fallback to Path string
 		const typeMatch =
@@ -214,25 +161,21 @@ const filteredProducts =
 
 		// Motif Filter
 		const productMotifs =
-			(p.motifs || p.product_motifs || [])?.map(
-				(pm: any) => pm.name || pm.motifs?.name,
-			) || [];
+			p.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
 		const motifMatch = !motifFilter || productMotifs.includes(motifFilter);
 
 		// Size Filter
-		const pVariants = p.variants || p.product_variants || [];
-		const variantSizes = pVariants?.map((v: any) => v.size_name) || [];
+		const variantSizes = p.product_variants?.map((v:any) => v.size_name) || [];
 		const legacySizes = p.sizes || [];
-
+		
 		let sizeMatch = !sizeFilter;
 		if (sizeFilter) {
 			if (legacySizes.includes(sizeFilter)) {
 				sizeMatch = true;
 			} else {
 				// Cek apakah ada varian yang namanya sama persis, ATAU berawalan "Size - " (misal "M - Lengan Pendek")
-				sizeMatch = variantSizes.some(
-					(vs: string) =>
-						vs === sizeFilter || vs.startsWith(`${sizeFilter} -`),
+				sizeMatch = variantSizes.some((vs: string) => 
+					vs === sizeFilter || vs.startsWith(`${sizeFilter} -`)
 				);
 			}
 		}
@@ -258,40 +201,34 @@ const filteredProducts =
 			});
 		}
 
-		// Price Range Filter
+		// Price Range Filter 
 		// Gunakan range dari product_variants jika ada, kalau tidak base price
 		let pMin = p.price;
 		let pMax = p.price;
-		if (pVariants && pVariants.length > 0) {
-			const vPrices = pVariants.map((v: any) => v.price);
+		if (p.product_variants && p.product_variants.length > 0) {
+			const vPrices = p.product_variants.map((v:any) => v.price);
 			pMin = Math.min(...vPrices);
 			pMax = Math.max(...vPrices);
 		}
-
+		
 		const priceMatch =
-			(!minPrice || pMax >= minPrice) && (!maxPrice || pMin <= maxPrice);
+			(!minPrice || pMax >= minPrice) &&
+			(!maxPrice || pMin <= maxPrice);
 
-		return (
-			typeMatch && motifMatch && sizeMatch && searchMatch && priceMatch
-		);
+		return typeMatch && motifMatch && sizeMatch && searchMatch && priceMatch;
 	}) || [];
 
 // Sort Logic
 const sortedProducts = filteredProducts.sort((a: any, b: any) => {
-	// Priority 1: Availability (In stock first)
-	const isOutOfStockA =
-		!a.is_active || a.total_stock === 0 || a.stock_status === "habis";
-	const isOutOfStockB =
-		!b.is_active || b.total_stock === 0 || b.stock_status === "habis";
-	if (isOutOfStockA !== isOutOfStockB) {
-		return isOutOfStockA ? 1 : -1;
+	// Priority 1: Availability (Active first)
+	if (a.is_active !== b.is_active) {
+		return a.is_active ? -1 : 1;
 	}
 
 	// Priority 2: User requested sort
 	const getEffectivePrice = (prod) => {
-		const prodVariants = prod.variants || prod.product_variants || [];
-		if (prodVariants && prodVariants.length > 0) {
-			const vPrices = prodVariants.map((v) => v.price);
+		if (prod.product_variants && prod.product_variants.length > 0) {
+			const vPrices = prod.product_variants.map((v) => v.price);
 			const vMin = Math.min(...vPrices);
 			if (vMin > 0) return vMin;
 		}
@@ -793,179 +730,156 @@ const sortedProducts = filteredProducts.sort((a: any, b: any) => {
 					</div>
 					<div class="product-grid" style="margin-top: 0;">
 						{
-							sortedProducts.map((p, index) => {
-								const isOutOfStock =
-									!p.is_active ||
-									p.total_stock === 0 ||
-									p.stock_status === "habis";
-								return (
+							sortedProducts.map((p, index) => (
+								<div
+									class={`product-card reveal-up ${!p.is_active ? "product-inactive" : ""}`}
+									data-delay={(index % 4) * 100}
+								>
 									<div
-										class={`product-card reveal-up ${isOutOfStock ? "product-inactive" : ""}`}
-										data-delay={(index % 4) * 100}
+										class="product-image"
+										style="position: relative;"
 									>
-										<div
-											class="product-image"
-											style="position: relative;"
-										>
-											<a href={`/products/${p.id}`}>
-												<img
-													src={
-														p.image_url ||
-														"https://via.placeholder.com/400x600?text=Batik"
-													}
-													alt={p.name}
-													loading="lazy"
-													class={
-														isOutOfStock
-															? "out-of-stock-img"
-															: ""
-													}
-												/>
-												{isOutOfStock && (
-													<div class="ribbon-wrapper">
-														<div class="ribbon">
-															HABIS
-														</div>
+										<a href={`/products/${p.id}`}>
+											<img
+												src={
+													p.image_url ||
+													"https://via.placeholder.com/400x600?text=Batik"
+												}
+												alt={p.name}
+												loading="lazy"
+												class={
+													!p.is_active
+														? "out-of-stock-img"
+														: ""
+												}
+											/>
+											{!p.is_active && (
+												<div class="ribbon-wrapper">
+													<div class="ribbon">
+														HABIS
 													</div>
-												)}
+												</div>
+											)}
+										</a>
+									</div>
+
+									<div
+										class="product-info"
+										style="display: flex; flex-direction: column; flex: 1;"
+									>
+										<p
+											class="text-uppercase color-accent"
+											style="font-size: 0.65rem; color: var(--color-accent); margin-bottom: 0.2rem;"
+										>
+											{p.types?.name} •{" "}
+											{p.product_motifs
+												?.map(
+													(pm: any) =>
+														pm.motifs?.name,
+												)
+												.join(", ") || "-"}
+										</p>
+										<h3 class="product-title">
+											<a
+												href={`/products/${p.id}`}
+												style="color: inherit; text-decoration: none;"
+											>
+												{p.name}
 											</a>
+										</h3>
+
+										<div class="product-meta">
+											{p.code && (
+												<code style="font-size: 0.7rem; background: #f9f9f9; padding: 0.2rem 0.4rem; color: #888; border-radius: 2px;">
+													{p.code}
+												</code>
+											)}
+											{p.product_variants && p.product_variants.length > 0 ? (
+												p.product_variants.map((v: any) => (
+													<span style="font-size: 0.65rem; border: 1px solid #eee; padding: 1px 6px; border-radius: 2px; color: var(--color-muted);">
+														{v.size_name}
+													</span>
+												))
+											) : p.sizes && p.sizes.length > 0 ? (
+												p.sizes.map((s: any) => (
+													<span style="font-size: 0.65rem; border: 1px solid #eee; padding: 1px 6px; border-radius: 2px; color: var(--color-muted);">
+														{s}
+													</span>
+												))
+											) : null}
 										</div>
 
-										<div
-											class="product-info"
-											style="display: flex; flex-direction: column; flex: 1;"
-										>
-											<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.2rem; flex-wrap: wrap; gap: 0.5rem;">
-												<p
-													class="text-uppercase color-accent"
-													style="font-size: 0.65rem; color: var(--color-accent); margin: 0;"
-												>
-													{p.types?.name ||
-														p.type?.name ||
-														"-"}{" "}
-													•{" "}
-													{(
-														p.motifs ||
-														p.product_motifs ||
-														[]
-													)
-														?.map(
-															(pm: any) =>
-																pm.name ||
-																pm.motifs?.name,
-														)
-														.filter(Boolean)
-														.join(", ") || "-"}
-												</p>
-												{p.code && (
-													<span style="font-size: 0.65rem; color: #a3a3a3; font-family: monospace; font-weight: 500; letter-spacing: 0.5px;">
-														#{p.code}
+										<div style="display: flex; align-items: center; gap: 0.5rem;">
+											{p.original_price &&
+												p.original_price > p.price && (
+													<span style="text-decoration: line-through; color: #999; font-size: 0.8rem;">
+														Rp{" "}
+														{Number(
+															p.original_price,
+														).toLocaleString(
+															"id-ID",
+														)}
 													</span>
 												)}
-											</div>
-											<h3 class="product-title">
-												<a
-													href={`/products/${p.id}`}
-													style="color: inherit; text-decoration: none;"
-												>
-													{p.name}
-												</a>
-											</h3>
-
-											<div class="product-meta">
-												{getProductDisplaySizes(p).map(
-													(sz: any) => (
-														<span style="font-size: 0.65rem; border: 1px solid #e2e8f0; padding: 2px 8px; border-radius: 4px; color: #475569; background: #f8fafc; font-weight: 500; text-transform: uppercase;">
-															{sz}
-														</span>
-													),
-												)}
-											</div>
-
-											<div style="display: flex; align-items: center; gap: 0.5rem;">
-												{p.original_price &&
-													p.original_price >
-														p.price && (
-														<span style="text-decoration: line-through; color: #999; font-size: 0.8rem;">
-															Rp{" "}
-															{Number(
-																p.original_price,
-															).toLocaleString(
-																"id-ID",
-															)}
-														</span>
-													)}
-												<p
-													class="price-tag"
-													style="margin: 0;"
-												>
-													{(() => {
-														let displayPrice = `Rp ${Number(p.price).toLocaleString("id-ID")}`;
-														if (
-															p.product_variants &&
-															p.product_variants
-																.length > 0
-														) {
-															const vPrices =
-																p.product_variants.map(
-																	(v: any) =>
-																		v.price,
-																);
-															const vMin =
-																Math.min(
-																	...vPrices,
-																);
-															if (vMin > 0) {
-																displayPrice = `Rp ${vMin.toLocaleString("id-ID")}`;
-															}
+											<p
+												class="price-tag"
+												style="margin: 0;"
+											>
+												{(() => {
+													let displayPrice = `Rp ${Number(p.price).toLocaleString("id-ID")}`;
+													if(p.product_variants && p.product_variants.length > 0) {
+														const vPrices = p.product_variants.map((v:any) => v.price);
+														const vMin = Math.min(...vPrices);
+														if (vMin > 0) {
+															displayPrice = `Rp ${vMin.toLocaleString("id-ID")}`;
 														}
-														return displayPrice;
-													})()}
-												</p>
-											</div>
+													}
+													return displayPrice;
+												})()}
+											</p>
+										</div>
 
-											<div class="actions">
-												{p.tokopedia_url && (
-													<a
-														href={
-															!isOutOfStock
-																? p.tokopedia_url
-																: "javascript:void(0)"
-														}
-														target={
-															!isOutOfStock
-																? "_blank"
-																: "_self"
-														}
-														class={`buy-btn ${isOutOfStock ? "disabled-btn" : ""}`}
-													>
-														{!isOutOfStock
-															? "Beli Sekarang"
-															: "HABIS TERJUAL"}
-													</a>
-												)}
+										<div class="actions">
+											{p.tokopedia_url && (
 												<a
 													href={
-														!isOutOfStock
-															? `${waBaseUrl}${settings.contact_whatsapp}?text=Halo, saya tertarik dengan produk ${p.name}`
+														p.is_active
+															? p.tokopedia_url
 															: "javascript:void(0)"
 													}
 													target={
-														!isOutOfStock
+														p.is_active
 															? "_blank"
 															: "_self"
 													}
-													class={`wa-btn ${isOutOfStock ? "disabled-btn" : ""}`}
+													class={`buy-btn ${!p.is_active ? "disabled-btn" : ""}`}
 												>
-													{!isOutOfStock
-														? "Chat Admin"
-														: "CEK PRODUK LAIN"}
+													{p.is_active
+														? "Beli Sekarang"
+														: "HABIS TERJUAL"}
 												</a>
-											</div>
+											)}
+											<a
+												href={
+													p.is_active
+														? `${waBaseUrl}${settings.contact_whatsapp}?text=Halo, saya tertarik dengan produk ${p.name}`
+														: "javascript:void(0)"
+												}
+												target={
+													p.is_active
+														? "_blank"
+														: "_self"
+												}
+												class={`wa-btn ${!p.is_active ? "disabled-btn" : ""}`}
+											>
+												{p.is_active
+													? "Chat Admin"
+													: "CEK PRODUK LAIN"}
+											</a>
 										</div>
 									</div>
-								);
-							})
+								</div>
+							))
 						}
 					</div>
 
