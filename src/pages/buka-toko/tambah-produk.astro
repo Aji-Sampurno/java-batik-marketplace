@@ -334,33 +334,26 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 ---
 
 <Layout title={`Admin Panel - ${settings?.site_name || "Batik Nusantara"}`}>
-	<section style="padding: var(--spacing-xl) 0; min-height: 80vh;">
-		<div class="container">
-			<div class="admin-header">
-				<div
-					style="display: flex; align-items: center; gap: var(--spacing-md);"
-				>
-					<div>
-						<h1
-							class="text-uppercase"
-							style="font-size: 1.2rem; margin: 0; font-weight: 600;"
-						>
-							{settings?.site_name || "Batik Nusantara"} Dashboard
-						</h1>
-						<p style="font-size: 0.8rem; opacity: 0.5;">
-							Kelola identitas dan katalog batik Anda.
-						</p>
-					</div>
+	<section style="padding: 130px 0 var(--spacing-2xl) 0; background: #fdfcfb; min-height: 100vh;">
+		<div class="container" style="max-width: 1000px;">
+			<!-- Header -->
+			<div style="margin-bottom: var(--spacing-xl); display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 1rem;">
+				<div>
+					<h1 style="font-family: var(--font-serif); font-size: 2.2rem; margin: 0; font-weight: 400;">
+						Tambah <span style="font-style: italic;">Produk Baru</span>
+					</h1>
+					<p style="opacity: 0.5; margin-top: 0.5rem; font-size: 0.9rem;">
+						Kelola katalog batik dan unggah produk siap jual Anda.
+					</p>
 				</div>
-				<div
-					style="display: flex; gap: var(--spacing-md); align-items: center;"
+				
+				<a
+					href="/buka-toko/pra-produk"
+					style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; text-decoration: none; padding: 0.6rem 1.2rem; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); color: var(--color-text); background: white; transition: 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"
+					onmouseover="this.style.background='#f8fafc'; this.style.borderColor='#cbd5e1';"
+					onmouseout="this.style.background='white'; this.style.borderColor='#e2e8f0';"
+					>&larr; Kembali ke Pra-Produk</a
 				>
-					<a
-						href="/buka-toko/pra-produk"
-						style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; text-decoration: none; padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm); color: var(--color-text);"
-						>&larr; Kembali ke Pra-Produk</a
-					>
-				</div>
 			</div>
 
 			{
@@ -380,7 +373,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 				)
 			}
 
-			<div style="max-width: 900px; margin: 0 auto;">
+			<div>
 					<!-- Form Product -->
 					<div
 						style="background: white; border: 1px solid var(--color-border); padding: var(--spacing-lg); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);"
@@ -408,82 +401,101 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								id="from_praproduk_input"
 								value="false"
 							/>
-							<div>
-								<label
-									class="text-uppercase opacity-50"
-									style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
-									>Nama Produk</label
-								>
-								<input
-									name="name"
-									id="product_name_input"
-									type="text"
-									required
-									placeholder="Kemeja Batik Parang"
-									style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
-								/>
-							</div>
-
-							<div
-								style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);"
-							>
-								<div>
+							<div id="praproduk_layout_container" class="praproduk-layout-container">
+								<!-- Left container for Pra-produk image (hidden by default) -->
+								<div id="praproduk_img_preview_wrapper" style="display: none;">
 									<label
 										class="text-uppercase opacity-50"
 										style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
-										>Kode SKU</label
+										>Gambar Pra-Produk</label
 									>
-									<input
-										name="code"
-										id="product_sku_input"
-										type="text"
-										placeholder="BTK-001"
-										style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
-									/>
-								</div>
-								<div>
-									<label
-										class="text-uppercase opacity-50"
-										style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
-										>Kode Barang (Auto-Name)</label
-									>
-									<input
-										name="item_code"
-										id="product_item_code_input"
-										type="text"
-										placeholder="001"
-										style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
-									/>
-								</div>
-								<div>
-									<label
-										class="text-uppercase opacity-50"
-										style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
-										>Harga (Rp)</label
-									>
-									<input
-										type="text"
-										class="currency-mask"
-										data-hidden-id="product_price_input"
-										required
-										id="product_price_input_display"
-										placeholder="450.000"
-										style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
-									/>
-									<input type="hidden" name="price" id="product_price_input" />
-									<div
-										id="price_markup_preview"
-										style="font-size: 0.65rem; color: #10b981; margin-top: 0.4rem; font-weight: 600; display: none;"
-									>
-										Harga Coret: Rp <span id="markup_val"
-											>0</span
-										> (Hemat Rp <span id="markup_pct">0</span>)
+									<div style="border: 1px solid #ddd; border-radius: var(--radius-sm); overflow: hidden; background: #f8fafc; width: 100%; aspect-ratio: 3 / 4; position: relative;">
+										<img id="praproduk_img_preview" src="" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
 									</div>
-									<input
-										type="hidden"
-										name="original_price"
-										id="original_price_input"
-									/>
+									<button type="button" id="download_praproduk_btn" style="margin-top: 0.5rem; width: 100%; padding: 0.5rem; font-size: 0.7rem; font-weight: 600; border: 1px solid #ddd; background: #fff; border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; text-transform: uppercase; letter-spacing: 0.5px; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
+										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+										Unduh Foto
+									</button>
+								</div>
+
+								<!-- Right container for vertical inputs -->
+								<div style="display: flex; flex-direction: column; gap: var(--spacing-md); width: 100%;">
+									<div>
+										<label
+											class="text-uppercase opacity-50"
+											style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+											>Nama Produk</label
+										>
+										<input
+											name="name"
+											id="product_name_input"
+											type="text"
+											required
+											placeholder="Kemeja Batik Parang"
+											style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+										/>
+									</div>
+
+									<div>
+										<label
+											class="text-uppercase opacity-50"
+											style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+											>Kode SKU</label
+										>
+										<input
+											name="code"
+											id="product_sku_input"
+											type="text"
+											placeholder="BTK-001"
+											style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+										/>
+									</div>
+
+									<div>
+										<label
+											class="text-uppercase opacity-50"
+											style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+											>Kode Barang (Auto-Name)</label
+										>
+										<input
+											name="item_code"
+											id="product_item_code_input"
+											type="text"
+											placeholder="001"
+											style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+										/>
+									</div>
+
+									<div>
+										<label
+											class="text-uppercase opacity-50"
+											style="font-size: 0.6rem; display: block; margin-bottom: 0.3rem;"
+											>Harga (Rp)</label
+										>
+										<input
+											type="text"
+											class="currency-mask"
+											data-hidden-id="product_price_input"
+											required
+											id="product_price_input_display"
+											placeholder="450.000"
+											style="width: 100%; padding: 0.7rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
+										/>
+										<input type="hidden" name="price" id="product_price_input" />
+										<div
+											id="price_markup_preview"
+											style="font-size: 0.65rem; color: #10b981; margin-top: 0.4rem; font-weight: 600; display: none;"
+										>
+											Harga Coret: Rp <span id="markup_val"
+												>0</span
+											> (Hemat Rp <span id="markup_pct">0</span>)
+										</div>
+										<input
+											type="hidden"
+											name="original_price"
+											id="original_price_input"
+										/>
+									</div>
 								</div>
 							</div>
 
@@ -802,6 +814,25 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 				gap: var(--spacing-md);
 			}
 			.admin-main-grid {
+				grid-template-columns: 1fr;
+			}
+		}
+
+
+		.praproduk-layout-container {
+			display: flex;
+			flex-direction: column;
+			gap: var(--spacing-md);
+			margin-bottom: var(--spacing-md);
+		}
+
+		.praproduk-layout-container.has-praproduk {
+			display: grid;
+			grid-template-columns: 280px 1fr;
+		}
+
+		@media (max-width: 640px) {
+			.praproduk-layout-container.has-praproduk {
 				grid-template-columns: 1fr;
 			}
 		}
@@ -1163,6 +1194,28 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 	<DeleteConfirmModal />
 
 	<script is:inline define:vars={{ hierarchicalTypes }}>
+		const BASE_PHOTO_URL = "https://noir.grace.gracianna.web.id/foto/";
+		const BASE_PHOTO_URL_FALLBACK = "https://noir.grace.gracianna.web.id/storage/";
+		const BASE_PHOTO_URL_IMAGES = "https://noir.grace.gracianna.web.id/images/";
+
+		function handlePraprodukImageError(imgEl) {
+			if (!imgEl.dataset.tried) {
+				imgEl.dataset.tried = "1";
+				imgEl.src = BASE_PHOTO_URL_FALLBACK + imgEl.dataset.filename;
+			} else if (imgEl.dataset.tried === "1") {
+				imgEl.dataset.tried = "2";
+				imgEl.src = BASE_PHOTO_URL_IMAGES + imgEl.dataset.filename;
+			} else {
+				imgEl.style.display = "none";
+				if(imgEl.parentElement) {
+					imgEl.parentElement.style.display = "flex";
+					imgEl.parentElement.style.alignItems = "center";
+					imgEl.parentElement.style.justifyContent = "center";
+					imgEl.parentElement.innerHTML = '<span style="font-size:0.7rem; color:#888;">Tidak ada foto</span>';
+				}
+			}
+		}
+
 		function initSearchableSelect() {
 			const selectContainers =
 				document.querySelectorAll(".searchable-select");
@@ -1761,6 +1814,42 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 
 					if(item) {
 							console.log("DEBUG: Item loaded successfully. Starting form auto-fill...");
+							
+							// Display Pra-Produk image if exists
+							const photoFile = item.foto || item.img1;
+							const imgWrapper = document.getElementById("praproduk_img_preview_wrapper");
+							const imgPreview = document.getElementById("praproduk_img_preview");
+							const layoutContainer = document.getElementById("praproduk_layout_container");
+
+							if (photoFile && imgPreview && imgWrapper) {
+								imgPreview.dataset.filename = photoFile;
+								imgPreview.src = BASE_PHOTO_URL + photoFile;
+								imgPreview.onerror = function() { handlePraprodukImageError(this); };
+								imgWrapper.style.display = "block";
+								if (layoutContainer) {
+									layoutContainer.classList.add("has-praproduk");
+								}
+
+								// Tambahkan fungsi tombol download
+								const downloadBtn = document.getElementById("download_praproduk_btn");
+								if (downloadBtn) {
+									downloadBtn.onclick = function(e) {
+										e.preventDefault();
+										const currentSrc = imgPreview.src;
+										if (!currentSrc) return;
+										
+										// Gunakan proxy API lokal kita untuk bypass CORS & force download
+										const downloadUrl = `/api/proxy-image?url=${encodeURIComponent(currentSrc)}`;
+										const anchor = document.createElement("a");
+										anchor.href = downloadUrl;
+										anchor.style.display = "none";
+										document.body.appendChild(anchor);
+										anchor.click();
+										document.body.removeChild(anchor);
+									};
+								}
+							}
+
 							// Auto-fill form
 							const nameInput = document.getElementById("product_name_input");
 							if(nameInput && item.nama) nameInput.value = item.nama;
