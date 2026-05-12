@@ -1,0 +1,39 @@
+---
+// API Endpoing for Infinite Scroll HTML Fragments
+export const prerender = false;
+import { apiFetch } from "../../lib/api";
+import ProductCard from "../../components/ProductCard.astro";
+
+const { searchParams } = Astro.url;
+const currentPage = Number(searchParams.get("page") || "1");
+const itemsPerPage = 12;
+
+const productParams = new URLSearchParams();
+productParams.set("page", String(currentPage));
+productParams.set("per_page", String(itemsPerPage));
+
+const passThrough = ["type", "motif", "size", "search", "min_price", "max_price", "sort"];
+passThrough.forEach(key => {
+    const altKey = key === "search" ? "q" : (key === "min_price" ? "minP" : (key === "max_price" ? "maxP" : key));
+    const val = searchParams.get(key) || searchParams.get(altKey);
+    if (val) productParams.set(key, val);
+});
+
+let paginatedProducts = [];
+let settings = { contact_whatsapp: "628123456789" };
+
+try {
+    const pRes = await apiFetch<any>(`products?${productParams.toString()}`);
+    paginatedProducts = pRes?.data || [];
+
+    const sRes = await apiFetch<any>("settings");
+    const s = sRes?.data || sRes;
+    if (s) settings = s;
+} catch (e) {
+    console.error("Partial Fetch Error", e);
+}
+---
+
+{paginatedProducts.map((p, i) => (
+    <ProductCard product={p} index={i} settings={settings} />
+))}
