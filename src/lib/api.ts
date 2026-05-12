@@ -42,9 +42,44 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
     throw new Error(`Respon server bukan JSON yang valid (kemungkinan HTML/Error Backend). Teks awal: ${text.slice(0, 150)}...`);
   }
 
-  if (endpoint.startsWith("types")) {
+  // Deep recursive loading for category types
+  if (endpoint === "types") {
     const rawData = data?.data || data;
     if (Array.isArray(rawData)) {
+      // 1. Identify Level 2 items that might contain children not returned in bulk API response
+      const level2Items: any[] = [];
+      for (const l1 of rawData) {
+        if (l1.children && Array.isArray(l1.children)) {
+          level2Items.push(...l1.children);
+        }
+      }
+
+      // 2. Perform parallel recursive fetches to get their Level 3 children
+      try {
+        await Promise.all(level2Items.map(async (l2: any) => {
+          // If backend omitted level 2 children, query them directly
+          if (!l2.children || !Array.isArray(l2.children) || l2.children.length === 0) {
+            try {
+              // Avoid loop fetch by calling native fetch on target URL
+              const subUrl = `${API_URL}/types/${l2.id}`;
+              const subRes = await fetch(subUrl, { headers: mergedHeaders });
+              if (subRes.ok) {
+                const subJson = await subRes.json();
+                const subData = subJson.data || subJson;
+                if (subData && subData.children) {
+                  l2.children = subData.children;
+                }
+              }
+            } catch (fetchErr) {
+              // Silently fail for nested children if single endpoint fails
+            }
+          }
+        }));
+      } catch (e) {
+        // Global concurrency failure safe-catch
+      }
+
+      // 3. Standard recursive flattener
       const flatten = (items: any[]): any[] => {
         let flat: any[] = [];
         for (const item of items) {
@@ -56,6 +91,7 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
         }
         return flat;
       };
+      
       const flatList = flatten(rawData);
       return (data?.data ? { ...data, data: flatList } : flatList) as T;
     }

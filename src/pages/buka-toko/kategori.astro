@@ -11,6 +11,7 @@ if (session?.value !== "authenticated") {
 let types: any[] = [];
 let settings: any = null;
 let message = "";
+let isError = false;
 
 try {
 	const tRes = await apiFetch<any>("types");
