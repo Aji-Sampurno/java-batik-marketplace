@@ -1,0 +1,30 @@
+---
+// API Endpoint for Admin Paginated Fragment
+export const prerender = false;
+import { apiFetch } from "../../lib/api";
+import AdminProductRow from "../../components/AdminProductRow.astro";
+
+const { searchParams } = Astro.url;
+const adminPage = Number(searchParams.get("page") || "1");
+const adminLimit = 12; // Updated from 20 to 12 as requested
+
+const pParams = new URLSearchParams();
+pParams.set("page", String(adminPage));
+pParams.set("per_page", String(adminLimit));
+
+const adminSearchQuery = searchParams.get("q");
+if (adminSearchQuery) pParams.set("search", adminSearchQuery);
+
+let productsData = [];
+
+try {
+    const pRes = await apiFetch<any>(`products?${pParams.toString()}`);
+    productsData = pRes?.data || pRes || [];
+} catch (e) {
+    console.error("Admin Partial Fetch Failed:", e);
+}
+---
+
+{productsData.map((p) => (
+    <AdminProductRow product={p} />
+))}

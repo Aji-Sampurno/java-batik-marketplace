@@ -1,0 +1,59 @@
+---
+export const prerender = false;
+import { apiFetch } from "../../lib/api";
+
+let activePromos: any[] = [];
+try {
+	const promoRes = await apiFetch<any>("promotions");
+	const promos = promoRes?.data || promoRes || [];
+	activePromos = promos
+		.filter((p: any) => p.is_active)
+		.sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0));
+} catch (e: any) {
+	console.error("API Fetch Error, fallback:", e.message);
+	activePromos = [
+		{ title: 'Promo 1', image_url: '/images/promo_1.png', link_url: '/products', is_active: true },
+		{ title: 'Promo 2', image_url: '/images/promo_2.png', link_url: '/products', is_active: true },
+		{ title: 'Promo 3', image_url: '/images/promo_3.png', link_url: '/products', is_active: true }
+	];
+}
+---
+
+<style is:inline>
+	@keyframes fadeInHorizontal {
+		from { opacity: 0; transform: translateX(20px); }
+		to { opacity: 1; transform: translateX(0); }
+	}
+	.promo-card-lazy {
+		animation: fadeInHorizontal 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	}
+</style>
+
+{
+	activePromos.map((promo, idx) => (
+		<a
+			href={promo.link_url || "/products"}
+			class="promo-card promo-card-lazy"
+			style={`flex: 0 0 85vw; max-width: 1200px; scroll-snap-align: center; position: relative; border-radius: var(--radius-sm); overflow: hidden; aspect-ratio: 21/9; height: auto; min-height: 250px; display: block; box-shadow: 0 30px 60px rgba(0,0,0,0.1); animation-delay: ${idx * 100}ms; opacity: 0;`}
+		>
+			<img
+				src={promo.image_url}
+				alt={promo.title}
+				style="width: 100%; height: 100%; object-fit: cover; transition: 1s cubic-bezier(0.2, 1, 0.3, 1);"
+				onmouseover="this.style.transform='scale(1.03)'"
+				onmouseout="this.style.transform='scale(1)'"
+			/>
+			<div
+				style="position: absolute; bottom: 0; left: 0; width: 100%; height: 60%; background: linear-gradient(to top, rgba(0,0,0,0.6), transparent); pointer-events: none; display: flex; flex-direction: column; justify-content: flex-end; padding: 3rem;"
+			>
+				<h3 style="color: white; font-family: var(--font-serif); font-size: 2rem; margin: 0; font-weight: 400;">{promo.title}</h3>
+			</div>
+		</a>
+	))
+}
+
+{activePromos.length === 0 && (
+	<div style="padding: 100px; text-align: center; width: 100%; opacity: 0.3;">
+		<p>Belum ada promo aktif saat ini.</p>
+	</div>
+)}

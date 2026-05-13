@@ -1,0 +1,1009 @@
+---
+export const prerender = false;
+import { apiFetch } from "../../lib/api";
+import ProductCard from "../../components/ProductCard.astro";
+
+const { searchParams } = Astro.url;
+const typeFilter = searchParams.get("type");
+const motifFilter = searchParams.get("motif");
+const sizeFilter = searchParams.get("size"); 
+const searchQuery = searchParams.get("q");
+const minPrice = searchParams.get("minP")
+	? Number(searchParams.get("minP"))
+	: null;
+const maxPrice = searchParams.get("maxP")
+	? Number(searchParams.get("maxP"))
+	: null;
+const sort = searchParams.get("sort") || "newest";
+
+const getSortUrl = (newSort: string) => {
+	const p = new URLSearchParams(searchParams);
+	p.set("sort", newSort);
+	p.delete("page"); 
+	return `?${p.toString()}`;
+};
+
+let typesData: any[] = [];
+let motifsData: any[] = [];
+let sizesData: any[] = [];
+let hierarchicalTypes: any[] = [];
+let activePathIds: any[] = [];
+let targetType: any = null;
+let settings: any = { contact_whatsapp: "628123456789" };
+
+try {
+	const tRes = await apiFetch<any>("types");
+	typesData = tRes?.data || tRes || [];
+
+	const mRes = await apiFetch<any>("motifs");
+	motifsData = mRes?.data || mRes || [];
+
+	const szRes = await apiFetch<any>("sizes");
+	sizesData = szRes?.data || szRes || [];
+
+	const sRes = await apiFetch<any>("settings");
+	const s = sRes?.data || sRes;
+	if (s) settings = s;
+
+	const buildCategoryTree = (
+		list: any[],
+		parentId = null,
+		depth = 0,
+		currentPath = "",
+	): any[] => {
+		let result: any[] = [];
+		list.filter((item) => item.parent_id === parentId).forEach((item) => {
+			const fullPath = currentPath
+				? `${currentPath} > ${item.name}`
+				: item.name;
+			result.push({ ...item, depth, fullPath });
+			const children = buildCategoryTree(
+				list,
+				item.id,
+				depth + 1,
+				fullPath,
+			);
+			result = result.concat(children);
+		});
+		return result;
+	};
+
+	hierarchicalTypes = buildCategoryTree(typesData);
+
+	targetType = hierarchicalTypes.find(
+		(t) => t.fullPath === typeFilter || t.id === typeFilter,
+	);
+	
+	const getAncestry = (list: any[], currentId: any): any[] => {
+		if (!currentId) return [];
+		const item = list.find((t) => t.id === currentId);
+		if (!item) return [];
+		return [item.id, ...getAncestry(list, item.parent_id)];
+	};
+
+	activePathIds = getAncestry(typesData, targetType?.id || null);
+} catch (e: any) {
+	console.error("API Fetch Error", e.message);
+}
+
+const itemsPerPage = 12;
+const currentPage = Number(searchParams.get("page") || "1");
+
+let totalItems = 0;
+let totalPages = 1;
+let paginatedProducts: any[] = [];
+
+const productParams = new URLSearchParams();
+productParams.set("page", String(currentPage));
+productParams.set("per_page", String(itemsPerPage));
+if (typeFilter) productParams.set("type", typeFilter);
+if (motifFilter) productParams.set("motif", motifFilter);
+if (sizeFilter) productParams.set("size", sizeFilter);
+if (searchQuery) productParams.set("search", searchQuery);
+if (minPrice) productParams.set("min_price", String(minPrice));
+if (maxPrice) productParams.set("max_price", String(maxPrice));
+productParams.set("sort", sort);
+
+try {
+	const pRes = await apiFetch<any>(`products?${productParams.toString()}`);
+	paginatedProducts = pRes?.data || [];
+	
+	const meta = pRes?.meta || pRes;
+	totalItems = Number(meta?.total || paginatedProducts.length);
+	totalPages = Number(meta?.last_page || Math.ceil(totalItems / itemsPerPage));
+} catch (pError: any) {
+	console.error("Backend Product Fetch Failed:", pError.message);
+}
+---
+
+<div class="products-layout">
+	<!-- Sidebar Filters -->
+	<aside class="filters-sidebar" id="filters-sidebar">
+		<div class="sidebar-mobile-header">
+			<div class="drag-handle"></div>
+			<div class="header-title-row">
+				<h3>Filter & Kategori</h3>
+				<button type="button" class="close-sidebar-btn" id="close-sidebar-btn">&times;</button>
+			</div>
+		</div>
+
+		<input
+			type="hidden"
+			name="q"
+			value={searchParams.get("q") || ""}
+		/>
+
+		<div class="filter-group">
+			<h3
+				class="text-uppercase"
+				style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;"
+			>
+				Rentang Harga
+			</h3>
+			<form
+				action="/products"
+				method="GET"
+				style="display: flex; flex-direction: column; gap: 0.5rem;"
+			>
+				{
+					Array.from(searchParams.entries()).map(
+						([key, value]) =>
+							key !== "minP" &&
+							key !== "maxP" && 
+							key !== "page" && (
+								<input
+									type="hidden"
+									name={key}
+									value={value}
+								/>
+							),
+					)
+				}
+
+				<div
+					style="display: flex; flex-direction: column; gap: 0.8rem;"
+				>
+					<div
+						style="display: flex; flex-direction: column; gap: 0.3rem;"
+					>
+						<label
+							style="font-size: 0.6rem; opacity: 0.5; text-transform: uppercase; font-weight: 600;"
+							>Harga Minimum</label
+						>
+						<input
+							type="text"
+							inputmode="numeric"
+							name="minP"
+							value={minPrice
+								? `Rp ${minPrice.toLocaleString("id-ID")}`
+								: ""}
+							placeholder="Rp 0"
+							class="price-input js-price-input"
+							style="width: 100%;"
+						/>
+					</div>
+					<div
+						style="display: flex; flex-direction: column; gap: 0.3rem;"
+					>
+						<label
+							style="font-size: 0.6rem; opacity: 0.5; text-transform: uppercase; font-weight: 600;"
+							>Harga Maksimum</label
+						>
+						<input
+							type="text"
+							inputmode="numeric"
+							name="maxP"
+							value={maxPrice
+								? `Rp ${maxPrice.toLocaleString("id-ID")}`
+								: ""}
+							placeholder="Rp 0"
+							class="price-input js-price-input"
+							style="width: 100%;"
+						/>
+					</div>
+				</div>
+				<button type="submit" class="apply-filter-btn"
+					>Terapkan</button
+				>
+			</form>
+		</div>
+
+		<details open class="filter-group">
+			<summary
+				style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; list-style: none; outline: none;"
+			>
+				<span
+					class="text-uppercase"
+					style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;"
+					>Jenis Produk</span
+				>
+				<svg
+					class="chevron"
+					width="12"
+					height="12"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					style="opacity: 0.5; transition: transform 0.3s ease;"
+					><polyline points="6 9 12 15 18 9"
+					></polyline></svg
+				>
+			</summary>
+			<div
+				style="display: flex; flex-direction: column; gap: 0.2rem; padding: 0.6rem 0 1rem 0;"
+			>
+				<a
+					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: "", page: "1" })}`}
+					class={!typeFilter
+						? "active-filter"
+						: "filter-link"}>Semua Jenis</a
+				>
+				{
+					hierarchicalTypes
+						?.filter((t) => {
+							return (
+								t.parent_id === null ||
+								activePathIds.includes(t.parent_id)
+							);
+						})
+						.map((t) => (
+							<a
+								href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: t.fullPath, page: "1" })}`}
+								class={
+									typeFilter === t.fullPath ||
+									typeFilter === t.id
+										? "active-filter"
+										: "filter-link"
+								}
+								style={`padding-left: ${t.depth * 1.2 + 0.8}rem; font-size: ${0.85 - t.depth * 0.05}rem; ${t.depth > 0 ? "opacity: 0.8;" : "font-weight: 500;"}`}
+							>
+								{activePathIds.includes(t.id) && (
+									<span style="color: var(--color-accent); margin-right: 4px;">
+										•
+									</span>
+								)}
+								{t.depth > 0 && (
+									<span style="opacity: 0.3; margin-right: 6px;">
+										∟
+									</span>
+								)}
+								<span
+									style={
+										typeFilter === t.fullPath ||
+										typeFilter === t.id
+											? "font-weight: 700; text-decoration: underline;"
+											: ""
+									}
+								>
+									{t.name}
+								</span>
+							</a>
+						))
+				}
+			</div>
+		</details>
+
+		<div
+			class="filter-group"
+			style="padding-bottom: var(--spacing-sm);"
+		>
+			<h3
+				class="text-uppercase"
+				style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;"
+			>
+				Ukuran
+			</h3>
+			<div
+				style="display: flex; flex-wrap: wrap; gap: 0.6rem;"
+			>
+				<a
+					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: "", page: "1" })}`}
+					class={!sizeFilter ? "active-chip" : "chip"}
+					style="font-size: 0.7rem;">Semua</a
+				>
+				{
+					sizesData?.map((s) => (
+						<a
+							href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: s.name, page: "1" })}`}
+							class={
+								sizeFilter === s.name
+									? "active-chip"
+									: "chip"
+							}
+							style="font-size: 0.7rem;"
+						>
+							{s.name}
+						</a>
+					))
+				}
+			</div>
+		</div>
+
+		<details class="filter-group">
+			<summary
+				style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; list-style: none; outline: none;"
+			>
+				<span
+					class="text-uppercase"
+					style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;"
+					>Motif Batik</span
+				>
+				<svg
+					class="chevron"
+					width="12"
+					height="12"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					style="opacity: 0.5; transition: transform 0.3s ease;"
+					><polyline points="6 9 12 15 18 9"
+					></polyline></svg
+				>
+			</summary>
+			<div
+				style="display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem 0 1rem 0;"
+			>
+				<a
+					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), motif: "", page: "1" })}`}
+					class={!motifFilter
+						? "active-filter"
+						: "filter-link"}>Semua Motif</a
+				>
+				{
+					motifsData?.map((m) => (
+						<a
+							href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), motif: m.name, page: "1" })}`}
+							class={
+								motifFilter === m.name
+									? "active-filter"
+									: "filter-link"
+							}
+						>
+							{m.name}
+						</a>
+					))
+				}
+			</div>
+		</details>
+
+		<div
+			style="margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid var(--color-border);"
+		>
+			<p
+				style="font-size: 0.75rem; opacity: 0.4; font-style: italic;"
+			>
+				Menampilkan {totalItems} produk dari koleksi
+				kami.
+			</p>
+		</div>
+	</aside>
+
+	<!-- Product Grid -->
+	<main>
+		<div
+			style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;"
+		>
+			<div class="results-info">
+				Menampilkan <strong
+					>{totalItems}</strong
+				> produk
+			</div>
+			<div class="sorting-controls">
+				<span class="sort-label">Urutkan:</span>
+				<div class="custom-dropdown" id="sortDropdown">
+					<button class="dropdown-trigger" type="button">
+						<span class="current-label">
+							{sort === "newest" && "Terbaru"}
+							{
+								sort === "price-asc" &&
+									"Harga: Terendah"
+							}
+							{
+								sort === "price-desc" &&
+									"Harga: Tertinggi"
+							}
+							{
+								sort === "alphabetical" &&
+									"Nama: A - Z"
+							}
+						</span>
+						<svg
+							class="chevron"
+							width="12"
+							height="12"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="3"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							><path d="M6 9l6 6 6-6"></path></svg
+						>
+					</button>
+					<div class="dropdown-menu">
+						<a
+							href={getSortUrl("newest")}
+							class={`dropdown-item ${sort === "newest" ? "active" : ""}`}
+						>
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								><circle cx="12" cy="12" r="10"
+								></circle><path d="M12 6v6l4 2"
+								></path></svg
+							>
+							Terbaru
+						</a>
+						<a
+							href={getSortUrl("price-asc")}
+							class={`dropdown-item ${sort === "price-asc" ? "active" : ""}`}
+						>
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								><path d="M12 19V5M5 12l7-7 7 7"
+								></path></svg
+							>
+							Harga: Terendah
+						</a>
+						<a
+							href={getSortUrl("price-desc")}
+							class={`dropdown-item ${sort === "price-desc" ? "active" : ""}`}
+						>
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								><path d="M12 5v14M5 12l7 7 7-7"
+								></path></svg
+							>
+							Harga: Tertinggi
+						</a>
+						<a
+							href={getSortUrl("alphabetical")}
+							class={`dropdown-item ${sort === "alphabetical" ? "active" : ""}`}
+						>
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								><path
+									d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+								></path><polyline
+									points="7 10 12 15 17 10"
+								></polyline><line
+									x1="12"
+									y1="15"
+									x2="12"
+									y2="3"></line><path
+									d="M11 5h10M11 9h10M11 13h10M11 17h10M11 21h10"
+								></path></svg
+							>
+							Nama: A-Z
+						</a>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="product-grid" style="margin-top: 0;">
+			{
+				paginatedProducts.map((p, index) => (
+					<ProductCard product={p} index={index} settings={settings} />
+				))
+			}
+		</div>
+
+		<!-- Dynamic Infinite Scroll Loading Trigger -->
+		{totalPages > 1 && (
+			<div id="infinite-scroll-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 0; min-height: 100px; text-align: center;">
+				<div id="loading-spinner" style="display: none; flex-direction: column; align-items: center; gap: 1rem;">
+					<div style="width: 30px; height: 30px; border: 3px solid rgba(140,120,81,0.1); border-top-color: var(--color-accent); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+					<p style="font-size: 0.7rem; letter-spacing: 1px; text-transform: uppercase; color: var(--color-accent); font-weight: 600; opacity: 0.7;">Memuat Koleksi...</p>
+				</div>
+				
+				<button id="manual-load-more" style="padding: 12px 24px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; font-family: var(--font-main); font-size: 0.8rem; font-weight: 600; cursor: pointer; display: none; color: var(--color-text); transition: all 0.2s;">Tampilkan Lebih Banyak</button>
+				
+				<div id="infinite-scroll-sentinel" style="height: 1px; width: 100%;"></div>
+			</div>
+		)}
+
+		<!-- State metadata purely for the JS hydration to easily consume -->
+		<div 
+			id="catalog-meta" 
+			data-total-pages={totalPages} 
+			data-current-page={currentPage} 
+			data-params-string={productParams.toString()}
+			style="display:none;"
+		></div>
+
+		{
+			totalItems === 0 && (
+				<div
+					class="reveal"
+					style="padding: var(--spacing-xl) 0; text-align: center; background: #f9f9f9; border-radius: var(--radius-md); margin-top: 2rem;"
+				>
+					<p style="font-style: italic; opacity: 0.5;">
+						Maaf, koleksi yang Anda cari belum tersedia.
+					</p>
+					<a
+						href="/products"
+						style="text-decoration: underline; margin-top: 1rem; display: block; font-size: 0.8rem;"
+					>
+						Lihat Semua Koleksi
+					</a>
+				</div>
+			)
+		}
+	</main>
+</div>
+
+<!-- Floating mobile trigger and modal backdrop inside the hydrate injection container -->
+<button type="button" class="mobile-filter-trigger-btn" id="mobile-filter-trigger">
+	<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 12.46V19l4 2v-6.54L22 3z"></path></svg>
+	Filter Koleksi
+</button>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+
+<style is:inline>
+	/* Mobile Header inside Sidebar (Hidden on Desktop) */
+	.sidebar-mobile-header {
+		display: none;
+	}
+	
+	.mobile-filter-trigger-btn {
+		display: none;
+	}
+
+	.sidebar-overlay {
+		display: none;
+	}
+
+	/* Ensure layout styles are shipped with dynamic html */
+	.products-layout {
+		display: grid;
+		grid-template-columns: 250px 1fr;
+		gap: var(--spacing-2xl);
+		align-items: start;
+	}
+	
+	.filters-sidebar {
+		position: sticky;
+		top: 100px;
+		max-height: calc(100vh - 120px);
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 1.2rem;
+		-ms-overflow-style: none;
+		scrollbar-width: none;
+		padding-bottom: 2rem;
+	}
+
+	.filters-sidebar::-webkit-scrollbar {
+		display: none;
+	}
+
+	.filter-group {
+		width: 100%;
+	}
+
+	.price-input {
+		padding: 0.6rem 0.8rem;
+		border: 1px solid #eee;
+		border-radius: 4px;
+		font-size: 0.8rem;
+		outline: none;
+		width: 100%;
+		background: #fafafa;
+		transition: all 0.3s ease;
+	}
+
+	.price-input:focus {
+		border-color: var(--color-accent);
+		background: #fff;
+		box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.05);
+	}
+
+	.apply-filter-btn {
+		background: var(--color-text);
+		color: white;
+		border: none;
+		padding: 0.5rem;
+		font-size: 0.7rem;
+		border-radius: 4px;
+		cursor: pointer;
+		text-transform: uppercase;
+		letter-spacing: 1px;
+		font-weight: 600;
+		transition: opacity 0.3s;
+	}
+
+	.apply-filter-btn:hover {
+		opacity: 0.9;
+	}
+
+	.filter-link {
+		font-size: 0.85rem;
+		opacity: 0.6;
+		transition: all 0.3s ease;
+		text-decoration: none;
+		color: var(--color-text);
+	}
+
+	.filter-link:hover {
+		opacity: 1;
+		padding-left: 5px;
+		color: var(--color-accent);
+	}
+
+	.active-filter {
+		font-size: 0.85rem;
+		opacity: 1;
+		color: var(--color-accent);
+		text-decoration: none;
+		font-weight: 600;
+	}
+
+	.sorting-controls {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.sort-label {
+		font-size: 0.7rem;
+		text-transform: uppercase;
+		letter-spacing: 1.5px;
+		opacity: 0.4;
+		font-weight: 700;
+	}
+
+	.custom-dropdown {
+		position: relative;
+		min-width: 170px;
+	}
+
+	.dropdown-trigger {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		padding: 0.5rem 0.9rem;
+		background: white;
+		border: 1px solid #eee;
+		border-radius: 8px;
+		font-size: 0.75rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.3s ease;
+		color: var(--color-text);
+	}
+
+	.dropdown-trigger:hover {
+		border-color: var(--color-accent);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+		background: #fdfdfd;
+	}
+
+	.dropdown-trigger .chevron {
+		transition: transform 0.3s ease;
+		opacity: 0.3;
+	}
+
+	.custom-dropdown.active .dropdown-trigger .chevron {
+		transform: rotate(180deg);
+	}
+
+	.dropdown-menu {
+		position: absolute;
+		top: calc(100% + 8px);
+		right: 0;
+		width: 100%;
+		background: white;
+		border: 1px solid #eee;
+		border-radius: 12px;
+		box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+		z-index: 100;
+		opacity: 0;
+		visibility: hidden;
+		transform: translateY(-10px);
+		transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+		overflow: hidden;
+		padding: 0.4rem;
+	}
+
+	.custom-dropdown.active .dropdown-menu {
+		opacity: 1;
+		visibility: visible;
+		transform: translateY(0);
+	}
+
+	.dropdown-item {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 0.6rem 0.8rem;
+		font-size: 0.75rem;
+		color: var(--color-text);
+		text-decoration: none;
+		border-radius: 8px;
+		transition: all 0.2s ease;
+		font-weight: 500;
+	}
+
+	.dropdown-item:hover {
+		background: #fdfcfb;
+		color: var(--color-accent);
+	}
+
+	.dropdown-item.active {
+		background: #fdfcfb;
+		color: var(--color-accent);
+		font-weight: 700;
+	}
+
+	.dropdown-item svg {
+		opacity: 0.3;
+		transition: opacity 0.2s;
+	}
+
+	.dropdown-item:hover svg,
+	.dropdown-item.active svg {
+		opacity: 1;
+		color: var(--color-accent);
+	}
+
+	.results-info {
+		font-size: 0.8rem;
+		opacity: 0.6;
+	}
+
+	.results-info strong {
+		color: var(--color-text);
+		font-weight: 700;
+	}
+
+	.filter-group summary span {
+		transition: color 0.3s ease;
+	}
+
+	.filter-group:hover summary span {
+		color: var(--color-accent);
+	}
+
+	details[open] .chevron {
+		transform: rotate(180deg);
+	}
+
+	details summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.chip {
+		display: inline-block;
+		padding: 0.35rem 0.8rem;
+		border: 1px solid #eee;
+		border-radius: var(--radius-sm);
+		color: var(--color-text);
+		opacity: 0.6;
+		transition: all 0.3s ease;
+		font-weight: 500;
+		background: #fcfcfc;
+		text-decoration: none;
+	}
+
+	.chip:hover {
+		border-color: var(--color-accent);
+		color: var(--color-accent);
+		opacity: 1;
+		transform: translateY(-1px);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+	}
+
+	.active-chip {
+		display: inline-block;
+		padding: 0.35rem 0.8rem;
+		background: var(--color-text);
+		color: white !important;
+		border: 1px solid var(--color-text);
+		border-radius: var(--radius-sm);
+		font-weight: 600;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+		text-decoration: none;
+	}
+
+	.product-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+		gap: var(--spacing-lg);
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
+	}
+
+	@media (max-width: 900px) {
+		.products-layout {
+			grid-template-columns: 1fr;
+			gap: var(--spacing-xl);
+		}
+
+		/* Transform sidebar into premium slide-up Bottom Sheet */
+		.filters-sidebar {
+			position: fixed !important;
+			bottom: 0 !important;
+			left: 0 !important;
+			top: auto !important;
+			width: 100% !important;
+			max-height: 80vh !important;
+			background: white !important;
+			z-index: 10001 !important;
+			padding: 0 1.5rem 2rem 1.5rem !important;
+			border-radius: 24px 24px 0 0 !important;
+			box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.15) !important;
+			transform: translateY(100%) !important; /* Hide off-screen */
+			transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+			display: flex !important;
+			flex-direction: column !important;
+			gap: 1.5rem !important;
+			overflow-y: auto !important;
+			visibility: hidden; /* prevent tab focus when closed */
+		}
+
+		.filters-sidebar.active {
+			transform: translateY(0) !important;
+			visibility: visible !important;
+		}
+
+		/* Show specific mobile element layout */
+		.sidebar-mobile-header {
+			display: block;
+			position: sticky;
+			top: 0;
+			background: white;
+			z-index: 10;
+			padding-top: 0.8rem;
+			padding-bottom: 1rem;
+			margin-bottom: 0.5rem;
+			border-bottom: 1px solid #f1f5f9;
+		}
+
+		.drag-handle {
+			width: 40px;
+			height: 4px;
+			background: #e2e8f0;
+			border-radius: 2px;
+			margin: 0 auto 1rem auto;
+		}
+
+		.header-title-row {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		.header-title-row h3 {
+			font-size: 1rem;
+			font-weight: 700;
+			margin: 0;
+			text-transform: uppercase;
+			letter-spacing: 1px;
+			color: var(--color-text);
+		}
+
+		.close-sidebar-btn {
+			background: #f1f5f9;
+			border: none;
+			width: 32px;
+			height: 32px;
+			border-radius: 50%;
+			font-size: 1.2rem;
+			line-height: 1;
+			cursor: pointer;
+			color: #64748b;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			transition: background 0.2s;
+		}
+
+		.close-sidebar-btn:hover {
+			background: #e2e8f0;
+		}
+
+		/* Floating trigger at screen center bottom for thumb access */
+		.mobile-filter-trigger-btn {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 8px;
+			position: fixed;
+			bottom: 24px;
+			left: 50%;
+			transform: translateX(-50%);
+			z-index: 9999;
+			background: #1e293b; /* Slate-800 */
+			color: white;
+			border: none;
+			padding: 0.8rem 1.5rem;
+			border-radius: 30px;
+			font-family: var(--font-main);
+			font-size: 0.85rem;
+			font-weight: 600;
+			letter-spacing: 0.5px;
+			box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+			cursor: pointer;
+			animation: float-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+			backdrop-filter: blur(8px);
+			transition: all 0.3s;
+		}
+
+		.mobile-filter-trigger-btn:hover {
+			background: #0f172a;
+			transform: translateX(-50%) translateY(-2px);
+		}
+
+		@keyframes float-in {
+			from { transform: translateX(-50%) translateY(30px); opacity: 0; }
+			to { transform: translateX(-50%) translateY(0); opacity: 1; }
+		}
+
+		/* Semi-transparent modal overlay */
+		.sidebar-overlay {
+			display: block;
+			position: fixed;
+			inset: 0;
+			background: rgba(0, 0, 0, 0.4);
+			backdrop-filter: blur(2px);
+			z-index: 10000;
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity 0.3s ease;
+		}
+
+		.sidebar-overlay.active {
+			opacity: 1;
+			pointer-events: auto;
+		}
+
+		.filter-group {
+			flex: none;
+			width: 100%;
+		}
+
+		.active-filter {
+			padding-left: 0;
+			border-left: none;
+			border-bottom: 2px solid var(--color-accent);
+		}
+	}
+
+	@media (max-width: 600px) {
+		/* Retain layout structures inside mobile bottom sheet but optimize for spacing */
+		.filters-sidebar {
+			padding: 0 1.2rem 2rem 1.2rem !important;
+		}
+	}
+</style>
+

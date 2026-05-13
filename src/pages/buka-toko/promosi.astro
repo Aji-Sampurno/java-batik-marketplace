@@ -9,17 +9,14 @@ if (session?.value !== "authenticated") {
 	return Astro.redirect("/login");
 }
 
-let promotions: any[] = [];
-let settings: any = null;
+const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://api.katalog.batik.gooproper.id/api";
 
+let settings: any = { site_name: "Batik Nusantara" };
 try {
-	const pr = await apiFetch<any>("promotions");
-	promotions = pr?.data || pr || [];
-
 	const s = await apiFetch<any>("settings");
 	settings = s?.data || s || { site_name: "Batik Nusantara" };
 } catch (e) {
-	console.error("Promotions/Settings fetch error:", e);
+	console.error("Settings fetch error:", e);
 }
 
 // Handle Form Submission
@@ -208,65 +205,16 @@ if (success === "status") message = "Status promo diperbarui!";
 									<th class="th-style" style="text-align: right;">Aksi</th>
 								</tr>
 							</thead>
-							<tbody>
-								{
-									promotions.map((p) => (
-										<tr style="border-bottom: 1px solid #f9f9f9;">
-											<td style="padding: 1.5rem;">
-												<div class="promo-preview-box">
-													<img src={p.image_url} alt={p.title} />
-												</div>
-											</td>
-											<td style="padding: 1.5rem;">
-												<div style="font-weight: 600; font-size: 1rem; color: #111;">
-													{p.title}
-												</div>
-												<div style="font-size: 0.75rem; opacity: 0.4; margin-top: 4px;">
-													Link: {p.link_url}
-												</div>
-												<div style="font-size: 0.7rem; font-weight: 700; color: var(--color-accent); margin-top: 8px; text-transform: uppercase; letter-spacing: 1px;">
-													Urutan #{p.order_index}
-												</div>
-											</td>
-											<td style="padding: 1.5rem; text-align: center;">
-												<form method="POST">
-													<input type="hidden" name="action" value="toggle_promo" />
-													<input type="hidden" name="id" value={p.id} />
-													<input type="hidden" name="current_status" value={String(p.is_active)} />
-													<button 
-														type="submit" 
-														class={`status-toggle ${p.is_active ? 'active' : 'inactive'}`}
-													>
-														{p.is_active ? 'Aktif' : 'Nonaktif'}
-													</button>
-												</form>
-											</td>
-											<td style="padding: 1.5rem; text-align: right;">
-												<form method="POST" class="delete-form">
-													<input type="hidden" name="action" value="delete_promo" />
-													<input type="hidden" name="id" value={p.id} />
-													<button 
-														type="button" 
-														class="btn-delete"
-														onclick="openDeleteModal(this.form)"
-													>
-														<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-													</button>
-												</form>
-											</td>
-										</tr>
-									))
-								}
+							<tbody id="promo-table-body">
+								<!-- Skeleton Filler Overlay -->
+								<tr>
+									<td colspan="4" style="padding: 4rem; text-align: center; opacity: 0.6;">
+										<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 1.2s linear infinite; margin-bottom: 8px; display: inline-block;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+										<p style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.5px; color: #64748b;">Memuat daftar promo...</p>
+									</td>
+								</tr>
 							</tbody>
 						</table>
-						{
-							promotions.length === 0 && (
-								<div style="padding: 4rem; text-align: center; opacity: 0.3;">
-									<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="margin-bottom: 1rem;"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/><path d="M12 8v4M12 16h.01"/></svg>
-									<p>Belum ada banner promo yang ditambahkan.</p>
-								</div>
-							)
-						}
 					</div>
 				</div>
 			</div>
@@ -290,7 +238,70 @@ if (success === "status") message = "Status promo diperbarui!";
 		</div>
 	</div>
 
-	<script is:inline>
+	<script is:inline define:vars={{ publicApiUrl }}>
+		// Multi-Row Stream Promo Hydrator
+		async function fetchAndHydratePromos() {
+			const body = document.getElementById('promo-table-body');
+
+			try {
+				const res = await fetch(`${publicApiUrl}/promotions`);
+				const json = await res.json();
+				const list = json.data || json || [];
+
+				if (body) {
+					if (list.length === 0) {
+						body.innerHTML = `
+							<tr>
+								<td colspan="4" style="padding: 4rem; text-align: center; opacity: 0.3;">
+									<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="margin-bottom: 1rem; display: block; margin: 0 auto;"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/><path d="M12 8v4M12 16h.01"/></svg>
+									<p style="margin-top: 1rem; font-size: 0.85rem;">Belum ada banner promo yang ditambahkan.</p>
+								</td>
+							</tr>
+						`;
+					} else {
+						body.innerHTML = list.map(p => `
+							<tr style="border-bottom: 1px solid #f9f9f9;">
+								<td style="padding: 1.5rem;">
+									<div class="promo-preview-box">
+										<img src="${p.image_url}" alt="${p.title}" onerror="this.parentElement.style.background='#f1f5f9'; this.style.opacity='0';" />
+									</div>
+								</td>
+								<td style="padding: 1.5rem;">
+									<div style="font-weight: 600; font-size: 1rem; color: #111;">${p.title}</div>
+									<div style="font-size: 0.75rem; opacity: 0.4; margin-top: 4px;">Link: ${p.link_url}</div>
+									<div style="font-size: 0.7rem; font-weight: 700; color: var(--color-accent); margin-top: 8px; text-transform: uppercase; letter-spacing: 1px;">Urutan #${p.order_index}</div>
+								</td>
+								<td style="padding: 1.5rem; text-align: center;">
+									<form method="POST">
+										<input type="hidden" name="action" value="toggle_promo" />
+										<input type="hidden" name="id" value="${p.id}" />
+										<input type="hidden" name="current_status" value="${String(p.is_active)}" />
+										<button type="submit" class="status-toggle ${p.is_active ? 'active' : 'inactive'}">
+											${p.is_active ? 'Aktif' : 'Nonaktif'}
+										</button>
+									</form>
+								</td>
+								<td style="padding: 1.5rem; text-align: right;">
+									<form method="POST" class="delete-form">
+										<input type="hidden" name="action" value="delete_promo" />
+										<input type="hidden" name="id" value="${p.id}" />
+										<button type="button" class="btn-delete" onclick="openDeleteModal(this.form)">
+											<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+										</button>
+									</form>
+								</td>
+							</tr>
+						`).join('');
+					}
+				}
+			} catch (err) {
+				console.error('[Promo Hydration Fail]:', err);
+				if (body) {
+					body.innerHTML = `<tr><td colspan="4" style="padding: 3rem; text-align: center; color: #b91c1c; font-weight: 600;">Gagal mengambil data API.</td></tr>`;
+				}
+			}
+		}
+
 		let currentForm = null;
 		const modal = document.getElementById('delete-modal');
 		const confirmBtn = document.getElementById('confirm-btn');
@@ -322,10 +333,14 @@ if (success === "status") message = "Status promo diperbarui!";
 		modal.addEventListener('click', (e) => {
 			if (e.target === modal) closeModal();
 		});
+
+		document.addEventListener("DOMContentLoaded", () => {
+			fetchAndHydratePromos();
+		});
 	</script>
 
 
-	<style>
+	<style is:global>
 		.glass-form {
 			background: white;
 			padding: 2rem;

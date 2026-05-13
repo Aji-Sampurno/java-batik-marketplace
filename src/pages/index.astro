@@ -1,36 +1,8 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { apiFetch } from "../lib/api";
 
-let featuredProducts: any[] = [];
-let activePromos: any[] = [];
-
-try {
-	const pRes = await apiFetch<any>("products?per_page=3");
-	featuredProducts = pRes?.data || pRes || [];
-
-	const promoRes = await apiFetch<any>("promotions");
-	const promos = promoRes?.data || promoRes || [];
-	activePromos = promos
-		.filter((p: any) => p.is_active)
-		.sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0));
-} catch (e: any) {
-	console.error("API Fetch Error, using mock fallback:", e.message);
-	// Mock fallback
-	const { products: mockProducts } = await import("../data/products");
-	featuredProducts = mockProducts.slice(0, 3).map((p) => ({
-		...p,
-		types: { name: p.type },
-		product_motifs: [{ motifs: { name: p.motif } }],
-		image_url: p.imageUrl,
-	}));
-
-	activePromos = [
-		{ title: 'Promo 1', image_url: '/images/promo_1.png', link_url: '/products', is_active: true },
-		{ title: 'Promo 2', image_url: '/images/promo_2.png', link_url: '/products', is_active: true },
-		{ title: 'Promo 3', image_url: '/images/promo_3.png', link_url: '/products', is_active: true }
-	];
-}
+// Blocking API requests have been lifted into client-side lazy hydration partials
+// to guarantee near-instantaneous initial page rendering speed.
 ---
 
 <Layout title="Eksklusivitas Indonesia">
@@ -85,9 +57,9 @@ try {
 					untuk gaya hidupan yang elegan dan berbudaya.
 				</p>
 
-				<!-- Hero Search -->
+				<!-- Hero Search with Smart Docking Marker Integration -->
 				<div
-					class="animate-fade-in"
+					class="animate-fade-in local-search-trigger-marker"
 					style="margin-bottom: var(--spacing-xl);"
 				>
 					<form
@@ -350,39 +322,15 @@ try {
 			</div>
 		</div>
 
-		<!-- Scroll Container -->
+		<!-- Scroll Container with Lazy Partial Hydration Wrapper -->
 		<div
 			id="promo-carousel"
-			style="display: flex; gap: 30px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 0 5%; scrollbar-width: none; -ms-overflow-style: none; cursor: grab;"
+			class="lazy-load-section"
+			data-endpoint="/partial/home-promos"
+			style="display: flex; gap: 30px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 0 5%; scrollbar-width: none; -ms-overflow-style: none; cursor: grab; min-height: 250px;"
 		>
-			{
-				activePromos.map((promo) => (
-					<a
-						href={promo.link_url || "/products"}
-						class="promo-card"
-						style="flex: 0 0 85vw; max-width: 1200px; scroll-snap-align: center; position: relative; border-radius: var(--radius-sm); overflow: hidden; aspect-ratio: 21/9; height: auto; min-height: 250px; display: block; box-shadow: 0 30px 60px rgba(0,0,0,0.1);"
-					>
-						<img
-							src={promo.image_url}
-							alt={promo.title}
-							style="width: 100%; height: 100%; object-fit: cover; transition: 1s cubic-bezier(0.2, 1, 0.3, 1);"
-							onmouseover="this.style.transform='scale(1.05)'"
-							onmouseout="this.style.transform='scale(1)'"
-						/>
-						<div
-							style="position: absolute; bottom: 0; left: 0; width: 100%; height: 60%; background: linear-gradient(to top, rgba(0,0,0,0.6), transparent); pointer-events: none; display: flex; flex-direction: column; justify-content: flex-end; padding: 3rem;"
-						>
-							<h3 style="color: white; font-family: var(--font-serif); font-size: 2rem; margin: 0; font-weight: 400;">{promo.title}</h3>
-						</div>
-					</a>
-				))
-			}
-			
-			{activePromos.length === 0 && (
-				<div style="padding: 100px; text-align: center; width: 100%; opacity: 0.3;">
-					<p>Belum ada promo aktif saat ini.</p>
-				</div>
-			)}
+			<!-- Premium Promo Banner Skeleton -->
+			<div class="promo-skeleton" style="flex: 0 0 85vw; max-width: 1200px; scroll-snap-align: center; border-radius: var(--radius-sm); overflow: hidden; aspect-ratio: 21/9; height: auto; min-height: 250px; background: linear-gradient(90deg, #fdfbf7 25%, #f5f2e9 50%, #fdfbf7 75%); background-size: 200% 100%; animation: shimmer 1.6s infinite;"></div>
 		</div>
 
 		<!-- Progress Bar -->
@@ -421,90 +369,21 @@ try {
 				>
 			</div>
 
-			<div class="product-grid" style="margin-top: var(--spacing-lg);">
-				{
-					featuredProducts.map((p, index) => (
-						<div
-							class="product-card reveal-up"
-							data-delay={index * 150}
-							style={!p.is_active ? "opacity: 0.8;" : ""}
-						>
-							<div
-								class="product-image"
-								style="position: relative;"
-							>
-								<a href={`/products/${p.id}`}>
-									<img
-										src={
-											p.image_url ||
-											"https://via.placeholder.com/400x600?text=Batik"
-										}
-										alt={p.name}
-										loading="lazy"
-										class={
-											!p.is_active
-												? "out-of-stock-img"
-												: ""
-										}
-									/>
-									{!p.is_active && (
-										<div class="ribbon-wrapper">
-											<div class="ribbon">HABIS</div>
-										</div>
-
-									)}
-
-								</a>
-							</div>
-							<div class="product-info">
-								<p
-									class="text-uppercase opacity-50"
-									style="font-size: 0.65rem;"
-								>
-									{(p.type?.name || p.types?.name || "-")} •{" "}
-									{(p.motifs?.map((m: any) => m.name).join(", ") || p.product_motifs?.map((pm: any) => pm.motifs?.name).join(", ") || "-")}
-								</p>
-								<h3 style="font-family: var(--font-main); font-weight: 500;">
-									<a
-										href={`/products/${p.id}`}
-										style="color: inherit; text-decoration: none;"
-									>
-										{p.name}
-									</a>
-								</h3>
-								<p class="price-tag">
-									{p.is_active ? (
-										<>
-											{p.original_price && p.original_price > p.price && (
-												<span style="text-decoration: line-through; color: #999; font-size: 0.8rem; margin-right: 0.5rem;">
-													Rp {Number(p.original_price).toLocaleString("id-ID")}
-												</span>
-											)}
-											<span>
-												{(() => {
-													let displayPrice = `Rp ${Number(p.price).toLocaleString("id-ID")}`;
-													const variants = p.variants || p.product_variants || [];
-													if(variants && variants.length > 0) {
-														const vPrices = variants.map((v:any) => v.price);
-														const vMin = Math.min(...vPrices);
-														if (vMin > 0) {
-															displayPrice = `Rp ${vMin.toLocaleString("id-ID")}`;
-														}
-													}
-													return displayPrice;
-												})()}
-											</span>
-										</>
-									) : (
-										<span style="color: #b91c1c; font-weight: 700;">
-											STOK HABIS
-										</span>
-									)}
-								</p>
-							</div>
-						</div>
-					))
-				}
+			<!-- Product Grid with Lazy Partial Hydration Trigger -->
+			<div 
+				class="product-grid lazy-load-section" 
+				data-endpoint="/partial/home-featured" 
+				style="margin-top: var(--spacing-lg); min-height: 400px;"
+			>
+				<!-- Three Premium Product Shimmer Skeleton Nodes -->
+				{[1, 2, 3].map(() => (
+					<div class="product-skeleton" style="display: flex; flex-direction: column; gap: var(--spacing-xs); opacity: 0.8;">
+						<div style="aspect-ratio: 4/5; border-radius: var(--radius-sm); background: linear-gradient(90deg, #fbfaf7 25%, #f4f1e6 50%, #fbfaf7 75%); background-size: 200% 100%; animation: shimmer 1.6s infinite; margin-bottom: 10px;"></div>
+						<div style="height: 10px; width: 30%; border-radius: 4px; background: #f4f1e6; margin-bottom: 8px;"></div>
+						<div style="height: 16px; width: 70%; border-radius: 4px; background: #f4f1e6; margin-bottom: 12px;"></div>
+						<div style="height: 14px; width: 40%; border-radius: 4px; background: #f4f1e6;"></div>
+					</div>
+				))}
 			</div>
 		</div>
 	</section>
@@ -606,6 +485,11 @@ try {
 	<style is:global>
 		.out-of-stock-img {
 			filter: grayscale(1) contrast(0.8);
+		}
+
+		@keyframes shimmer {
+			0% { background-position: 200% 0; }
+			100% { background-position: -200% 0; }
 		}
 
 		/* Diagonal Ribbon */
@@ -820,5 +704,49 @@ try {
 				handleSecret(e);
 			});
 		}
+
+		// --- Precision Proximity Hydration (Lazy Observer Engine) ---
+		function initProximityHydration() {
+			const lazySections = document.querySelectorAll('.lazy-load-section');
+			if (!lazySections.length) return;
+
+			const loadOptions = {
+				root: null,
+				rootMargin: '350px 0px 350px 0px', // Fire request 350px before the section rolls into view
+				threshold: 0.01
+			};
+
+			const lazyObserver = new IntersectionObserver((entries, observer) => {
+				entries.forEach(entry => {
+					if (entry.isIntersecting) {
+						const container = entry.target;
+						const url = container.getAttribute('data-endpoint');
+						
+						if (url) {
+							fetch(url)
+								.then(res => res.text())
+								.then(markup => {
+									// Instant structural swap
+									container.innerHTML = markup;
+									
+									// Smoothly trigger scroll calculation for promo carousel just once on hydrate
+									if (container.id === 'promo-carousel') {
+										container.dispatchEvent(new Event('scroll'));
+									}
+								})
+								.catch(err => console.error('[Lazy Hydration Error]:', err));
+						}
+						
+						// Task accomplished: unbind monitor for optimal browser performance
+						observer.unobserve(container);
+					}
+				});
+			}, loadOptions);
+
+			lazySections.forEach(el => lazyObserver.observe(el));
+		}
+
+		// Trigger hydration check engine instantly on client run
+		initProximityHydration();
 	</script>
 </Layout>

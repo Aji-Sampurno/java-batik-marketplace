@@ -8,21 +8,15 @@ if (session?.value !== "authenticated") {
 	return Astro.redirect("/login");
 }
 
-let settings: any = null;
-let existingCodes: string[] = [];
+const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://api.katalog.batik.gooproper.id/api";
+
+let settings: any = { site_name: "Batik Nusantara" };
 try {
 	const sRes = await apiFetch<any>("settings");
 	const s = sRes?.data || sRes;
 	if (s) settings = s;
-
-	const pRes = await apiFetch<any>("products?per_page=1000");
-	const products = pRes?.data || pRes || [];
-	products.forEach((p: any) => {
-		if (p.code) existingCodes.push(p.code);
-		if (p.item_code) existingCodes.push(p.item_code);
-	});
 } catch (e: any) {
-	console.error("Fetch error:", e.message);
+	console.error("Settings fetch error:", e.message);
 }
 
 const success = Astro.url.searchParams.get("success");
@@ -318,11 +312,32 @@ if (success === "product") {
 		}
 	</style>
  
-	<script is:inline define:vars={{ existingCodes }}>
+	<script is:inline define:vars={{ publicApiUrl }}>
 		const BASE_PHOTO_URL = "https://noir.grace.gracianna.web.id/foto/";
         const BASE_PHOTO_URL_FALLBACK = "https://noir.grace.gracianna.web.id/storage/";
         const BASE_PHOTO_URL_IMAGES = "https://noir.grace.gracianna.web.id/images/";
  
+		let existingCodes = [];
+
+		// Asynchronous Background Catalog Hydration to prevent UI blocking
+		async function fetchExistingCodes() {
+			try {
+				const response = await fetch(`${publicApiUrl}/products?per_page=1000`);
+				const json = await response.json();
+				const products = json.data || json || [];
+				products.forEach(p => {
+					if (p.code) existingCodes.push(p.code);
+					if (p.item_code) existingCodes.push(p.item_code);
+				});
+				// Smoothly refresh visibility markers without UI glitching
+				if (fetchedProducts && fetchedProducts.length > 0) {
+					renderProducts(fetchedProducts);
+				}
+			} catch (err) {
+				console.error("[Catalog Hydration Error]:", err);
+			}
+		}
+
 		let currentPage = 1;
 		let totalPages = 1;
 		let searchQuery = "";
@@ -798,8 +813,11 @@ if (success === "product") {
 		});
 
 		// Start fetching
+		// Parallel Async Multi-Stream Data Loading
 		document.addEventListener('DOMContentLoaded', () => {
 			fetchProducts();
+			fetchExistingCodes();
+
 			// Remove success query param without reload
 			const urlParams = new URLSearchParams(window.location.search);
 			if (urlParams.has('success')) {

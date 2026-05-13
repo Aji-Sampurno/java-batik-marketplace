@@ -8,33 +8,20 @@ const session = Astro.cookies.get("admin_session");
 if (session?.value !== "authenticated") {
 	return Astro.redirect("/login");
 }
-let types: any[] = [];
-let settings: any = null;
+const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://api.katalog.batik.gooproper.id/api";
+
+let settings: any = { site_name: "Batik Nusantara" };
 let message = "";
 let isError = false;
 
 try {
-	const tRes = await apiFetch<any>("types");
-	types = tRes?.data || tRes || [];
-
 	const sRes = await apiFetch<any>("settings");
 	settings = sRes?.data || sRes || { site_name: "Batik Nusantara" };
 } catch (e: any) {
-	console.error("API Fetch Error:", e.message);
+	console.error("Settings fetch error:", e.message);
 }
 
-// Hierarchical Helper: Sort categories into a flat list with levels
-const buildCategoryTree = (list: any[], parentId = null, depth = 0): any[] => {
-	let result: any[] = [];
-	list.filter((item) => item.parent_id === parentId).forEach((item) => {
-		result.push({ ...item, depth });
-		const children = buildCategoryTree(list, item.id, depth + 1);
-		result = result.concat(children);
-	});
-	return result;
-};
-
-const hierarchicalTypes = buildCategoryTree(types);
+// Recursive logic and API block has been lifted to asynchronous client-side JS.
 
 // Handle Form Submission (Server Side)
 if (Astro.request.method === "POST") {
@@ -51,7 +38,7 @@ if (Astro.request.method === "POST") {
 				const parent = await apiFetch<any>(`types/${parent_id}`);
 				const parentData = parent?.data || parent;
 				if (parentData) {
-					category_level = (parentData.category_level || 1) + 1;
+					category_level = Number(parentData.category_level || 1) + 1;
 				}
 			}
 
@@ -160,25 +147,12 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 											placeholder="Cari induk kategori..."
 										/>
 									</div>
-									<div class="ss-options">
+									<div class="ss-options" id="dropdown-options-container">
 										<div class="ss-option" data-value="">
-											<span>Kategori Utama (Root)</span>
+											<span>Kategori Utama (Root)...</span>
 											<span class="lvl-badge lvl-1">Root</span>
 										</div>
-										{
-											hierarchicalTypes
-												.filter((t) => t.depth < 2)
-												.map((t) => (
-													<div class="ss-option" data-value={t.id}>
-														<span>
-															{"--".repeat(t.depth)}{" "}{t.name}
-														</span>
-														<span class={`lvl-badge lvl-${t.depth + 1}`}>
-															L{t.depth + 1}
-														</span>
-													</div>
-												))
-										}
+										<!-- Dynamic parent options will populate asynchronously -->
 									</div>
 								</div>
 							</div>
@@ -211,69 +185,18 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 							<p class="text-uppercase opacity-50" style="font-size: 0.7rem; font-weight: 700; letter-spacing: 1.5px;">
 								Daftar Kategori Terdaftar
 							</p>
-							<span style="font-size: 0.75rem; color: #9ca3af; font-weight: 600;">
-								{hierarchicalTypes?.length || 0} Kategori
+							<span style="font-size: 0.75rem; color: #9ca3af; font-weight: 600;" id="category-count-text">
+								-- Kategori
 							</span>
 						</div>
 
-						<div class="category-tree-wrapper">
-							{
-								hierarchicalTypes?.map((t) => (
-									<div
-										class="category-item"
-										style={`margin-left: ${t.depth * 28}px; border-color: ${t.depth === 0 ? "#f3f4f6" : "transparent"};`}
-									>
-										{t.depth > 0 && <div class="tree-connector" />}
-										<div class="cat-content">
-											<span class={`lvl-badge lvl-${t.depth + 1}`}>
-												L{t.depth + 1}
-											</span>
-											<span
-												class="cat-name"
-												style={`font-weight: ${t.depth === 0 ? "600" : "400"}; color: ${t.depth === 0 ? "#111827" : "#4b5563"};`}
-											>
-												{t.name}
-											</span>
-										</div>
-
-										<div class="cat-actions">
-											<form
-												method="POST"
-												class="delete-form"
-											>
-												<input
-													type="hidden"
-													name="action"
-													value="delete_type"
-												/>
-												<input
-													type="hidden"
-													name="id"
-													value={t.id}
-												/>
-												<button
-													type="button"
-													class="btn-trash"
-													title="Hapus Kategori"
-													onclick="openDeleteModal(this.form)"
-												>
-													<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-												</button>
-											</form>
-										</div>
-									</div>
-								))
-							}
+						<div class="category-tree-wrapper" id="category-tree-container">
+							<!-- High-performance visual skeleton placeholder -->
+							<div style="padding: 4rem; text-align: center; opacity: 0.6;">
+								<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 1.2s linear infinite; margin: 0 auto 1rem auto; display: block;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+								<p style="font-size: 0.8rem; font-weight: 500;">Memuat struktur kategori...</p>
+							</div>
 						</div>
-						{
-							(!hierarchicalTypes || hierarchicalTypes.length === 0) && (
-								<div style="padding: 4rem; text-align: center; border: 1px dashed #e5e7eb; border-radius: 12px;">
-									<p style="font-size: 0.9rem; color: #9ca3af; opacity: 0.6;">
-										Belum ada struktur kategori.
-									</p>
-								</div>
-							)
-						}
 					</div>
 				</div>
 			</div>
@@ -297,7 +220,98 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 		</div>
 	</div>
 
-	<script is:inline>
+	<script is:inline define:vars={{ publicApiUrl }}>
+		// Ultra-efficient recursive JSON flattener (Handles pre-built API relational trees)
+		function flattenCategoryTree(nestedList, depth = 0) {
+			let result = [];
+			if (!Array.isArray(nestedList)) return result;
+			nestedList.forEach(item => {
+				result.push({ ...item, depth });
+				if (item.children && item.children.length > 0) {
+					const childList = flattenCategoryTree(item.children, depth + 1);
+					result = result.concat(childList);
+				}
+			});
+			return result;
+		}
+
+		// Main Hydration Sequence
+		async function fetchAndHydrateCategories() {
+			const treeContainer = document.getElementById('category-tree-container');
+			const dropdownContainer = document.getElementById('dropdown-options-container');
+			const countText = document.getElementById('category-count-text');
+
+			try {
+				const res = await fetch(`${publicApiUrl}/types`);
+				const json = await res.json();
+				const list = json.data || json || [];
+				
+				const tree = flattenCategoryTree(list);
+				
+				// 1. Inject Dropdown parent options (Only depth 0 and 1)
+				const dropdownHtml = tree.filter(t => t.depth < 2).map(t => `
+					<div class="ss-option" data-value="${t.id}">
+						<span>${"--".repeat(t.depth)} ${t.name}</span>
+						<span class="lvl-badge lvl-${t.depth + 1}">L${t.depth + 1}</span>
+					</div>
+				`).join('');
+				
+				if (dropdownContainer) {
+					dropdownContainer.innerHTML = `
+						<div class="ss-option" data-value="">
+							<span>Kategori Utama (Root)</span>
+							<span class="lvl-badge lvl-1">Root</span>
+						</div>
+						${dropdownHtml}
+					`;
+				}
+
+				// 2. Inject Tree Node Items
+				if (treeContainer) {
+					if (tree.length === 0) {
+						treeContainer.innerHTML = `
+							<div style="padding: 4rem; text-align: center; border: 1px dashed #e5e7eb; border-radius: 12px;">
+								<p style="font-size: 0.9rem; color: #9ca3af; opacity: 0.6;">Belum ada struktur kategori.</p>
+							</div>
+						`;
+					} else {
+						treeContainer.innerHTML = tree.map(t => `
+							<div class="category-item" style="margin-left: ${t.depth * 28}px; border-color: ${t.depth === 0 ? '#f3f4f6' : 'transparent'};">
+								${t.depth > 0 ? '<div class="tree-connector"></div>' : ''}
+								<div class="cat-content">
+									<span class="lvl-badge lvl-${t.depth + 1}">L${t.depth + 1}</span>
+									<span class="cat-name" style="font-weight: ${t.depth === 0 ? '600' : '400'}; color: ${t.depth === 0 ? '#111827' : '#4b5563'};">${t.name}</span>
+								</div>
+								<div class="cat-actions">
+									<form method="POST" class="delete-form">
+										<input type="hidden" name="action" value="delete_type" />
+										<input type="hidden" name="id" value="${t.id}" />
+										<button type="button" class="btn-trash" title="Hapus Kategori" onclick="openDeleteModal(this.form)">
+											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+										</button>
+									</form>
+								</div>
+							</div>
+						`).join('');
+					}
+				}
+
+				// 3. Update counters
+				if (countText) {
+					countText.innerText = `${tree.length} Kategori`;
+				}
+
+				// 4. Setup searchable selections AFTER nodes exist in DOM
+				initSearchableSelect();
+
+			} catch (err) {
+				console.error('[Category Hydration Fail]:', err);
+				if (treeContainer) {
+					treeContainer.innerHTML = `<p style="color: #b91c1c; font-weight: 600; text-align: center; padding: 2rem;">Koneksi API gagal.</p>`;
+				}
+			}
+		}
+
 		// Searchable dropdown logic
 		function initSearchableSelect() {
 			const selectContainers = document.querySelectorAll(".searchable-select");
@@ -376,11 +390,11 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 		});
 
 		document.addEventListener("DOMContentLoaded", () => {
-			initSearchableSelect();
+			fetchAndHydrateCategories();
 		});
 	</script>
 
-	<style>
+	<style is:global>
 		.input-label {
 			font-size: 0.65rem;
 			text-transform: uppercase;

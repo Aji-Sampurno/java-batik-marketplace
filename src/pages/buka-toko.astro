@@ -3,12 +3,15 @@ export const prerender = false;
 import Layout from "../layouts/Layout.astro";
 import { apiFetch, uploadToLaravel } from "../lib/api";
 import DeleteConfirmModal from "../components/DeleteConfirmModal.astro";
+import AdminProductRow from "../components/AdminProductRow.astro";
 
 // Check for session (Authentication Gate)
 const session = Astro.cookies.get("admin_session");
 if (session?.value !== "authenticated") {
 	return Astro.redirect("/login");
 }
+
+const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://api.katalog.batik.gooproper.id/api";
 
 // Handle Logout & Search
 const { searchParams } = Astro.url;
@@ -23,84 +26,15 @@ let types: any[] = [];
 let motifs: any[] = [];
 let sizesData: any[] = [];
 let productsData: any[] = [];
-let settings: any = null;
+let settings: any = { site_name: "Batik Nusantara" };
+let totalItems = 0;
+let totalPages = 1;
+let activeCount = 0;
+let adminPage = 1;
 
-try {
-	const tRes = await apiFetch<any>("types");
-	types = tRes?.data || tRes || [];
+// Blocking API requests in the Dashboard landing have been migrated to client-side
+// async loaders to secure instantaneous rendering of the menu shell.
 
-	const mRes = await apiFetch<any>("motifs");
-	motifs = mRes?.data || mRes || [];
-
-	const szRes = await apiFetch<any>("sizes");
-	sizesData = szRes?.data || szRes || [];
-
-	const pRes = await apiFetch<any>("products?per_page=1000");
-	productsData = pRes?.data || pRes || [];
-
-	const sRes = await apiFetch<any>("settings");
-	settings = sRes?.data || sRes || { site_name: "Batik Nusantara" };
-
-	// Filter products by search query (In-memory)
-	if (adminSearchQuery) {
-		const q = adminSearchQuery.toLowerCase().trim();
-		const keywords = q.split(/\s+/).filter((kw) => kw.length > 0);
-
-		productsData = productsData.filter((p) => {
-			// Get all category names for this product
-			const productCategoryNames =
-				p.product_categories?.map((pc: any) => pc.types?.name) || [];
-			if (p.types?.name) productCategoryNames.push(p.types.name);
-
-			// Get all motif names for this product
-			const productMotifs =
-				p.product_motifs?.map((pm: any) => pm.motifs?.name) || [];
-
-			// ALL keywords must match at least one search surface
-			return keywords.every((kw) => {
-				const nameMatch = p.name?.toLowerCase().includes(kw);
-				const codeMatch = p.code?.toLowerCase().includes(kw);
-				const motifMatch = productMotifs.some((m: any) =>
-					m?.toLowerCase().includes(kw),
-				);
-				const categoryMatch = productCategoryNames.some((c: any) =>
-					c?.toLowerCase().includes(kw),
-				);
-
-				return nameMatch || codeMatch || motifMatch || categoryMatch;
-			});
-		});
-	}
-} catch (e: any) {
-	console.error("API Fetch Error, using mock fallback:", e.message);
-	// Mock data fallback
-	const { products: mockProducts } = await import("../data/products");
-	const uniqueTypes = [...new Set(mockProducts.map((p) => p.type))];
-	types = uniqueTypes.map((t) => ({ name: t, id: t }));
-
-	const uniqueMotifs = [...new Set(mockProducts.map((p) => p.motif))];
-	motifs = uniqueMotifs.map((m) => ({ name: m, id: m }));
-
-	productsData = mockProducts.map((p) => ({
-		...p,
-		types: { name: p.name, id: p.id },
-		product_motifs: [{ motifs: { name: p.motif } }],
-	}));
-}
-
-// Fetch Total Pra-Produk Count
-let praProdukCount = 0;
-try {
-	const praRes = await fetch(
-		"https://noir.grace.gracianna.web.id/api/v1/beli1?per_page=1",
-	);
-	const praJson = await praRes.json();
-	if (praJson.success && praJson.meta) {
-		praProdukCount = praJson.meta.total || 0;
-	}
-} catch (e: any) {
-	console.error("Gagal mengambil total pra-produk:", e.message);
-}
 
 // Hierarchical Helper: Sort categories into a flat list with levels
 const buildCategoryTree = (list: any[], parentId = null, depth = 0): any[] => {
@@ -207,9 +141,9 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 						Total Produk
 					</p>
 					<h2 style="font-size: 2rem; margin: 0;">
-						{productsData?.filter((p) => p.is_active).length || 0}
+						<span id="stat-active-count">--</span>
 						<span style="font-size: 1rem; opacity: 0.4;"
-							>/ {productsData?.length || 0}</span
+							>/ <span id="stat-total-count">--</span></span
 						>
 					</h2>
 				</div>
@@ -224,7 +158,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 						Kategori Jenis
 					</p>
 					<h2 style="font-size: 2rem; margin: 0;">
-						{types?.length || 0}
+						<span id="stat-types-count">--</span>
 					</h2>
 				</div>
 				<div
@@ -238,7 +172,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 						Total Motif
 					</p>
 					<h2 style="font-size: 2rem; margin: 0;">
-						{motifs?.length || 0}
+						<span id="stat-motifs-count">--</span>
 					</h2>
 				</div>
 				<div
@@ -252,7 +186,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 						Total Pra-Produk
 					</p>
 					<h2 style="font-size: 2rem; margin: 0;">
-						{praProdukCount.toLocaleString("id-ID")}
+						<span id="stat-praproduk-count">--</span>
 					</h2>
 				</div>
 			</div>
@@ -321,8 +255,8 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 
 						<span
 							class="text-uppercase opacity-50"
-							style="font-size: 0.6rem;"
-							>{productsData?.length || 0} Items</span
+							style="font-size: 0.65rem; font-weight: 600; background: #f1f5f9; padding: 4px 8px; border-radius: 4px; color: #475569;"
+							><span id="table-total-count">--</span> Total Produk</span
 						>
 					</div>
 
@@ -357,217 +291,206 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									>
 								</tr>
 							</thead>
-							<tbody>
-								{
-									productsData?.map((p) => (
-										<tr
-											style="border-bottom: 1px solid #f0f0f0; transition: background 0.2s;"
-											class="table-row-hover"
-										>
-											<td style="padding: 1rem;">
-												<div style="display: flex; gap: 0.8rem; align-items: center;">
-													<div style="width: 40px; height: 40px; background: #eee; border-radius: 4px; overflow: hidden; flex-shrink: 0;">
-														<img
-															src={p.image_url}
-															style="width: 100%; height: 100%; object-fit: cover;"
-															alt=""
-														/>
-													</div>
-													<div>
-														<div style="font-weight: 500; font-size: 0.9rem;">
-															{p.name}
-														</div>
-														<div style="display: flex; gap: 0.4rem; align-items: center;">
-															<code style="font-size: 0.7rem; color: var(--color-muted);">
-																{p.code || "-"}
-															</code>
-															{p.sizes &&
-																p.sizes.length >
-																	0 && (
-																	<span style="font-size: 0.6rem; background: #eee; padding: 1px 4px; border-radius: 2px;">
-																		{p.sizes.join(
-																			", ",
-																		)}
-																	</span>
-																)}
-														</div>
-													</div>
-												</div>
-											</td>
-											<td style="padding: 1rem;">
-												<div style="display: flex; flex-wrap: wrap; gap: 4px;">
-													{p.product_categories?.map(
-														(pc: any) => (
-															<span style="font-size: 0.7rem; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; color: #555;">
-																{pc.types?.name}
-															</span>
-														),
-													)}
-													{(!p.product_categories ||
-														p.product_categories
-															.length === 0) && (
-														<span style="font-size: 0.75rem; opacity: 0.5;">
-															-
-														</span>
-													)}
-												</div>
-												<div style="font-size: 0.7rem; opacity: 0.5; margin-top: 4px;">
-													{p.product_motifs
-														?.map(
-															(pm: any) =>
-																pm.motifs?.name,
-														)
-														.join(", ") || "-"}
-												</div>
-											</td>
-											<td style="padding: 1rem; font-weight: 600; font-size: 0.85rem;">
-												Rp{" "}
-												{Number(p.price).toLocaleString(
-													"id-ID",
-												)}
-											</td>
-											<td style="padding: 1rem; text-align: center;">
-												<form
-													method="POST"
-													style="display: inline;"
-												>
-													<input
-														type="hidden"
-														name="action"
-														value="toggle_status"
-													/>
-													<input
-														type="hidden"
-														name="id"
-														value={p.id}
-													/>
-													<input
-														type="hidden"
-														name="current_status"
-														value={
-															p.is_active
-																? "true"
-																: "false"
-														}
-													/>
-													<button
-														type="submit"
-														title={
-															p.is_active
-																? "Sembunyikan dari Katalog"
-																: "Tampilkan di Katalog"
-														}
-														style={`border: none; background: none; cursor: pointer; color: ${
-															p.is_active
-																? "var(--color-accent)"
-																: "#ccc"
-														}; transition: 0.2s;`}
-													>
-														{p.is_active ? (
-															<svg
-																width="20"
-																height="20"
-																viewBox="0 0 24 24"
-																fill="none"
-																stroke="currentColor"
-																stroke-width="2"
-															>
-																<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-																<circle
-																	cx="12"
-																	cy="12"
-																	r="3"
-																/>
-															</svg>
-														) : (
-															<svg
-																width="20"
-																height="20"
-																viewBox="0 0 24 24"
-																fill="none"
-																stroke="currentColor"
-																stroke-width="2"
-															>
-																<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-																<line
-																	x1="1"
-																	y1="1"
-																	x2="23"
-																	y2="23"
-																/>
-															</svg>
-														)}
-													</button>
-												</form>
-											</td>
-											<td style="padding: 1rem; text-align: center;">
-												<div style="display: flex; gap: 0.4rem; justify-content: center;">
-													<a
-														href={`/buka-toko/edit/${p.id}`}
-														title="Edit Produk"
-														style="background: #f0f7ff; color: #0070f3; padding: 0.4rem; border-radius: 4px; display: inline-flex; align-items: center; transition: 0.2s;"
-													>
-														<svg
-															width="16"
-															height="16"
-															viewBox="0 0 24 24"
-															fill="none"
-															stroke="currentColor"
-															stroke-width="2"
-														>
-															<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-															<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4L18.5 2.5z" />
-														</svg>
-													</a>
-													<form
-														method="POST"
-														style="display: inline;"
-														onsubmit="return showDeleteConfirm(this, 'Apakah Anda yakin ingin menghapus produk ini secara permanen?')"
-													>
-														<input
-															type="hidden"
-															name="action"
-															value="delete_product"
-														/>
-														<input
-															type="hidden"
-															name="id"
-															value={p.id}
-														/>
-														<button
-															type="submit"
-															title="Hapus Permanen"
-															style="border: none; background: #fff5f5; color: #ff4d4d; padding: 0.4rem; border-radius: 4px; cursor: pointer; transition: 0.2s;"
-														>
-															<svg
-																xmlns="http://www.w3.org/2000/svg"
-																width="16"
-																height="16"
-																fill="currentColor"
-																viewBox="0 0 16 16"
-															>
-																<path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z" />
-																<path
-																	fill-rule="evenodd"
-																	d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"
-																/>
-															</svg>
-														</button>
-													</form>
-												</div>
-											</td>
-										</tr>
-									))
-								}
+							<tbody id="admin-tbody">
+								<!-- Initial Loading Placeholder directly rendered for fast first paint -->
+								<tr id="initial-loading-indicator">
+									<td colspan="5" style="text-align: center; padding: 4rem; color: #64748b;">
+										<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem;">
+											<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation: spin 1s linear infinite;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+											<p style="font-weight: 500; font-size: 0.9rem;">Memuat data katalog...</p>
+										</div>
+									</td>
+								</tr>
+								
+								<!-- Secret Sentinel row for Infinite Scroll logic -->
+								<tr id="sentinel-row" style="opacity: 0; height: 1px; pointer-events: none; display: none;">
+									<td colspan="5"></td>
+								</tr>
 							</tbody>
 						</table>
-						{
-							(!productsData || productsData.length === 0) && (
-								<div style="padding: var(--spacing-xl); text-align: center; opacity: 0.4;">
-									Belum ada produk.
-								</div>
-							)
-						}
+						<!-- Empty State Message hidden by default -->
+						<div id="empty-state-message" style="display: none; padding: 3rem; text-align: center; opacity: 0.4;">
+							Belum ada produk.
+						</div>
+
+						<!-- Administrative Infinite Scroll & Initial Hydration Controls -->
+						<div id="admin-scroll-loader" style="display: none; text-align: center; padding: 1.5rem; border-top: 1px solid #f0f0f0; background: #fcfcfc; border-bottom-left-radius: var(--radius-md); border-bottom-right-radius: var(--radius-md);">
+							<div id="admin-spinner" style="display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
+								<div style="width: 20px; height: 20px; border: 2px solid #eee; border-top-color: #0f172a; border-radius: 50%; animation: spin 0.7s linear infinite;"></div>
+								<span style="font-size: 0.75rem; color: #64748b; font-weight: 500;">Memuat lebih banyak...</span>
+							</div>
+							<button id="admin-load-more" style="padding: 8px 16px; background: white; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.75rem; color: #475569; font-weight: 600; cursor: pointer; display: none; margin: 0 auto;">Tampilkan Lebih Banyak</button>
+						</div>
+
+						<style>
+							@keyframes spin { to { transform: rotate(360deg); } }
+						</style>
+
+						<script is:inline define:vars={{ publicApiUrl, adminSearchQuery }}>
+							document.addEventListener('DOMContentLoaded', () => {
+								const initialIndicator = document.getElementById('initial-loading-indicator');
+								const emptyState = document.getElementById('empty-state-message');
+								const sentinel = document.getElementById('sentinel-row');
+								const scrollLoader = document.getElementById('admin-scroll-loader');
+								const spinner = document.getElementById('admin-spinner');
+								const manualBtn = document.getElementById('admin-load-more');
+								
+								// STAT ELEMENTS
+								const statActive = document.getElementById('stat-active-count');
+								const statTotal = document.getElementById('stat-total-count');
+								const tableTotal = document.getElementById('table-total-count');
+								const statPraproduk = document.getElementById('stat-praproduk-count');
+								
+								let currPage = 0; 
+								let totalPages = 1;
+								let isLoading = false;
+								
+								// Setup intersection observer 
+								const observer = new IntersectionObserver((entries) => {
+									if (entries[0].isIntersecting && currPage > 0 && currPage < totalPages) {
+										loadMoreRows();
+									}
+								}, { rootMargin: '200px' });
+
+								const loadMoreRows = async () => {
+									if (isLoading || (currPage > 0 && currPage >= totalPages)) return;
+									
+									isLoading = true;
+									if(currPage > 0) {
+										if(scrollLoader) scrollLoader.style.display = 'block';
+									}
+									
+									const targetPage = currPage + 1;
+									
+									try {
+										const partialUrl = `/partial/admin-products?page=${targetPage}${adminSearchQuery ? `&q=${encodeURIComponent(adminSearchQuery)}` : ''}`;
+										const res = await fetch(partialUrl);
+										
+										if (res.ok) {
+											const html = await res.text();
+											const hasContent = html.trim().length > 0;
+											
+											// If this was the very first load, wipe the initial spinner indicator
+											if (currPage === 0) {
+												if(initialIndicator) initialIndicator.style.display = 'none';
+												
+												if (!hasContent) {
+													if(emptyState) emptyState.style.display = 'block';
+												} else {
+													// Reveal and attach intersection observer to sentinel
+													if(sentinel) {
+														sentinel.style.display = 'table-row';
+														observer.observe(sentinel);
+													}
+												}
+											}
+											
+											if(hasContent) {
+												sentinel.insertAdjacentHTML('beforebegin', html);
+											}
+											
+											currPage = targetPage;
+										}
+									} catch (err) {
+										console.error('Dashboard Stream Error:', err);
+										if(manualBtn) manualBtn.style.display = 'block';
+									} finally {
+										isLoading = false;
+										
+										if (currPage >= totalPages) {
+											if(scrollLoader) scrollLoader.style.display = 'none';
+										}
+									}
+								};
+								
+								// CLIENT DATA SEQUENCE: Run ALL fetches asynchronously right after DOM is interactive
+								const runDashboardHydration = async () => {
+									// 1. Trigger table load immediately in background!
+									loadMoreRows();
+									
+									// 2. Fetch stats headers to populate upper count tiles
+									try {
+										const searchStr = adminSearchQuery ? `&search=${encodeURIComponent(adminSearchQuery)}` : '';
+										const metadataUrl = `${publicApiUrl}/products?per_page=12${searchStr}`;
+										
+										fetch(metadataUrl)
+											.then(r => r.json())
+											.then(json => {
+												if(json && json.meta) {
+													totalPages = json.meta.last_page || 1;
+													const total = json.meta.total || 0;
+													if(tableTotal) tableTotal.innerText = total.toLocaleString('id-ID');
+													if(statTotal) statTotal.innerText = total.toLocaleString('id-ID');
+													
+													// Correct current totalPages so observer bounds are known
+												}
+											}).catch(e => console.error("Metadata fail:", e));
+										
+										// Fetch Active Count explicitly
+										fetch(`${publicApiUrl}/products?is_active=true&per_page=1`)
+											.then(r => r.json())
+											.then(json => {
+												if(json && json.meta && statActive) {
+													statActive.innerText = (json.meta.total || 0).toLocaleString('id-ID');
+												}
+											}).catch(e => console.error("Active fetch fail:", e));
+
+										// Hydrate Category Count (Recursive tree traversal crawler)
+										const statTypes = document.getElementById('stat-types-count');
+										fetch(`${publicApiUrl}/types`)
+											.then(r => r.json())
+											.then(json => {
+												const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+												function countTreeNodes(arr) {
+													let count = 0;
+													arr.forEach(item => {
+														count++;
+														if (item.children && Array.isArray(item.children)) {
+															count += countTreeNodes(item.children);
+														}
+													});
+													return count;
+												}
+												if (statTypes) {
+													statTypes.innerText = countTreeNodes(list).toLocaleString('id-ID');
+												}
+											}).catch(e => console.error("Types fetch fail:", e));
+
+										// Hydrate Motif Count (Flat wrapper dataset analyzer)
+										const statMotifs = document.getElementById('stat-motifs-count');
+										fetch(`${publicApiUrl}/motifs`)
+											.then(r => r.json())
+											.then(json => {
+												const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+												if (statMotifs) {
+													statMotifs.innerText = list.length.toLocaleString('id-ID');
+												}
+											}).catch(e => console.error("Motifs fetch fail:", e));
+
+										// Fetch external Praproduk Count asynchronously
+										fetch("https://noir.grace.gracianna.web.id/api/v1/beli1?per_page=1")
+											.then(r => r.json())
+											.then(json => {
+												if(json && json.meta && statPraproduk) {
+													statPraproduk.innerText = (json.meta.total || 0).toLocaleString('id-ID');
+												} else if (json.total && statPraproduk) {
+													statPraproduk.innerText = (json.total).toLocaleString('id-ID');
+												}
+											}).catch(e => console.error("Praproduk external fail:", e));
+											
+									} catch(err) {
+										console.error('Stats Orchestration Error:', err);
+									}
+								};
+
+								// Let the magic begin
+								runDashboardHydration();
+								
+								if(manualBtn) {
+									manualBtn.addEventListener('click', loadMoreRows);
+								}
+							});
+						</script>
 					</div>
 				</div>
 			</div>

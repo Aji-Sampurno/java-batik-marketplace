@@ -1,0 +1,205 @@
+---
+interface Props {
+    product: any;
+}
+
+const { product: p } = Astro.props;
+---
+
+<tr
+    style="border-bottom: 1px solid #f0f0f0; transition: background 0.2s;"
+    class="table-row-hover"
+>
+    <td style="padding: 1rem;">
+        <div style="display: flex; gap: 0.8rem; align-items: center;">
+            <div style="width: 40px; height: 40px; background: #eee; border-radius: 4px; overflow: hidden; flex-shrink: 0;">
+                <img
+                    src={p.image_url}
+                    style="width: 100%; height: 100%; object-fit: cover;"
+                    alt=""
+                />
+            </div>
+            <div>
+                <div style="font-weight: 500; font-size: 0.9rem;">
+                    {p.name}
+                </div>
+                <div style="display: flex; gap: 0.4rem; align-items: center;">
+                    <code style="font-size: 0.7rem; color: var(--color-muted);">
+                        {p.code || "-"}
+                    </code>
+                    {p.sizes &&
+                        p.sizes.length >
+                            0 && (
+                            <span style="font-size: 0.6rem; background: #eee; padding: 1px 4px; border-radius: 2px;">
+                                {p.sizes.join(
+                                    ", ",
+                                )}
+                            </span>
+                        )}
+                </div>
+            </div>
+        </div>
+    </td>
+    <td style="padding: 1rem;">
+        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+            {(p.product_categories || p.categories)?.map(
+                (pc: any) => (
+                    <span style="font-size: 0.7rem; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; color: #555;">
+                        {pc.name || pc.types?.name}
+                    </span>
+                ),
+            )}
+            {(!(p.product_categories || p.categories) ||
+                (p.product_categories || p.categories)
+                    .length === 0) && (
+                <span style="font-size: 0.75rem; opacity: 0.5;">
+                    -
+                </span>
+            )}
+        </div>
+        <div style="font-size: 0.7rem; opacity: 0.5; margin-top: 4px;">
+            {(p.product_motifs || p.motifs)
+                ?.map(
+                    (pm: any) =>
+                        pm.name || pm.motifs?.name,
+                )
+                .join(", ") || "-"}
+        </div>
+    </td>
+    <td style="padding: 1rem; font-weight: 600; font-size: 0.85rem;">
+        Rp{" "}
+        {Number(p.price).toLocaleString(
+            "id-ID",
+        )}
+    </td>
+    <td style="padding: 1rem; text-align: center;">
+        <form
+            method="POST"
+            style="display: inline;"
+        >
+            <input
+                type="hidden"
+                name="action"
+                value="toggle_status"
+            />
+            <input
+                type="hidden"
+                name="id"
+                value={p.id}
+            />
+            <input
+                type="hidden"
+                name="current_status"
+                value={
+                    p.is_active
+                        ? "true"
+                        : "false"
+                }
+            />
+            <button
+                type="submit"
+                title={
+                    p.is_active
+                        ? "Sembunyikan dari Katalog"
+                        : "Tampilkan di Katalog"
+                }
+                style={`border: none; background: none; cursor: pointer; color: ${
+                    p.is_active
+                        ? "var(--color-accent)"
+                        : "#ccc"
+                }; transition: 0.2s;`}
+            >
+                {p.is_active ? (
+                    <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                    >
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle
+                            cx="12"
+                            cy="12"
+                            r="3"
+                        />
+                    </svg>
+                ) : (
+                    <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                    >
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                        <line
+                            x1="1"
+                            y1="1"
+                            x2="23"
+                            y2="23"
+                        />
+                    </svg>
+                )}
+            </button>
+        </form>
+    </td>
+    <td style="padding: 1rem; text-align: center;">
+        <div style="display: flex; gap: 0.4rem; justify-content: center;">
+            <a
+                href={`/buka-toko/edit/${p.id}`}
+                title="Edit Produk"
+                style="background: #f0f7ff; color: #0070f3; padding: 0.4rem; border-radius: 4px; display: inline-flex; align-items: center; transition: 0.2s;"
+            >
+                <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                >
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4L18.5 2.5z" />
+                </svg>
+            </a>
+            <form
+                method="POST"
+                style="display: inline;"
+                onsubmit="return showDeleteConfirm(this, 'Apakah Anda yakin ingin menghapus produk ini secara permanen?')"
+            >
+                <input
+                    type="hidden"
+                    name="action"
+                    value="delete_product"
+                />
+                <input
+                    type="hidden"
+                    name="id"
+                    value={p.id}
+                />
+                <button
+                    type="submit"
+                    title="Hapus Permanen"
+                    style="border: none; background: #fff5f5; color: #ff4d4d; padding: 0.4rem; border-radius: 4px; cursor: pointer; transition: 0.2s;"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        fill="currentColor"
+                        viewBox="0 0 16 16"
+                    >
+                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z" />
+                        <path
+                            fill-rule="evenodd"
+                            d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"
+                        />
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </td>
+</tr>

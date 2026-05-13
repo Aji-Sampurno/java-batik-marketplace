@@ -1,0 +1,194 @@
+---
+---
+<div class="products-layout-skeleton">
+	<!-- Sidebar Skeleton -->
+	<aside class="filters-sidebar">
+		<!-- Price Range Skeleton -->
+		<div class="filter-group">
+			<div class="skeleton-title"></div>
+			<div class="skeleton-box" style="height: 40px; margin-bottom: 0.5rem;"></div>
+			<div class="skeleton-box" style="height: 40px; margin-bottom: 0.5rem;"></div>
+			<div class="skeleton-box" style="height: 30px;"></div>
+		</div>
+
+		<!-- Types Skeleton -->
+		<div class="filter-group">
+			<div class="skeleton-title"></div>
+			<div class="skeleton-list">
+				<div class="skeleton-text" style="width: 80%;"></div>
+				<div class="skeleton-text" style="width: 90%; margin-left: 10px;"></div>
+				<div class="skeleton-text" style="width: 75%; margin-left: 10px;"></div>
+				<div class="skeleton-text" style="width: 85%;"></div>
+				<div class="skeleton-text" style="width: 70%; margin-left: 10px;"></div>
+			</div>
+		</div>
+
+		<!-- Sizes Skeleton -->
+		<div class="filter-group">
+			<div class="skeleton-title"></div>
+			<div class="skeleton-chips">
+				<div class="skeleton-chip"></div>
+				<div class="skeleton-chip"></div>
+				<div class="skeleton-chip"></div>
+				<div class="skeleton-chip"></div>
+				<div class="skeleton-chip"></div>
+			</div>
+		</div>
+
+		<!-- Motifs Skeleton -->
+		<div class="filter-group">
+			<div class="skeleton-title"></div>
+			<div class="skeleton-list">
+				<div class="skeleton-text" style="width: 85%;"></div>
+				<div class="skeleton-text" style="width: 70%;"></div>
+				<div class="skeleton-text" style="width: 90%;"></div>
+			</div>
+		</div>
+	</aside>
+
+	<!-- Main Grid Skeleton -->
+	<main>
+		<!-- Topbar Skeleton -->
+		<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+			<div class="skeleton-text" style="width: 150px; margin: 0;"></div>
+			<div class="skeleton-box" style="width: 170px; height: 35px; border-radius: 8px; margin: 0;"></div>
+		</div>
+
+		<!-- Cards Grid Skeleton -->
+		<div class="product-grid" style="margin-top: 0;">
+			{[...Array(8)].map(() => (
+				<div class="skeleton-card">
+					<div class="skeleton-card-image"></div>
+					<div class="skeleton-card-info">
+						<div class="skeleton-text" style="width: 60%; margin-bottom: 0.5rem;"></div>
+						<div class="skeleton-text" style="width: 100%; height: 20px; margin-bottom: 0.5rem;"></div>
+						<div class="skeleton-chips" style="margin-bottom: 1rem;">
+							<div class="skeleton-chip" style="width: 30px;"></div>
+							<div class="skeleton-chip" style="width: 30px;"></div>
+						</div>
+						<div class="skeleton-text" style="width: 40%; height: 22px; margin-bottom: 1.5rem;"></div>
+						<div class="skeleton-box" style="height: 38px; margin-bottom: 0.5rem;"></div>
+						<div class="skeleton-box" style="height: 38px;"></div>
+					</div>
+				</div>
+			))}
+		</div>
+	</main>
+</div>
+
+<style>
+	.products-layout-skeleton {
+		display: grid;
+		grid-template-columns: 250px 1fr;
+		gap: var(--spacing-2xl);
+		align-items: start;
+	}
+
+	.filters-sidebar {
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
+	}
+
+	.filter-group {
+		width: 100%;
+	}
+
+	/* Skeleton Core Animations */
+	.skeleton-title,
+	.skeleton-box,
+	.skeleton-text,
+	.skeleton-chip,
+	.skeleton-card-image {
+		background: #f1f5f9;
+		background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+		background-size: 200% 100%;
+		animation: shimmer 1.5s infinite linear;
+		border-radius: 4px;
+	}
+
+	@keyframes shimmer {
+		0% { background-position: 200% 0; }
+		100% { background-position: -200% 0; }
+	}
+
+	.skeleton-title {
+		width: 100px;
+		height: 14px;
+		margin-bottom: 1rem;
+	}
+
+	.skeleton-box {
+		width: 100%;
+	}
+
+	.skeleton-text {
+		height: 12px;
+		margin-bottom: 0.8rem;
+	}
+
+	.skeleton-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.skeleton-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.skeleton-chip {
+		width: 45px;
+		height: 26px;
+		border-radius: 6px;
+	}
+
+	/* Product Grid Styles matching real UI */
+	.product-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+		gap: var(--spacing-lg);
+	}
+
+	.skeleton-card {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+	}
+
+	.skeleton-card-image {
+		aspect-ratio: 4/5;
+		width: 100%;
+		margin-bottom: 1rem;
+	}
+
+	.skeleton-card-info {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+	}
+
+	@media (max-width: 900px) {
+		.products-layout-skeleton {
+			grid-template-columns: 1fr;
+			gap: var(--spacing-xl);
+		}
+		.filters-sidebar {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+			gap: var(--spacing-lg);
+			border-bottom: 1px solid var(--color-border);
+			padding-bottom: var(--spacing-lg);
+			margin-bottom: var(--spacing-lg);
+		}
+	}
+
+	@media (max-width: 600px) {
+		.filters-sidebar {
+			grid-template-columns: 1fr;
+			gap: var(--spacing-md);
+		}
+	}
+</style>

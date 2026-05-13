@@ -8,18 +8,17 @@ const session = Astro.cookies.get("admin_session");
 if (session?.value !== "authenticated") {
 	return Astro.redirect("/login");
 }
-let motifs: any[] = [];
-let settings: any = null;
+const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://api.katalog.batik.gooproper.id/api";
+
+let settings: any = { site_name: "Batik Nusantara" };
 let message = "";
+let isError = false;
 
 try {
-	const mRes = await apiFetch<any>("motifs");
-	motifs = mRes?.data || mRes || [];
-
 	const sRes = await apiFetch<any>("settings");
 	settings = sRes?.data || sRes || { site_name: "Batik Nusantara" };
 } catch (e: any) {
-	console.error("API Fetch Error:", e.message);
+	console.error("Settings fetch error:", e.message);
 }
 
 // Handle Form Submission (Server Side)
@@ -134,54 +133,18 @@ if (success === "deleted") message = "Motif berhasil dihapus!";
 							<p class="text-uppercase opacity-50" style="font-size: 0.7rem; font-weight: 700; letter-spacing: 1.5px;">
 								Daftar Motif Terdaftar
 							</p>
-							<span style="font-size: 0.75rem; color: #9ca3af; font-weight: 600;">
-								{motifs?.length || 0} Motif
+							<span style="font-size: 0.75rem; color: #9ca3af; font-weight: 600;" id="motif-count-text">
+								-- Motif
 							</span>
 						</div>
 
-						<div style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
-							{
-								motifs?.map((m) => (
-									<div style="display: flex; justify-content: space-between; align-items: center; padding: 0.8rem 1rem; background: #fdfdfd; border-radius: 8px; border: 1px solid #f1f1f1; transition: 0.2s;" class="motif-row">
-										<span style="font-size: 0.85rem; font-weight: 500; color: #111827;">
-											{m.name}
-										</span>
-										<form
-											method="POST"
-											class="delete-form"
-										>
-											<input
-												type="hidden"
-												name="action"
-												value="delete_motif"
-											/>
-											<input
-												type="hidden"
-												name="id"
-												value={m.id}
-											/>
-											<button
-												type="button"
-												class="btn-trash"
-												title="Hapus Motif"
-												onclick="openDeleteModal(this.form)"
-											>
-												<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-											</button>
-										</form>
-									</div>
-								))
-							}
+						<div style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;" id="motif-list-container">
+							<!-- Skeleton Premium Placeholder Loader -->
+							<div style="padding: 3rem; text-align: center; opacity: 0.6;">
+								<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 1s linear infinite; margin-bottom: 8px; display: inline-block;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+								<p style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.5px;">Memuat daftar motif...</p>
+							</div>
 						</div>
-						{
-							(!motifs || motifs.length === 0) && (
-								<div style="padding: 4rem; text-align: center; border: 1px dashed #e5e7eb; border-radius: 12px;">
-									<p style="font-size: 0.9rem; color: #9ca3af; opacity: 0.6;">
-										Belum ada data motif.
-									</p>
-								</div>
-							)
-						}
 					</div>
 				</div>
 			</div>
@@ -205,7 +168,52 @@ if (success === "deleted") message = "Motif berhasil dihapus!";
 		</div>
 	</div>
 
-	<script is:inline>
+	<script is:inline define:vars={{ publicApiUrl }}>
+		// Asynchronous Multi-Card Motif Hydrator
+		async function fetchAndHydrateMotifs() {
+			const container = document.getElementById('motif-list-container');
+			const countText = document.getElementById('motif-count-text');
+
+			try {
+				const res = await fetch(`${publicApiUrl}/motifs`);
+				const json = await res.json();
+				const list = json.data || json || [];
+
+				if (container) {
+					if (list.length === 0) {
+						container.innerHTML = `
+							<div style="padding: 4rem; text-align: center; border: 1px dashed #e5e7eb; border-radius: 12px;">
+								<p style="font-size: 0.9rem; color: #9ca3af; opacity: 0.6;">Belum ada data motif.</p>
+							</div>
+						`;
+					} else {
+						container.innerHTML = list.map(m => `
+							<div style="display: flex; justify-content: space-between; align-items: center; padding: 0.8rem 1rem; background: #fdfdfd; border-radius: 8px; border: 1px solid #f1f1f1; transition: 0.2s;" class="motif-row">
+								<span style="font-size: 0.85rem; font-weight: 500; color: #111827;">${m.name}</span>
+								<form method="POST" class="delete-form">
+									<input type="hidden" name="action" value="delete_motif" />
+									<input type="hidden" name="id" value="${m.id}" />
+									<button type="button" class="btn-trash" title="Hapus Motif" onclick="openDeleteModal(this.form)">
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+									</button>
+								</form>
+							</div>
+						`).join('');
+					}
+				}
+
+				if (countText) {
+					countText.innerText = `${list.length} Motif`;
+				}
+
+			} catch (err) {
+				console.error('[Motif Hydration Error]:', err);
+				if (container) {
+					container.innerHTML = `<p style="color: #b91c1c; text-align: center; padding: 2rem; font-weight: 600;">Koneksi Gagal.</p>`;
+				}
+			}
+		}
+
 		// Delete Confirmation Modal
 		let currentForm = null;
 		const modal = document.getElementById('delete-modal');
@@ -237,9 +245,13 @@ if (success === "deleted") message = "Motif berhasil dihapus!";
 		modal.addEventListener('click', (e) => {
 			if (e.target === modal) closeModal();
 		});
+
+		document.addEventListener("DOMContentLoaded", () => {
+			fetchAndHydrateMotifs();
+		});
 	</script>
 
-	<style>
+	<style is:global>
 		.input-label {
 			font-size: 0.65rem;
 			text-transform: uppercase;
