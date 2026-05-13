@@ -262,11 +262,13 @@ if (Astro.request.method === "POST") {
 
 				// Build variants array
 				const variant_sizes = formData.getAll("variant_size") as string[];
+				const variant_skus = formData.getAll("variant_sku") as string[];
 				const variant_prices = formData.getAll("variant_price") as string[];
 				const variant_stocks = formData.getAll("variant_stock") as string[];
 				const variant_dalamans = formData.getAll("variant_dalaman") as string[];
 				const variants = variant_sizes.map((size, index) => ({
 					size_name: size,
+					sku: variant_skus[index] || null,
 					price: parseFloat(variant_prices[index] || price?.toString() || "0"),
 					stock: parseInt(variant_stocks[index] || "0", 10),
 					dalaman: variant_dalamans[index] || null
@@ -695,6 +697,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 														</span>
 													</label>
 													<input type="hidden" name="variant_size" value={size.name + fit} disabled class="v-size-input-add" />
+													<input type="hidden" name="variant_sku" disabled class="v-sku-input-add" />
 													<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: none;">
 														<div style="flex: 1;">
 															<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
@@ -734,6 +737,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 														</span>
 													</label>
 													<input type="hidden" name="variant_size" value={`${size.name}${fit} - ${sleeve}`} disabled class="v-size-input-add" />
+													<input type="hidden" name="variant_sku" disabled class="v-sku-input-add" />
 													<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: none;">
 														<div style="flex: 1;">
 															<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
@@ -1741,6 +1745,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 			cb.addEventListener('change', (e) => {
 				const parent = e.target.closest('.variant-item-add');
 				const vSize = parent.querySelector('.v-size-input-add');
+				const vSku = parent.querySelector('.v-sku-input-add');
 				const vPriceDisp = parent.querySelector('.v-price-input-add');
 				const vPriceHid = parent.querySelector('.v-price-hidden-add');
 				const vStock = parent.querySelector('.v-stock-input-add');
@@ -1748,8 +1753,9 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 				const details = parent.querySelector('.v-details-add');
 				
 				const isChecked = e.target.checked;
-				vSize.disabled = !isChecked;
-				vPriceDisp.disabled = !isChecked;
+				if(vSize) vSize.disabled = !isChecked;
+				if(vSku) vSku.disabled = !isChecked;
+				if(vPriceDisp) vPriceDisp.disabled = !isChecked;
 				if(vPriceHid) vPriceHid.disabled = !isChecked;
 				vStock.disabled = !isChecked;
 				if(vDalaman) vDalaman.disabled = !isChecked;
@@ -1993,6 +1999,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 						</span>
 					</label>
 					<input type="hidden" name="variant_size" value="${txt}" disabled class="v-size-input-add" />
+					<input type="hidden" name="variant_sku" disabled class="v-sku-input-add" />
 					<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: none;">
 						<div style="flex: 1;">
 							<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
@@ -2024,6 +2031,8 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 				cb.addEventListener('change', (e) => {
 					const isChecked = e.target.checked;
 					row.querySelector('.v-size-input-add').disabled = !isChecked;
+					const vSku = row.querySelector('.v-sku-input-add');
+					if (vSku) vSku.disabled = !isChecked;
 					dispPrice.disabled = !isChecked;
 					hdnPrice.disabled = !isChecked;
 					row.querySelector('.v-stock-input-add').disabled = !isChecked;
@@ -2305,6 +2314,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 																</span>
 															</label>
 															<input type="hidden" name="variant_size" value="${finalLabel}" class="v-size-input-add" />
+															<input type="hidden" name="variant_sku" value="${sourceItem.kode || ''}" class="v-sku-input-add" />
 															<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: flex;">
 																<div style="flex: 1;">
 																	<input type="text" value="${formatCurrency(sourceItem.hjual)}" placeholder="Harga" style="width: 100%; padding: 0.35rem 0.5rem; border: 1px solid #cbd5e1; font-size: 0.75rem; border-radius: 4px; font-weight: 600;" class="v-price-input-add" />
@@ -2326,6 +2336,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 														// Binding interaksi internal baris kustom
 														const cb = elementRow.querySelector('.variant-cb-add');
 														const sizeInput = elementRow.querySelector('.v-size-input-add');
+														const skuInput = elementRow.querySelector('.v-sku-input-add');
 														const priceDisp = elementRow.querySelector('.v-price-input-add');
 														const priceHdn = elementRow.querySelector('.v-price-hidden-add');
 														const stockInput = elementRow.querySelector('.v-stock-input-add');
@@ -2335,6 +2346,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 														cb.addEventListener('change', (e) => {
 															const checked = e.target.checked;
 															sizeInput.disabled = !checked;
+															if(skuInput) skuInput.disabled = !checked;
 															priceDisp.disabled = !checked;
 															priceHdn.disabled = !checked;
 															stockInput.disabled = !checked;
@@ -2431,7 +2443,8 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 													sizeMap[sz] = { 
 														price: price, 
 														stock: stock, 
-														dalaman: dalaman
+														dalaman: dalaman,
+														kode: detail.kode || ""
 													};
 												} else {
 													sizeMap[sz].stock += stock;
@@ -2441,6 +2454,8 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 													if (dalaman) {
 														sizeMap[sz].dalaman = dalaman;
 													}
+													// Jika tergabung dari beberapa baris ERP, kosongkan SKU agar sinkronisasi backend otomatis fallback ke mode akumulasi ukuran tradisional!
+													sizeMap[sz].kode = "";
 												}
 											});
 
@@ -2474,12 +2489,16 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 													const vPriceHid = parent.querySelector('.v-price-hidden-add');
 													const vStock = parent.querySelector('.v-stock-input-add');
 													const vDalaman = parent.querySelector('.v-dalaman-input-add');
+													const vSku = parent.querySelector('.v-sku-input-add');
 
 													if (vPriceHid) vPriceHid.value = data.price;
 													if (vPriceDisp) vPriceDisp.value = new Intl.NumberFormat('id-ID').format(data.price);
 													if (vStock) vStock.value = data.stock;
 													if (vDalaman) {
 														vDalaman.value = data.dalaman || "";
+													}
+													if (vSku) {
+														vSku.value = data.kode || "";
 													}
 												} else {
 													cb.checked = false;
