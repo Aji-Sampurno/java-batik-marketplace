@@ -2228,76 +2228,265 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								try {
 									const detailsArray = typeof item.details === 'string' ? JSON.parse(item.details) : item.details;
 									if (Array.isArray(detailsArray)) {
-										const sizeMap = {};
-										detailsArray.forEach(detail => {
-											let sz = (detail.size || '').trim().toUpperCase();
-											if (sz === '00') sz = 'ALL SIZE';
-											const isSF = /\bSF\b/i.test(detail.nama || '') || (detail.nama || '').trim().toUpperCase().endsWith('SF');
-											if (isSF) {
-												sz = sz + ' SF';
-											}
-
-											const price = parseFloat(detail.hjual || 0);
-											const stock = parseInt(detail.stok || 0);
-											const dalaman = detail.dalaman || "";
+										
+										// 1. SISTEM DETEKSI TIPE SETELAN DI FRONTEND
+										const isSetelan = (item.nama || '').toUpperCase().includes('STLAN') || (item.nama || '').toUpperCase().includes('SETELAN');
+										
+										if (isSetelan) {
+											console.log("DEBUG: Mode Setelan Aktif. Membangun UI Pemecah & Penukar Atasan-Bawahan!");
 											
-											if (!sizeMap[sz]) {
-												sizeMap[sz] = { 
-													price: price, 
-													stock: stock, 
-													dalaman: dalaman
+											// Urutkan data agar berurutan sesuai fisik baris
+											const sortedDetails = detailsArray.sort((a, b) => (a.id || 0) - (b.id || 0));
+											const listCont = document.getElementById("custom-sizes-list-container");
+											
+											if (listCont) {
+												// Bersihkan input kustom bawaan sebelumnya & Render header informatif
+												listCont.innerHTML = "";
+												
+												const helperContainer = document.createElement("div");
+												helperContainer.style.cssText = "background: #fef3c7; border: 1px solid #fbbf24; color: #92400e; font-size: 0.75rem; padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; font-weight: 500; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.05);";
+												helperContainer.innerHTML = `
+													<div style="display:flex; align-items:center; gap:6px; font-weight:700; margin-bottom:2px; font-size:0.8rem;">
+														<span>✨ Mode Setelan Cerdas Aktif</span>
+													</div>
+													<div>Sistem mendeteksi ini adalah produk setelan dan telah memecah varian menjadi Atasan & Bawahan. <strong>Klik tombol 'Tukar Atasan/Bawahan'</strong> untuk menukar data jika urutannya terbalik!</div>
+												`;
+												listCont.appendChild(helperContainer);
+
+												const formatCurrency = (num) => {
+													return num ? new Intl.NumberFormat('id-ID').format(num) : '';
 												};
-											} else {
-												sizeMap[sz].stock += stock;
-												if (price > sizeMap[sz].price) {
-													sizeMap[sz].price = price;
-												}
-												if (dalaman) {
-													sizeMap[sz].dalaman = dalaman;
+
+												// Iterasi lompat 2 baris untuk memproses setiap pasang
+												for (let i = 0; i < sortedDetails.length; i += 2) {
+													const item1 = sortedDetails[i];
+													const item2 = sortedDetails[i + 1];
+													if (!item2) continue; // Skip jika ganjil yatim piatu
+
+													let sz = (item1.size || '').trim().toUpperCase();
+													if (sz === '00') sz = 'ALL SIZE';
+													const isSF = /\bSF\b/i.test(item1.nama || '') || (item1.nama || '').trim().toUpperCase().endsWith('SF');
+													if (isSF) sz = sz + ' SF';
+
+													// Container Kartu Pembungkus 1 Pasang
+													const pairWrapper = document.createElement("div");
+													pairWrapper.className = "setelan-pair-card";
+													pairWrapper.style.cssText = "background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem; border-left: 4px solid #f59e0b; display: flex; flex-direction: column; gap: 0.5rem; transition: background-color 0.4s ease;";
+
+													// Header Baris Pasangan (Judul Ukuran + Tombol Swap)
+													const headerBar = document.createElement("div");
+													headerBar.style.cssText = "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; margin-bottom: 0.25rem;";
+													headerBar.innerHTML = `
+														<span style="font-size: 0.8rem; font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 6px;">
+															<span style="width:8px; height:8px; background:#f59e0b; border-radius:50%;"></span>
+															Ukuran: <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px; color:#475569; font-family:monospace;">${sz}</span>
+														</span>
+														<button type="button" class="js-btn-swap-setelan" style="background: #ffffff; border: 1px solid #cbd5e1; color: #475569; font-size: 0.65rem; font-weight: 700; padding: 5px 10px; border-radius: 4px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05); display: flex; align-items: center; gap: 4px; transition:all 0.2s;">
+															⇄ Tukar Atasan/Bawahan
+														</button>
+													`;
+													pairWrapper.appendChild(headerBar);
+
+													// Fungsi helper merender baris input individual (Atasan/Bawahan)
+													const createPartRow = (suffix, sourceItem, role) => {
+														const finalLabel = `${sz} - ${suffix}`;
+														const elementRow = document.createElement("div");
+														elementRow.className = "variant-item-add variant-standard";
+														elementRow.style.cssText = "display: flex; align-items: center; gap: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 0.5rem 0.75rem; border-radius: 6px;";
+														
+														elementRow.innerHTML = `
+															<label style="display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; cursor: pointer; min-width: 160px; margin: 0;">
+																<input type="checkbox" class="variant-cb-add" value="${finalLabel}" checked style="margin: 0;" />
+																<span style="display: flex; flex-direction: column;">
+																	<strong class="js-lbl-size" style="font-weight: 600; line-height: 1.2; color: #0f172a;">${finalLabel}</strong>
+																	<span class="js-badge-role" style="font-size: 0.55rem; font-weight: 800; text-transform: uppercase; margin-top: 2px; color: ${role==='ATASAN' ? '#0284c7' : '#059669'}; letter-spacing: 0.5px;">
+																		${role==='ATASAN' ? '✦ ATASAN' : '✦ BAWAHAN'}
+																	</span>
+																</span>
+															</label>
+															<input type="hidden" name="variant_size" value="${finalLabel}" class="v-size-input-add" />
+															<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: flex;">
+																<div style="flex: 1;">
+																	<input type="text" value="${formatCurrency(sourceItem.hjual)}" placeholder="Harga" style="width: 100%; padding: 0.35rem 0.5rem; border: 1px solid #cbd5e1; font-size: 0.75rem; border-radius: 4px; font-weight: 600;" class="v-price-input-add" />
+																	<input type="hidden" name="variant_price" value="${sourceItem.hjual}" class="v-price-hidden-add" />
+																</div>
+																<div style="width: 65px;">
+																	<input type="number" name="variant_stock" value="${sourceItem.stok}" style="width: 100%; padding: 0.35rem 0.5rem; border: 1px solid #cbd5e1; font-size: 0.75rem; border-radius: 4px; text-align:center; font-weight: 600;" class="v-stock-input-add" />
+																</div>
+																<div style="width: 95px;">
+																	<select name="variant_dalaman" class="v-dalaman-input-add" style="width: 100%; padding: 0.35rem; border: 1px solid #cbd5e1; font-size: 0.75rem; border-radius: 4px; background:#fff; cursor:pointer;">
+																		<option value="" ${!sourceItem.dalaman ? 'selected' : ''}>Tanpa</option>
+																		<option value="F" ${sourceItem.dalaman==='F' ? 'selected' : ''}>Furing</option>
+																		<option value="TF" ${sourceItem.dalaman==='TF' ? 'selected' : ''}>Non Furing</option>
+																	</select>
+																</div>
+															</div>
+														`;
+
+														// Binding interaksi internal baris kustom
+														const cb = elementRow.querySelector('.variant-cb-add');
+														const sizeInput = elementRow.querySelector('.v-size-input-add');
+														const priceDisp = elementRow.querySelector('.v-price-input-add');
+														const priceHdn = elementRow.querySelector('.v-price-hidden-add');
+														const stockInput = elementRow.querySelector('.v-stock-input-add');
+														const dalamanInput = elementRow.querySelector('.v-dalaman-input-add');
+														const detailsBox = elementRow.querySelector('.v-details-add');
+
+														cb.addEventListener('change', (e) => {
+															const checked = e.target.checked;
+															sizeInput.disabled = !checked;
+															priceDisp.disabled = !checked;
+															priceHdn.disabled = !checked;
+															stockInput.disabled = !checked;
+															dalamanInput.disabled = !checked;
+															detailsBox.style.opacity = checked ? '1' : '0.4';
+														});
+
+														priceDisp.addEventListener('input', (e) => {
+															const raw = e.target.value.replace(/\D/g, '');
+															priceHdn.value = raw;
+															e.target.value = formatCurrency(raw);
+														});
+
+														return elementRow;
+													};
+
+													const atasanRow = createPartRow('Atasan', item1, 'ATASAN');
+													const bawahanRow = createPartRow('Bawahan', item2, 'BAWAHAN');
+
+													pairWrapper.appendChild(atasanRow);
+													pairWrapper.appendChild(bawahanRow);
+													listCont.appendChild(pairWrapper);
+
+													// LOGIKA UTAMA TOMBOL TUKAR IDENTITAS (LABEL SWAP ENGINE)
+													const swapBtn = headerBar.querySelector('.js-btn-swap-setelan');
+													swapBtn.addEventListener('click', (e) => {
+														e.preventDefault();
+														
+														// Referensi Elemen Row 1
+														const aLbl = atasanRow.querySelector('.js-lbl-size');
+														const aInp = atasanRow.querySelector('.v-size-input-add');
+														const aCb = atasanRow.querySelector('.variant-cb-add');
+														const aBdg = atasanRow.querySelector('.js-badge-role');
+
+														// Referensi Elemen Row 2
+														const bLbl = bawahanRow.querySelector('.js-lbl-size');
+														const bInp = bawahanRow.querySelector('.v-size-input-add');
+														const bCb = bawahanRow.querySelector('.variant-cb-add');
+														const bBdg = bawahanRow.querySelector('.js-badge-role');
+
+														// Cache Identitas Asli Row 1
+														const cachedInpValue = aInp.value;
+														const cachedBadgeHtml = aBdg.innerHTML;
+														const cachedBadgeColor = aBdg.style.color;
+
+														// Tukar Identitas: Salin Row 2 ke Row 1
+														aInp.value = bInp.value;
+														aLbl.textContent = bInp.value;
+														aCb.value = bInp.value;
+														aBdg.innerHTML = bBdg.innerHTML;
+														aBdg.style.color = bBdg.style.color;
+
+														// Tukar Identitas: Terapkan Cache Row 1 ke Row 2
+														bInp.value = cachedInpValue;
+														bLbl.textContent = cachedInpValue;
+														bCb.value = cachedInpValue;
+														bBdg.innerHTML = cachedBadgeHtml;
+														bBdg.style.color = cachedBadgeColor;
+
+														// Animasi visual penanda penukaran sukses
+														pairWrapper.style.backgroundColor = "#d1fae5"; // Soft Emerald
+														setTimeout(() => {
+															pairWrapper.style.backgroundColor = "#f8fafc";
+														}, 600);
+													});
 												}
 											}
-										});
 
-										// Now find all variant-item-add elements and fill them
-										const isSleeveSplitEnabled = document.getElementById('toggle_sleeve_options_add')?.checked;
-
-										document.querySelectorAll('.variant-item-add').forEach(parent => {
-											const cb = parent.querySelector('.variant-cb-add');
-											if (!cb) return;
-
-											const isSleeveSplitItem = parent.classList.contains('variant-sleeve-split');
-											const isStandardItem = parent.classList.contains('variant-standard');
-
-											// Only process if the item matches the current toggle mode
-											const shouldProcess = (isSleeveSplitEnabled && isSleeveSplitItem) || (!isSleeveSplitEnabled && isStandardItem);
-
-											const checkboxVal = cb.value.trim().toUpperCase();
-											let baseSize = checkboxVal;
-											if (checkboxVal.includes(' - LENGAN')) {
-												baseSize = checkboxVal.split(' - LENGAN')[0].trim();
-											}
-
-											if (shouldProcess && sizeMap[baseSize]) {
-												const data = sizeMap[baseSize];
-												cb.checked = true;
-												cb.dispatchEvent(new Event('change'));
-
-												const vPriceDisp = parent.querySelector('.v-price-input-add');
-												const vPriceHid = parent.querySelector('.v-price-hidden-add');
-												const vStock = parent.querySelector('.v-stock-input-add');
-												const vDalaman = parent.querySelector('.v-dalaman-input-add');
-
-												if (vPriceHid) vPriceHid.value = data.price;
-												if (vPriceDisp) vPriceDisp.value = new Intl.NumberFormat('id-ID').format(data.price);
-												if (vStock) vStock.value = data.stock;
-												if (vDalaman) {
-													vDalaman.value = data.dalaman || "";
+											// Matikan seluruh checkbox varian statis reguler agar tidak terjadi duplikasi data
+											document.querySelectorAll('.variant-cb-add').forEach(cb => {
+												const isInsideCustom = cb.closest('#custom-sizes-list-container');
+												if (!isInsideCustom) {
+													cb.checked = false;
+													cb.dispatchEvent(new Event('change'));
 												}
-											} else {
-												cb.checked = false;
-												cb.dispatchEvent(new Event('change'));
-											}
-										});
+											});
+
+										} else {
+											// --- LOGIKA ASLI UNTUK NON-SETELAN ---
+											const sizeMap = {};
+											detailsArray.forEach(detail => {
+												let sz = (detail.size || '').trim().toUpperCase();
+												if (sz === '00') sz = 'ALL SIZE';
+												const isSF = /\bSF\b/i.test(detail.nama || '') || (detail.nama || '').trim().toUpperCase().endsWith('SF');
+												if (isSF) {
+													sz = sz + ' SF';
+												}
+
+												const price = parseFloat(detail.hjual || 0);
+												const stock = parseInt(detail.stok || 0);
+												const dalaman = detail.dalaman || "";
+												
+												if (!sizeMap[sz]) {
+													sizeMap[sz] = { 
+														price: price, 
+														stock: stock, 
+														dalaman: dalaman
+													};
+												} else {
+													sizeMap[sz].stock += stock;
+													if (price > sizeMap[sz].price) {
+														sizeMap[sz].price = price;
+													}
+													if (dalaman) {
+														sizeMap[sz].dalaman = dalaman;
+													}
+												}
+											});
+
+											// Find all static variant-item-add elements and fill them
+											const isSleeveSplitEnabled = document.getElementById('toggle_sleeve_options_add')?.checked;
+
+											document.querySelectorAll('.variant-item-add').forEach(parent => {
+												const cb = parent.querySelector('.variant-cb-add');
+												if (!cb) return;
+
+												const isInsideCustom = cb.closest('#custom-sizes-list-container');
+												if (isInsideCustom) return; // Abaikan input kustom di mode standar
+
+												const isSleeveSplitItem = parent.classList.contains('variant-sleeve-split');
+												const isStandardItem = parent.classList.contains('variant-standard');
+
+												const shouldProcess = (isSleeveSplitEnabled && isSleeveSplitItem) || (!isSleeveSplitEnabled && isStandardItem);
+
+												const checkboxVal = cb.value.trim().toUpperCase();
+												let baseSize = checkboxVal;
+												if (checkboxVal.includes(' - LENGAN')) {
+													baseSize = checkboxVal.split(' - LENGAN')[0].trim();
+												}
+
+												if (shouldProcess && sizeMap[baseSize]) {
+													const data = sizeMap[baseSize];
+													cb.checked = true;
+													cb.dispatchEvent(new Event('change'));
+
+													const vPriceDisp = parent.querySelector('.v-price-input-add');
+													const vPriceHid = parent.querySelector('.v-price-hidden-add');
+													const vStock = parent.querySelector('.v-stock-input-add');
+													const vDalaman = parent.querySelector('.v-dalaman-input-add');
+
+													if (vPriceHid) vPriceHid.value = data.price;
+													if (vPriceDisp) vPriceDisp.value = new Intl.NumberFormat('id-ID').format(data.price);
+													if (vStock) vStock.value = data.stock;
+													if (vDalaman) {
+														vDalaman.value = data.dalaman || "";
+													}
+												} else {
+													cb.checked = false;
+													cb.dispatchEvent(new Event('change'));
+												}
+											});
+										}
 									}
 								} catch (err) {
 									console.error("Gagal memproses details variasi harga", err);
