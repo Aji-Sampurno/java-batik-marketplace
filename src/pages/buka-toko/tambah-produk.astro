@@ -22,21 +22,7 @@ const adminSearchQuery = searchParams.get("q");
 let types: any[] = [];
 let motifs: any[] = [];
 let sizesData: any[] = [];
-const AVAILABLE_COLORS = [
-	{ name: "Hitam", hex: "#000000" },
-	{ name: "Putih", hex: "#ffffff" },
-	{ name: "Merah", hex: "#dc2626" },
-	{ name: "Kuning", hex: "#eab308" },
-	{ name: "Hijau", hex: "#16a34a" },
-	{ name: "Biru", hex: "#2563eb" },
-	{ name: "Coklat", hex: "#78350f" },
-	{ name: "Abu-abu", hex: "#6b7280" },
-	{ name: "Krem", hex: "#fef3c7" },
-	{ name: "Ungu", hex: "#7c3aed" },
-	{ name: "Navy", hex: "#1e3a8a" },
-	{ name: "Maroon", hex: "#7f1d1d" },
-];
-
+let colorsData: any[] = [];
 let productsData: any[] = [];
 let settings: any = null;
 
@@ -49,6 +35,9 @@ try {
 
 	const szRes = await apiFetch<any>("sizes");
 	sizesData = szRes?.data || szRes || [];
+
+	const colRes = await apiFetch<any>("colors");
+	colorsData = colRes?.data || colRes || [];
 
 	// Sort sizes from smallest to largest
 	const sizeOrder = ["ALL SIZE", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL", "7XL", "8XL"];
@@ -627,14 +616,14 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								>
 								<div class="motif-style-container" id="color-grid">
 									{
-										AVAILABLE_COLORS.map((c) => (
+										colorsData?.map((c) => (
 											<label class="motif-style-label" style="gap: 0.5rem !important;">
 												<input
 													type="checkbox"
 													name="colors"
 													value={c.name}
 												/>
-												<span style={`display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${c.hex}; border: 1px solid rgba(0,0,0,0.15); flex-shrink:0;`}></span>
+												<span style={`display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${c.hex || '#cccccc'}; border: 1px solid rgba(0,0,0,0.15); flex-shrink:0;`}></span>
 												{c.name}
 											</label>
 										))
@@ -2139,8 +2128,47 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 						}
 					}
 
+					function selectColorByName(colorName) {
+						if (!colorName) return;
+						const colorGrid = document.getElementById('color-grid');
+						if (!colorGrid) return;
+						
+						const options = colorGrid.querySelectorAll('input[name="colors"]');
+						let found = false;
+						for (const opt of options) {
+							if (opt.value.toLowerCase() === colorName.toLowerCase()) {
+								opt.checked = true;
+								found = true;
+								break;
+							}
+						}
+						
+						if (!found) {
+							// Add as new custom color
+							const lbl = document.createElement('label');
+							lbl.className = 'motif-style-label';
+							lbl.style.gap = '0.5rem';
+							lbl.innerHTML = `<input type="checkbox" name="colors" value="${colorName}" checked /> <span style="display:inline-block; width:12px; height:12px; border-radius:50%; background-color:#cccccc; border: 1px solid rgba(0,0,0,0.15); flex-shrink:0;"></span> ${colorName}`;
+							lbl.querySelector('input').addEventListener('change', updateName);
+							colorGrid.appendChild(lbl);
+						}
+						updateName();
+					}
+
 					if(item) {
 							console.log("DEBUG: Item loaded successfully. Starting form auto-fill...");
+							
+							// Auto-detect color from name
+							const colorList = ['HITAM', 'PUTIH', 'MERAH', 'KUNING', 'HIJAU', 'BIRU', 'COKLAT', 'ABU-ABU', 'KREM', 'UNGU', 'NAVY', 'MAROON', 'SOGA', 'TERACOTTA', 'PEACH', 'LAVENDER', 'MINT', 'OLIVE', 'DENIM', 'DUSTY', 'ROSE', 'GOLD', 'SILVER', 'TOSCA'];
+							if (item.nama) {
+								const upperName = item.nama.toUpperCase();
+								colorList.forEach(color => {
+									if (upperName.includes(color)) {
+										console.log("DEBUG: Auto-detected color from name:", color);
+										selectColorByName(color);
+									}
+								});
+							}
 							
 							// Display Pra-Produk image if exists
 							const photoFile = item.foto || item.img1;

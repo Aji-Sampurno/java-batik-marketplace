@@ -7,6 +7,7 @@ const { searchParams } = Astro.url;
 const typeFilter = searchParams.get("type");
 const motifFilter = searchParams.get("motif");
 const sizeFilter = searchParams.get("size"); 
+const colorFilter = searchParams.get("color");
 const searchQuery = searchParams.get("q");
 const minPrice = searchParams.get("minP")
 	? Number(searchParams.get("minP"))
@@ -26,6 +27,7 @@ const getSortUrl = (newSort: string) => {
 let typesData: any[] = [];
 let motifsData: any[] = [];
 let sizesData: any[] = [];
+let colorsData: any[] = [];
 let hierarchicalTypes: any[] = [];
 let activePathIds: any[] = [];
 let targetType: any = null;
@@ -40,6 +42,9 @@ try {
 
 	const szRes = await apiFetch<any>("sizes");
 	sizesData = szRes?.data || szRes || [];
+
+	const colRes = await apiFetch<any>("colors");
+	colorsData = colRes?.data || colRes || [];
 
 	const sRes = await apiFetch<any>("settings");
 	const s = sRes?.data || sRes;
@@ -99,6 +104,7 @@ productParams.set("per_page", String(itemsPerPage));
 if (typeFilter) productParams.set("type", typeFilter);
 if (motifFilter) productParams.set("motif", motifFilter);
 if (sizeFilter) productParams.set("size", sizeFilter);
+if (colorFilter) productParams.set("color", colorFilter);
 if (searchQuery) productParams.set("search", searchQuery);
 if (minPrice) productParams.set("min_price", String(minPrice));
 if (maxPrice) productParams.set("max_price", String(maxPrice));
@@ -316,6 +322,42 @@ try {
 							style="font-size: 0.7rem;"
 						>
 							{s.name}
+						</a>
+					))
+				}
+			</div>
+		</div>
+		
+		<div
+			class="filter-group"
+			style="padding-bottom: var(--spacing-sm);"
+		>
+			<h3
+				class="text-uppercase"
+				style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;"
+			>
+				Warna
+			</h3>
+			<div
+				style="display: flex; flex-wrap: wrap; gap: 0.6rem;"
+			>
+				<a
+					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), color: "", page: "1" })}`}
+					class={!colorFilter ? "active-chip" : "chip"}
+					style="font-size: 0.7rem;">Semua Warna</a
+				>
+				{
+					colorsData?.map((c) => (
+						<a
+							href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), color: c.name, page: "1" })}`}
+							class={
+								colorFilter === c.name
+									? "active-chip"
+									: "chip"
+							}
+							style="font-size: 0.7rem;"
+						>
+							{c.name}
 						</a>
 					))
 				}

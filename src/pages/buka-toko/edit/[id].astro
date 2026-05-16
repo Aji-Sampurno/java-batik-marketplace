@@ -20,20 +20,7 @@ let selectedMotifIds: string[] = [];
 let message = "";
 let isError = false;
 
-const AVAILABLE_COLORS = [
-	{ name: "Hitam", hex: "#000000" },
-	{ name: "Putih", hex: "#ffffff" },
-	{ name: "Merah", hex: "#dc2626" },
-	{ name: "Kuning", hex: "#eab308" },
-	{ name: "Hijau", hex: "#16a34a" },
-	{ name: "Biru", hex: "#2563eb" },
-	{ name: "Coklat", hex: "#78350f" },
-	{ name: "Abu-abu", hex: "#6b7280" },
-	{ name: "Krem", hex: "#fef3c7" },
-	{ name: "Ungu", hex: "#7c3aed" },
-	{ name: "Navy", hex: "#1e3a8a" },
-	{ name: "Maroon", hex: "#7f1d1d" },
-];
+let colorsData: any[] = [];
 let selectedColors: string[] = [];
 
 try {
@@ -55,6 +42,9 @@ try {
 
 	const szRes = await apiFetch<any>("sizes");
 	sizesData = szRes?.data || szRes || [];
+
+	const colRes = await apiFetch<any>("colors");
+	colorsData = colRes?.data || colRes || [];
 } catch (e: any) {
 	console.error("API Fetch Error:", e.message);
 }
@@ -436,7 +426,7 @@ if (Astro.request.method === "POST") {
 						>
 						<div class="motif-style-container" id="color-grid">
 							{
-								AVAILABLE_COLORS.map((c) => (
+								colorsData?.map((c) => (
 									<label class="motif-style-label" style="gap: 0.5rem !important; align-items: center;">
 										<input
 											type="checkbox"
@@ -444,14 +434,14 @@ if (Astro.request.method === "POST") {
 											value={c.name}
 											checked={selectedColors.includes(c.name)}
 										/>
-										<span style={`display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${c.hex}; border: 1px solid rgba(0,0,0,0.15); flex-shrink:0;`}></span>
+										<span style={`display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${c.hex || '#cccccc'}; border: 1px solid rgba(0,0,0,0.15); flex-shrink:0;`}></span>
 										{c.name}
 									</label>
 								))
 							}
 							{
-								/* Persistent Custom Render: Display colors that are associated but NOT standard constants */
-								selectedColors.filter(sc => !AVAILABLE_COLORS.some(ac => ac.name === sc)).map((sc) => (
+								/* Persistent Custom Render: Display colors that are associated but NOT in colorsData */
+								selectedColors.filter(sc => !colorsData.some(ac => ac.name === sc)).map((sc) => (
 									<label class="motif-style-label" style="gap: 0.5rem !important; align-items: center; border: 1px dashed #94a3b8;">
 										<input
 											type="checkbox"
