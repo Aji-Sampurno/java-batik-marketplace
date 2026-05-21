@@ -1598,8 +1598,18 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 			const itemCode = itemCodeInput?.value.trim() || "";
 			const parts = [];
 			if (jenis) parts.push(jenis);
-			if (colorStr) parts.push(colorStr);
 			if (motifStr) parts.push(motifStr);
+			if (colorStr) parts.push(colorStr);
+
+			// Auto append "Tanpa Furing" for Kemeja if lining is TF (Tanpa Furing) or "" (Tanpa Dalaman)
+			if (jenis && jenis.toLowerCase().includes("kemeja")) {
+				const activeDalamans = Array.from(document.querySelectorAll('.v-dalaman-input-add:not(:disabled)'));
+				const isTanpaFuring = activeDalamans.length > 0 && activeDalamans.some(select => select.value === 'TF' || select.value === '');
+				if (isTanpaFuring) {
+					parts.push("Tanpa Furing");
+				}
+			}
+
 			if (itemCode) parts.push(itemCode);
 			
 			nameInput.value = parts.join(" ");
@@ -1722,6 +1732,13 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 				const observer = new MutationObserver(updateName);
 				observer.observe(l1Input, { attributes: true });
 			}
+
+			// Trigger updateName when variant lining (dalaman) or variant selection changes
+			document.addEventListener('change', (e) => {
+				if (e.target && (e.target.classList.contains('v-dalaman-input-add') || e.target.classList.contains('variant-cb-add'))) {
+					updateName();
+				}
+			});
 		}
 
 
@@ -2568,6 +2585,9 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 							// Remove query param without reload
 							const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
 							window.history.pushState({path:newUrl}, '', newUrl);
+
+							// Re-run updateName at the end of population to ensure everything is synced
+							updateName();
 						}
 					} catch(e) {
 						console.error("Gagal mengambil data Pra-Produk", e);
