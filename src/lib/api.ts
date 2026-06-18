@@ -72,7 +72,7 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
 
 export async function uploadToLaravel(file: File, folder?: string): Promise<string> {
   const formData = new FormData();
-  formData.append("image", file);
+  formData.append("image", file, file.name);
   if (folder) {
     formData.append("folder", folder);
   }
