@@ -3,6 +3,8 @@ export const prerender = false;
 import Layout from '../../layouts/Layout.astro';
 import { apiFetch } from '../../lib/api';
 
+const PUBLIC_API_URL = import.meta.env.PUBLIC_API_URL || "https://api.katalog.batik.gooproper.id/api";
+
 const { id } = Astro.params;
 
 let product: any = null;
@@ -847,6 +849,140 @@ function renderMarkdown(md: string): string {
 		}
 	</style>
 
+	<script is:inline define:vars={{
+		productId: product?.id,
+		kodeitem: product?.item_code || product?.code,
+		webStock: product?.total_inventory ?? product?.total_stock ?? 0,
+		PUBLIC_API_URL
+	}}>
+		// Auto-Sync Background Task
+		if (productId && kodeitem) {
+			const checkAndSyncStock = async () => {
+				try {
+					const erpUrl = `https://noir.grace.gracianna.web.id/api/v1/beli1?per_page=20&q=${encodeURIComponent(kodeitem)}`;
+					const res = await fetch(erpUrl);
+					const json = await res.json();
+					
+					if (json.success && json.data && json.data.length > 0) {
+						const item = json.data.find(i => i.kode === kodeitem || i.kodeitem === kodeitem);
+						if (item) {
+							let erpStock = 0;
+							// 1. Map ERP stock to sizes
+							const sizeMap = {};
+							if (item.details && Array.isArray(item.details)) {
+								item.details.forEach(detail => {
+									let sz = (detail.size || '').trim().toUpperCase();
+									if (sz === '00') sz = 'ALL SIZE';
+									if (/^\d+L$/.test(sz)) sz = sz.replace('L', 'XL');
+									const isSF = /\bSF\b/i.test(detail.nama || '') || (detail.nama || '').trim().toUpperCase().endsWith('SF');
+									if (isSF) {
+										sz = sz + ' SF';
+									}
+									const stock = parseInt(detail.stok || 0);
+									if (!sizeMap[sz]) {
+										sizeMap[sz] = stock;
+									} else {
+										sizeMap[sz] += stock;
+									}
+								});
+							}
+
+							// 2. Update existing variants stock and detect actual changes
+							let needsUpdate = false;
+							const existingVariants = product.variants || product.product_variants || [];
+							const updatedVariants = existingVariants.map(v => {
+								let varName = (v.size_name || '').toUpperCase();
+								let baseSz = varName;
+								if (varName.includes(' - ')) {
+									baseSz = varName.split(' - ')[0].trim();
+								}
+								
+								let newStock = sizeMap[baseSz] || 0;
+								let currentStock = parseInt(v.stock || 0);
+								
+								if (newStock !== currentStock) {
+									needsUpdate = true;
+								}
+								
+								return {
+									size_name: v.size_name,
+									sku: v.sku,
+									price: parseFloat(v.price || product.price || 0),
+									stock: newStock,
+									dalaman: v.dalaman || null
+								};
+							});
+							
+							if (needsUpdate) {
+								console.log(`[Auto-Sync] Varian terdeteksi berubah, melakukan sinkronisasi...`);
+								
+								// Tampilkan indikator loading kecil
+								const stockBadge = document.querySelector('.status-badge');
+								if(stockBadge) {
+									stockBadge.innerText = 'SINKRONISASI...';
+									stockBadge.style.background = '#f59e0b';
+									stockBadge.style.color = '#fff';
+								}
+
+								// 3. Build Full Valid Payload for Laravel
+								const updatePayload = {
+									name: product.name,
+									price: product.price,
+									type_id: product.type_id || (product.type ? product.type.id : null),
+									category_ids: (product.categories || product.product_categories || []).map(c => c.id || c.category_id),
+									motif_ids: (product.motifs || product.product_motifs || []).map(m => m.id || m.motif_id),
+									colors: product.colors || [],
+									description: product.description || '',
+									code: product.code || '',
+									original_price: product.original_price || 0,
+									item_code: product.item_code || '',
+									image_url: product.image_url || '',
+									images: product.images || [],
+									tokopedia_url: product.tokopedia_url || '',
+									variants: updatedVariants,
+									is_active: product.is_active !== undefined ? product.is_active : true
+								};
+
+								// Panggil backend
+								const updateRes = await fetch(`${PUBLIC_API_URL}/products/${productId}`, {
+									method: 'PUT',
+									headers: {
+										'Content-Type': 'application/json',
+										'Accept': 'application/json'
+									},
+									body: JSON.stringify(updatePayload) 
+								});
+								
+								if (updateRes.ok) {
+									console.log("[Auto-Sync] Berhasil, memuat ulang halaman...");
+									window.location.reload();
+								} else {
+									console.warn("[Auto-Sync] Gagal melakukan sinkronisasi dengan backend, status:", updateRes.status);
+									if(stockBadge) {
+										stockBadge.innerText = 'Sisa ' + webStock;
+										stockBadge.style.background = '#fffbeb';
+										stockBadge.style.color = '#f59e0b';
+									}
+								}
+							} else {
+								console.log("[Auto-Sync] Stok web sudah sesuai dengan ERP.");
+							}
+						}
+					}
+				} catch (e) {
+					console.error("[Auto-Sync] Gagal mengecek ERP", e);
+				}
+			};
+
+			// Jalankan sedikit delay agar tidak memblokir render utama UI
+			setTimeout(checkAndSyncStock, 800);
+		}
+	</script>
+
+	<script is:inline define:vars={{ productData: product, waNumberData: waNumber }}>
+		window.product = productData;
+		window.waNumber = waNumberData;
+	</script>
 	<script is:inline>
 		// Gallery Switcher Logic
 		const mainImg = document.getElementById('main-product-img');

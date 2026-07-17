@@ -8,7 +8,10 @@ const { product: p } = Astro.props;
 
 <tr
     style="border-bottom: 1px solid #f0f0f0; transition: background 0.2s;"
-    class="table-row-hover"
+    class="table-row-hover admin-product-row"
+    data-product-id={p.id}
+    data-kodeitem={p.item_code || p.code}
+    data-stock={p.total_inventory ?? p.total_stock ?? p.stock_accumulated ?? p.stock ?? 0}
 >
     <td style="padding: 1rem;">
         <div style="display: flex; gap: 0.8rem; align-items: center;">
@@ -147,59 +150,67 @@ const { product: p } = Astro.props;
         </form>
     </td>
     <td style="padding: 1rem; text-align: center;">
-        <div style="display: flex; gap: 0.4rem; justify-content: center;">
-            <a
-                href={`/buka-toko/edit/${p.id}`}
-                title="Edit Produk"
-                style="background: #f0f7ff; color: #0070f3; padding: 0.4rem; border-radius: 4px; display: inline-flex; align-items: center; transition: 0.2s;"
-            >
-                <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                >
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4L18.5 2.5z" />
-                </svg>
-            </a>
-            <form
-                method="POST"
-                style="display: inline;"
-                onsubmit="return showDeleteConfirm(this, 'Apakah Anda yakin ingin menghapus produk ini secara permanen?')"
-            >
-                <input
-                    type="hidden"
-                    name="action"
-                    value="delete_product"
-                />
-                <input
-                    type="hidden"
-                    name="id"
-                    value={p.id}
-                />
-                <button
-                    type="submit"
-                    title="Hapus Permanen"
-                    style="border: none; background: #fff5f5; color: #ff4d4d; padding: 0.4rem; border-radius: 4px; cursor: pointer; transition: 0.2s;"
+        <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+            <div style="display: flex; gap: 0.4rem; justify-content: center;">
+                <a
+                    href={`/buka-toko/edit/${p.id}`}
+                    title="Edit Produk"
+                    style="background: #f0f7ff; color: #0070f3; padding: 0.4rem; border-radius: 4px; display: inline-flex; align-items: center; transition: 0.2s;"
                 >
                     <svg
-                        xmlns="http://www.w3.org/2000/svg"
                         width="16"
                         height="16"
-                        fill="currentColor"
-                        viewBox="0 0 16 16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
                     >
-                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z" />
-                        <path
-                            fill-rule="evenodd"
-                            d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"
-                        />
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4L18.5 2.5z" />
                     </svg>
-                </button>
-            </form>
+                </a>
+                <form
+                    method="POST"
+                    style="display: inline;"
+                    onsubmit="return showDeleteConfirm(this, 'Apakah Anda yakin ingin menghapus produk ini secara permanen?')"
+                >
+                    <input
+                        type="hidden"
+                        name="action"
+                        value="delete_product"
+                    />
+                    <input
+                        type="hidden"
+                        name="id"
+                        value={p.id}
+                    />
+                    <button
+                        type="submit"
+                        title="Hapus Permanen"
+                        style="border: none; background: #fff5f5; color: #ff4d4d; padding: 0.4rem; border-radius: 4px; cursor: pointer; transition: 0.2s;"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            fill="currentColor"
+                            viewBox="0 0 16 16"
+                        >
+                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z" />
+                            <path
+                                fill-rule="evenodd"
+                                d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"
+                            />
+                        </svg>
+                    </button>
+                </form>
+            </div>
+            
+            <div class="manual-sync-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; margin-top: 4px;">
+                <button type="button" class="btn-cek-stok" style="background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; padding: 4px 8px; font-size: 0.65rem; border-radius: 4px; font-weight: 600; cursor: pointer; transition: 0.2s;">Cek Stok ERP</button>
+                <span class="sync-msg" style="display: none; font-size: 0.6rem; font-weight: 600;"></span>
+                <button type="button" class="btn-sync-stock" style="display: none; background: #f59e0b; color: white; border: none; padding: 4px 8px; font-size: 0.65rem; border-radius: 4px; font-weight: 600; cursor: pointer;">Sync</button>
+            </div>
         </div>
     </td>
 </tr>

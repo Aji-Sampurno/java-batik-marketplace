@@ -403,6 +403,115 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									}
 								};
 								
+								// Delegate event listener for manual stock check
+								document.addEventListener('click', async (e) => {
+									if (e.target && e.target.classList.contains('btn-cek-stok')) {
+										const btn = e.target;
+										const row = btn.closest('.admin-product-row');
+										if (!row) return;
+
+										const kodeitem = row.getAttribute('data-kodeitem');
+										const currentStock = parseInt(row.getAttribute('data-stock') || '0', 10);
+										const productId = row.getAttribute('data-product-id');
+										
+										if (!kodeitem || kodeitem === '-' || kodeitem === 'null') {
+											alert("Kode item tidak valid untuk cek stok.");
+											return;
+										}
+
+										const syncMsg = row.querySelector('.sync-msg');
+										const btnSync = row.querySelector('.btn-sync-stock');
+
+										btn.disabled = true;
+										btn.innerText = 'Mengecek...';
+										syncMsg.style.display = 'none';
+										btnSync.style.display = 'none';
+
+										try {
+											const url = `https://noir.grace.gracianna.web.id/api/v1/beli1?per_page=20&q=${encodeURIComponent(kodeitem)}`;
+											const res = await fetch(url);
+											const json = await res.json();
+											
+											if (json.success && json.data && json.data.length > 0) {
+												const item = json.data.find(i => i.kode === kodeitem || i.kodeitem === kodeitem);
+												if (item) {
+													let erpStock = 0;
+													if (item.details && Array.isArray(item.details)) {
+														erpStock = item.details.reduce((sum, d) => sum + parseInt(d.stok || 0, 10), 0);
+													}
+													
+													if (erpStock !== currentStock) {
+														btn.style.display = 'none';
+														syncMsg.style.display = 'inline-block';
+														syncMsg.style.color = '#b91c1c';
+														syncMsg.innerText = `ERP: ${erpStock} (Web: ${currentStock})`;
+														
+														btnSync.style.display = 'inline-block';
+														btnSync.onclick = async () => {
+															btnSync.disabled = true;
+															btnSync.innerText = 'Syncing...';
+															try {
+																const updateUrl = `${publicApiUrl}/products/${productId}`;
+																const updateRes = await fetch(updateUrl, {
+																	method: 'PUT',
+																	headers: {
+																		'Content-Type': 'application/json',
+																		'Accept': 'application/json'
+																	},
+																	body: JSON.stringify({ _force_sync: true }) 
+																});
+																
+																if (updateRes.ok) {
+																	btnSync.innerText = 'Tersinkronisasi';
+																	btnSync.style.background = '#10b981';
+																	setTimeout(() => {
+																		btnSync.style.display = 'none';
+																		syncMsg.style.display = 'none';
+																		btn.style.display = 'inline-block';
+																		btn.innerText = 'Cek Stok ERP';
+																		btn.disabled = false;
+																		const stockElement = row.querySelector('[data-stock]');
+																		if(stockElement) stockElement.setAttribute('data-stock', erpStock);
+																	}, 2000);
+																} else {
+																	btnSync.innerText = 'Gagal';
+																	btnSync.disabled = false;
+																}
+															} catch(e) {
+																btnSync.innerText = 'Gagal';
+																btnSync.disabled = false;
+															}
+														};
+													} else {
+														btn.innerText = 'Stok Sesuai';
+														btn.style.background = '#f0fdf4';
+														btn.style.color = '#166534';
+														btn.style.borderColor = '#bbf7d0';
+														setTimeout(() => {
+															btn.innerText = 'Cek Stok ERP';
+															btn.style.background = '#f8fafc';
+															btn.style.color = '#475569';
+															btn.style.borderColor = '#cbd5e1';
+															btn.disabled = false;
+														}, 3000);
+													}
+												} else {
+													btn.innerText = 'Tdk Ditemukan (List)';
+													btn.disabled = false;
+													console.log("Kode tidak cocok di hasil:", json.data.map(d=>d.kodeitem));
+												}
+											} else {
+												btn.innerText = 'Tdk Ditemukan (API)';
+												btn.disabled = false;
+											}
+										} catch (err) {
+											console.error("Gagal cek stok", err);
+											btn.innerText = 'Gagal Cek';
+											btn.disabled = false;
+										}
+									}
+								});
+
 								// CLIENT DATA SEQUENCE: Run ALL fetches asynchronously right after DOM is interactive
 								const runDashboardHydration = async () => {
 									// 1. Trigger table load immediately in background!
