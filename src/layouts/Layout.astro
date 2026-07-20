@@ -50,7 +50,8 @@ console.log("DEBUG: Batik Offline Parsing v4", {
 });
 
 // Logic for Text Logo (Split by space)
-const nameParts = settings.site_name.split(" ");
+const safeSiteName = settings?.site_name || "Batik Nusantara";
+const nameParts = safeSiteName.split(" ");
 const firstWord = nameParts[0];
 const restWords = nameParts.slice(1).join(" ");
 

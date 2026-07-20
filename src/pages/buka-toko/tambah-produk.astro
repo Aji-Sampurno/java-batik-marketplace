@@ -4,6 +4,7 @@ import Layout from "../../layouts/Layout.astro";
 import { apiFetch, uploadToLaravel } from "../../lib/api";
 import DeleteConfirmModal from "../../components/DeleteConfirmModal.astro";
 import sharp from "sharp";
+import fs from "node:fs";
 
 // Check for session (Authentication Gate)
 const session = Astro.cookies.get("admin_session");
@@ -260,20 +261,15 @@ if (Astro.request.method === "POST") {
 
 				// Fetch logo buffer once if needed
 				let logoBuffer: Buffer | null = null;
-				if (fromPraproduk && settings?.logo_url) {
+				if (fromPraproduk) {
 					try {
-						// Convert Laravel URL to absolute if necessary, or just fetch
-						const logoUrlStr = settings.logo_url.startsWith("http")
-							? settings.logo_url
-							: `https://api.katalog.batik.gooproper.id${settings.logo_url}`;
-						const logoRes = await fetch(logoUrlStr);
-						if (logoRes.ok) {
-							logoBuffer = Buffer.from(
-								await logoRes.arrayBuffer(),
-							);
-						}
+						// Selalu pakai logo lokal java_batik_gold.png
+						logoBuffer = fs.readFileSync(
+							process.cwd() +
+								"/public/images/java_batik_gold.png",
+						);
 					} catch (e) {
-						console.error("Failed to fetch logo for watermark", e);
+						console.error("Failed to load java_batik_gold.png", e);
 					}
 				}
 
@@ -296,9 +292,9 @@ if (Astro.request.method === "POST") {
 
 									// Add Logo top right
 									if (logoBuffer) {
-										const logoWidth = Math.max(
-											Math.round(width * 0.15),
-											50,
+										// Logo width = 18% of image width
+										const logoWidth = Math.round(
+											width * 0.18,
 										);
 										const resizedLogo = await sharp(
 											logoBuffer,
@@ -309,9 +305,21 @@ if (Astro.request.method === "POST") {
 											})
 											.toBuffer();
 
+										const resizedMeta =
+											await sharp(resizedLogo).metadata();
+										const actualLogoW =
+											resizedMeta.width || logoWidth;
+										const logoMargin = Math.round(
+											width * 0.04,
+										);
+
 										compositeArr.push({
 											input: resizedLogo,
-											gravity: "northeast",
+											top: logoMargin,
+											left:
+												width -
+												actualLogoW -
+												logoMargin,
 											blend: "over",
 										});
 									}
@@ -321,22 +329,25 @@ if (Astro.request.method === "POST") {
 										.toString()
 										.trim();
 									if (actualCode) {
+										// Font size ~2.2% of height
 										const fontSize = Math.max(
-											Math.round(height * 0.025),
-											14,
+											Math.round(height * 0.022),
+											12,
 										);
-										const padding = Math.round(
-											fontSize * 0.5,
+										// margin kanan 4%, margin bawah 5% dari height
+										const textMarginRight = Math.round(
+											width * 0.04,
 										);
-										// We create SVG text
+										const textY =
+											height - Math.round(height * 0.05);
 										const svgText = `
 											<svg width="${width}" height="${height}">
 												<style>
 													.title { fill: white; font-size: ${fontSize}px; font-weight: bold; font-family: sans-serif; }
 													.shadow { fill: black; font-size: ${fontSize}px; font-weight: bold; font-family: sans-serif; }
 												</style>
-												<text x="${width - padding + 2}" y="${height - padding + 2}" text-anchor="end" class="shadow">${actualCode}</text>
-												<text x="${width - padding}" y="${height - padding}" text-anchor="end" class="title">${actualCode}</text>
+												<text x="${width - textMarginRight + 2}" y="${textY + 2}" text-anchor="end" class="shadow">${actualCode}</text>
+												<text x="${width - textMarginRight}" y="${textY}" text-anchor="end" class="title">${actualCode}</text>
 											</svg>
 										`;
 										compositeArr.push({
@@ -3023,18 +3034,30 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 
 							function selectL2ByName(l2Name) {
 								if (!l2Name) return;
-								const l2Row = document.getElementById("l2-selection-row");
+								const l2Row =
+									document.getElementById("l2-selection-row");
 								if (!l2Row) return;
 
-								const labels = l2Row.querySelectorAll("label.motif-style-label");
+								const labels = l2Row.querySelectorAll(
+									"label.motif-style-label",
+								);
 								let found = false;
 								for (const lbl of labels) {
-									const text = lbl.textContent.trim().toLowerCase();
-									if (text === l2Name.toLowerCase() || text.includes(l2Name.toLowerCase())) {
-										const checkbox = lbl.querySelector('input[type="checkbox"]');
+									const text = lbl.textContent
+										.trim()
+										.toLowerCase();
+									if (
+										text === l2Name.toLowerCase() ||
+										text.includes(l2Name.toLowerCase())
+									) {
+										const checkbox = lbl.querySelector(
+											'input[type="checkbox"]',
+										);
 										if (checkbox) {
 											checkbox.checked = true;
-											checkbox.dispatchEvent(new Event("change"));
+											checkbox.dispatchEvent(
+												new Event("change"),
+											);
 											found = true;
 											break;
 										}
@@ -3042,8 +3065,10 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								}
 
 								if (!found) {
-									const customInput = document.getElementById("new-l2-input");
-									const addBtn = document.getElementById("add-l2-btn");
+									const customInput =
+										document.getElementById("new-l2-input");
+									const addBtn =
+										document.getElementById("add-l2-btn");
 									if (customInput && addBtn) {
 										customInput.value = l2Name;
 										addBtn.click();
@@ -3053,15 +3078,25 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 
 							function selectMotifByName(motifName) {
 								if (!motifName) return;
-								const motifGrid = document.getElementById("motif-grid");
+								const motifGrid =
+									document.getElementById("motif-grid");
 								if (!motifGrid) return;
 
-								const labels = motifGrid.querySelectorAll("label.motif-style-label");
+								const labels = motifGrid.querySelectorAll(
+									"label.motif-style-label",
+								);
 								let found = false;
 								for (const lbl of labels) {
-									const text = lbl.textContent.trim().toLowerCase();
-									if (text === motifName.toLowerCase() || text.includes(motifName.toLowerCase())) {
-										const checkbox = lbl.querySelector('input[type="checkbox"]');
+									const text = lbl.textContent
+										.trim()
+										.toLowerCase();
+									if (
+										text === motifName.toLowerCase() ||
+										text.includes(motifName.toLowerCase())
+									) {
+										const checkbox = lbl.querySelector(
+											'input[type="checkbox"]',
+										);
 										if (checkbox) {
 											checkbox.checked = true;
 											found = true;
@@ -3071,8 +3106,14 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								}
 
 								if (!found) {
-									const customInput = document.getElementById("new-motif-input");
-									const addBtn = document.getElementById("add-motif-btn");
+									const customInput =
+										document.getElementById(
+											"new-motif-input",
+										);
+									const addBtn =
+										document.getElementById(
+											"add-motif-btn",
+										);
 									if (customInput && addBtn) {
 										customInput.value = motifName;
 										addBtn.click();
@@ -3236,12 +3277,15 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								}
 
 								let typeLetter = "";
-								const activeCode = item.kode || item.kodeitem || "";
-								
+								const activeCode =
+									item.kode || item.kodeitem || "";
+
 								if (activeCode.length === 1) {
 									typeLetter = activeCode.toUpperCase();
 								} else if (activeCode.length >= 2) {
-									typeLetter = activeCode.charAt(1).toUpperCase();
+									typeLetter = activeCode
+										.charAt(1)
+										.toUpperCase();
 								}
 
 								const t2Map = {
@@ -3265,7 +3309,9 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									X: "GAMIS",
 								};
 
-								let categoryName = typeLetter ? t2Map[typeLetter] : null;
+								let categoryName = typeLetter
+									? t2Map[typeLetter]
+									: null;
 
 								// Jika mapping dari kode gagal, gunakan nama kategori dari API
 								if (!categoryName && item.kategori) {
@@ -3275,16 +3321,21 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								if (categoryName) {
 									console.log(
 										"DEBUG: Auto-detecting category:",
-										"kode=", activeCode,
-										"letter=", typeLetter,
-										"->", categoryName,
+										"kode=",
+										activeCode,
+										"letter=",
+										typeLetter,
+										"->",
+										categoryName,
 									);
 									selectCategoryByName(categoryName);
 								}
 
 								let motifLetter = "";
 								if (activeCode.length >= 4) {
-									motifLetter = activeCode.charAt(3).toUpperCase();
+									motifLetter = activeCode
+										.charAt(3)
+										.toUpperCase();
 								}
 
 								const t3Map = {
@@ -3310,27 +3361,55 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									I: "BABY",
 									V: "VISCOS",
 									W: "SILKY",
-									X: "KREP"
+									X: "KREP",
 								};
 
 								if (motifLetter && t3Map[motifLetter]) {
-									console.log("DEBUG: Auto-detecting L2/Bahan based on 4th letter:", motifLetter, "->", t3Map[motifLetter]);
+									console.log(
+										"DEBUG: Auto-detecting L2/Bahan based on 4th letter:",
+										motifLetter,
+										"->",
+										t3Map[motifLetter],
+									);
 									selectL2ByName(t3Map[motifLetter]);
 								}
 
 								// Deteksi Kain Gulungan (Kode awalan G atau I atau nama mengandung GULUNGAN)
-								const isKainGulungan = (activeCode.length > 0 && (activeCode.charAt(0).toUpperCase() === 'G' || activeCode.charAt(0).toUpperCase() === 'I')) || (item.nama && item.nama.toUpperCase().includes("GULUNGAN"));
+								const isKainGulungan =
+									(activeCode.length > 0 &&
+										(activeCode.charAt(0).toUpperCase() ===
+											"G" ||
+											activeCode
+												.charAt(0)
+												.toUpperCase() === "I")) ||
+									(item.nama &&
+										item.nama
+											.toUpperCase()
+											.includes("GULUNGAN"));
 								let calculatedPrice = item.hjual;
 								if (isKainGulungan) {
 									calculatedPrice = "285000";
-									console.log("DEBUG: Kain Gulungan terdeteksi. Mengatur harga ke 285.000/meter");
-									
-									const priceContainer = document.getElementById("product_price_input_display")?.parentElement;
-									if (priceContainer && !document.getElementById("gulungan_note")) {
-										const note = document.createElement("div");
+									console.log(
+										"DEBUG: Kain Gulungan terdeteksi. Mengatur harga ke 285.000/meter",
+									);
+
+									const priceContainer =
+										document.getElementById(
+											"product_price_input_display",
+										)?.parentElement;
+									if (
+										priceContainer &&
+										!document.getElementById(
+											"gulungan_note",
+										)
+									) {
+										const note =
+											document.createElement("div");
 										note.id = "gulungan_note";
-										note.style.cssText = "font-size: 0.65rem; color: #0284c7; margin-top: 0.4rem; font-weight: 600;";
-										note.innerHTML = "✨ Kain Gulungan Terdeteksi: Harga diatur otomatis ke Rp 285.000 / meter.";
+										note.style.cssText =
+											"font-size: 0.65rem; color: #0284c7; margin-top: 0.4rem; font-weight: 600;";
+										note.innerHTML =
+											"✨ Kain Gulungan Terdeteksi: Harga diatur otomatis ke Rp 285.000 / meter.";
 										priceContainer.appendChild(note);
 									}
 								}
@@ -3345,7 +3424,8 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 											"product_price_input_display",
 										);
 									if (priceInputHidden) {
-										priceInputHidden.value = calculatedPrice;
+										priceInputHidden.value =
+											calculatedPrice;
 										priceInputHidden.dispatchEvent(
 											new Event("input", {
 												bubbles: true,
@@ -3353,9 +3433,10 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 										);
 									}
 									if (priceInputDisplay) {
-										priceInputDisplay.value = parseInt(
-											calculatedPrice,
-										).toLocaleString("id-ID");
+										priceInputDisplay.value =
+											parseInt(
+												calculatedPrice,
+											).toLocaleString("id-ID");
 									}
 								}
 
@@ -3369,7 +3450,9 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 										if (Array.isArray(detailsArray)) {
 											// Override hjual if Kain Gulungan
 											if (isKainGulungan) {
-												detailsArray.forEach(d => d.hjual = "285000");
+												detailsArray.forEach(
+													(d) => (d.hjual = "285000"),
+												);
 											}
 											// 1. SISTEM DETEKSI TIPE SETELAN DI FRONTEND
 											const isSetelan =
@@ -4180,18 +4263,14 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								: "";
 
 							let logoImg = null;
-							if (isPraproduk && logoUrl) {
+							if (isPraproduk) {
 								try {
-									// using proxy if it's external, but we can try loading via Image with crossOrigin
-									const proxyUrl = logoUrl.startsWith("http")
-										? logoUrl
-										: `https://api.katalog.batik.gooproper.id${logoUrl}`;
 									logoImg = new Image();
-									logoImg.crossOrigin = "Anonymous";
 									await new Promise((resolve) => {
 										logoImg.onload = resolve;
-										logoImg.onerror = () => resolve(); // continue on error
-										logoImg.src = `/api/proxy-image?url=${encodeURIComponent(proxyUrl)}`;
+										logoImg.onerror = () => resolve();
+										logoImg.src =
+											"/images/java_batik_gold.png";
 									});
 								} catch (err) {
 									console.error(
@@ -4264,13 +4343,14 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 										ctx.drawImage(img, 0, 0, width, height);
 
 										if (isPraproduk) {
-											// Draw logo (15% of width, without enlargement)
+											// Draw logo 18% of width with small margin
 											if (logoImg && logoImg.width > 0) {
-												let logoW = Math.max(
-													width * 0.15,
-													20,
+												const logoMargin = Math.round(
+													width * 0.04,
 												);
-												// Prevent upscaling which causes blurriness
+												let logoW = Math.round(
+													width * 0.18,
+												);
 												if (logoW > logoImg.width) {
 													logoW = logoImg.width;
 												}
@@ -4283,8 +4363,8 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 													"high";
 												ctx.drawImage(
 													logoImg,
-													width - logoW,
-													0,
+													width - logoW - logoMargin,
+													logoMargin,
 													logoW,
 													logoH,
 												);
@@ -4299,30 +4379,32 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 
 											if (codeTxt) {
 												const fontSize = Math.max(
-													Math.round(height * 0.025),
-													14,
+													Math.round(height * 0.022),
+													12,
 												);
-												const padding = Math.round(
-													fontSize * 0.5,
-												);
+												const textMarginRight =
+													Math.round(width * 0.04);
+												const textY =
+													height -
+													Math.round(height * 0.05);
 												ctx.font = `bold ${fontSize}px sans-serif`;
 												ctx.textAlign = "right";
-												ctx.textBaseline = "bottom";
+												ctx.textBaseline = "alphabetic";
 
 												// Draw shadow
 												ctx.fillStyle = "black";
 												ctx.fillText(
 													codeTxt,
-													width - padding + 1,
-													height - padding + 1,
+													width - textMarginRight + 1,
+													textY + 1,
 												);
 
 												// Draw white text
 												ctx.fillStyle = "white";
 												ctx.fillText(
 													codeTxt,
-													width - padding,
-													height - padding,
+													width - textMarginRight,
+													textY,
 												);
 											}
 										}
