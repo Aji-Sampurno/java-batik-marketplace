@@ -261,6 +261,7 @@ if (Astro.request.method === "POST") {
 
 				// Fetch logo buffer once if needed
 				let logoBuffer: Buffer | null = null;
+				let fontBase64 = "";
 				if (fromPraproduk) {
 					try {
 						// Selalu pakai logo lokal java_batik_gold.png
@@ -268,8 +269,13 @@ if (Astro.request.method === "POST") {
 							process.cwd() +
 								"/public/images/java_batik_gold.png",
 						);
+						const fontBuffer = fs.readFileSync(
+							process.cwd() +
+								"/public/fonts/Roboto-Bold.ttf",
+						);
+						fontBase64 = fontBuffer.toString("base64");
 					} catch (e) {
-						console.error("Failed to load java_batik_gold.png", e);
+						console.error("Failed to load assets", e);
 					}
 				}
 
@@ -343,8 +349,12 @@ if (Astro.request.method === "POST") {
 										const svgText = `
 											<svg width="${width}" height="${height}">
 												<style>
-													.title { fill: white; font-size: ${fontSize}px; font-weight: bold; font-family: sans-serif; }
-													.shadow { fill: black; font-size: ${fontSize}px; font-weight: bold; font-family: sans-serif; }
+													@font-face {
+														font-family: 'Roboto';
+														src: url('data:font/ttf;base64,${fontBase64}');
+													}
+													.title { fill: white; font-size: ${fontSize}px; font-weight: bold; font-family: 'Roboto', sans-serif; }
+													.shadow { fill: black; font-size: ${fontSize}px; font-weight: bold; font-family: 'Roboto', sans-serif; }
 												</style>
 												<text x="${width - textMarginRight + 2}" y="${textY + 2}" text-anchor="end" class="shadow">${actualCode}</text>
 												<text x="${width - textMarginRight}" y="${textY}" text-anchor="end" class="title">${actualCode}</text>
