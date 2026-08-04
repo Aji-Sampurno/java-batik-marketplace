@@ -3988,13 +3988,24 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 															sz = sz + " SF";
 														}
 
+														let detailDivider = priceDivider;
+														if (detail.nama) {
+															const dMatch = (detail.nama || '').toString().trim().match(/^(\d+(?:\.\d+)?)/);
+															if (dMatch) {
+																const dNum = parseFloat(dMatch[1]);
+																if (dNum > 1 && dNum <= 20 && (dNum % 0.5 === 0)) {
+																	detailDivider = dNum;
+																}
+															}
+														}
+
 														let price =
 															parseFloat(
 																detail.hjual ||
 																	0,
 															);
-														if (priceDivider > 1 && price > 0) {
-															price = Math.round(price / priceDivider);
+														if (detailDivider > 1 && price > 0) {
+															price = Math.round(price / detailDivider);
 														}
 														const stock = parseInt(
 															detail.stok || 0,
