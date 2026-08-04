@@ -51,6 +51,27 @@ const waNumber = settings.contact_whatsapp || "628123456789";
 const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${product.name} (${product.code || ''}). Apakah masih tersedia?`);
 const isOutOfStock = !product.is_active || product.total_stock === 0 || product.stock_status === 'habis';
 
+const colorsList: string[] = product.colors || [];
+const imagesList: string[] = product.images || (product.image_url ? [product.image_url] : []);
+
+let detectedColors: string[] = [...colorsList];
+if (detectedColors.length === 0) {
+  const knownColors = ["HITAM","PUTIH","MERAH","KUNING","HIJAU","BIRU","COKLAT","BROWN","BLACK","RED","BLUE","GREEN","WHITE","YELLOW","ORANGE","PINK","ABU-ABU","GREY","GRAY","KREM","UNGU","NAVY","MAROON","SOGA","TERACOTTA","PEACH","LAVENDER","MINT","OLIVE","DENIM","DUSTY","ROSE","GOLD","SILVER","TOSCA","KHAKI"];
+  const nameUpper = (product.name || '').toUpperCase();
+  const vars = product.variants || product.product_variants || [];
+  const found = new Set<string>();
+  knownColors.forEach(c => {
+    if (nameUpper.includes(c)) found.add(c);
+  });
+  vars.forEach((v: any) => {
+    const vName = (v.size_name || v.name || '').toUpperCase();
+    knownColors.forEach(c => {
+      if (vName.includes(c)) found.add(c);
+    });
+  });
+  detectedColors = Array.from(found);
+}
+
 function renderMarkdown(md: string): string {
   if (!md) return '';
   
@@ -186,6 +207,34 @@ function renderMarkdown(md: string): string {
 								{productMotifs.map((m: string) => <span class="motif-tag">{m}</span>)}
 							</div>
 						</div>
+						{detectedColors.length > 0 && (
+							<div class="meta-item" style="margin-top: 1rem; margin-bottom: 0.5rem;">
+								<span class="meta-label" style="font-weight: 700; color: #1e293b; display: block; margin-bottom: 0.5rem;">
+									Pilihan Warna ({detectedColors.length})
+								</span>
+								<div class="color-swatch-list" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+									{detectedColors.map((colorName: string, idx: number) => {
+										let matchedImg = imagesList[idx % imagesList.length] || product.image_url;
+										const searchColor = colorName.toLowerCase();
+										const foundImg = imagesList.find((imgUrl: string) => imgUrl.toLowerCase().includes(searchColor));
+										if (foundImg) matchedImg = foundImg;
+
+										return (
+											<button
+												type="button"
+												class={`color-swatch-btn ${idx === 0 ? 'active' : ''}`}
+												data-color={colorName}
+												data-image={matchedImg}
+												style="display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.95rem; border-radius: 8px; border: 2px solid #e2e8f0; background: #fff; cursor: pointer; transition: all 0.2s; font-size: 0.85rem; font-weight: 600; color: #334155;"
+											>
+												<span style="width: 12px; height: 12px; border-radius: 50%; background-color: #8c7851; border: 1px solid rgba(0,0,0,0.15); display: inline-block;"></span>
+												{colorName}
+											</button>
+										);
+									})}
+								</div>
+							</div>
+						)}
 						{(product.variants || product.product_variants || []).length > 0 ? (
 							<div class="meta-item" style="margin-top: 1rem;">
 								<span class="meta-label" style="font-weight: 700; color: #1e293b;">Pilihan Ukuran & Model</span>
@@ -999,7 +1048,43 @@ function renderMarkdown(md: string): string {
 					}
 				});
 			});
-		}		// Variant Selection Logic
+		}
+
+		// Color Swatch Click Handler -> Instantly switches main image according to selected color
+		const colorBtns = document.querySelectorAll('.color-swatch-btn');
+		if (colorBtns.length > 0) {
+			colorBtns.forEach(btn => {
+				btn.addEventListener('click', () => {
+					const colorImg = btn.getAttribute('data-image');
+					if (mainImg && colorImg) {
+						mainImg.style.opacity = '0.3';
+						setTimeout(() => {
+							mainImg.src = colorImg;
+							mainImg.style.opacity = '1';
+						}, 150);
+					}
+					colorBtns.forEach(b => {
+						b.classList.remove('active');
+						b.style.borderColor = '#e2e8f0';
+						b.style.background = '#fff';
+					});
+					btn.classList.add('active');
+					btn.style.borderColor = '#8c7851';
+					btn.style.background = '#fdfbf7';
+
+					if (thumbs) {
+						thumbs.forEach(thumb => {
+							if (thumb.getAttribute('data-src') === colorImg) {
+								thumbs.forEach(t => t.classList.remove('active'));
+								thumb.classList.add('active');
+							}
+						});
+					}
+				});
+			});
+		}
+
+		// Variant Selection Logic
 		const baseSzBtns = document.querySelectorAll('.base-sz-btn');
 		const subVarBtns = document.querySelectorAll('.sub-var-btn');
 		const priceDisplay = document.querySelector('.product-price');

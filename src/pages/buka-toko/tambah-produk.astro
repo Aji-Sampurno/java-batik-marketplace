@@ -384,8 +384,20 @@ if (Astro.request.method === "POST") {
 								}
 							}
 
+							// Auto-rename file to include item code and color variant name for storage & gallery auto-detection
+							const activeColors = (colors || []) as string[];
+							const imageColorTags = formData.getAll("image_color_tags") as string[];
+							const imgIndex = images.length;
+							const actualCode = (item_code || code || "PRODUK").toString().trim().replace(/[^a-zA-Z0-9]/g, '');
+							const colorTag = imageColorTags[imgIndex] || activeColors[imgIndex % (activeColors.length || 1)] || "";
+							const cleanColorTag = colorTag ? `_${colorTag.toUpperCase().replace(/[^A-Z0-9]/g, '')}` : "";
+							const ext = file.name.split('.').pop() || 'jpg';
+							const customName = `${actualCode}${cleanColorTag}_${Date.now()}_${imgIndex + 1}.${ext}`;
+							
+							const renamedFile = new File([await fileToUpload.arrayBuffer()], customName, { type: fileToUpload.type });
+
 							const publicUrl = await uploadToLaravel(
-								fileToUpload,
+								renamedFile,
 								folderPath,
 							);
 							images.push(publicUrl);
@@ -2186,8 +2198,14 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 					}
 
 					const itemCode = itemCodeInput?.value.trim() || "";
+					let displayJenis = jenis;
+					if (displayJenis && displayJenis.toLowerCase().includes("kain")) {
+						if (window.praprodukKainMeter && !displayJenis.includes("Meter")) {
+							displayJenis += " " + window.praprodukKainMeter;
+						}
+					}
 					const parts = [];
-					if (jenis) parts.push(jenis);
+					if (displayJenis) parts.push(displayJenis);
 					if (motifStr) parts.push(motifStr);
 					if (colorStr) parts.push(colorStr);
 					if (jenis && jenis.toLowerCase().includes("kemeja")) {
@@ -2901,19 +2919,22 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 					});
 				}
 
-				// Check URL for Pra-Produk selection
-				document.addEventListener("DOMContentLoaded", async () => {
+				// Check URL for Pra-Produk selection & auto-fill
+				const initPraprodukAutoFill = async () => {
 					setupCustomEntries(); // Fire custom setup bootstrap
 					setupCustomSizeLogic(); // Enable dynamic variant creation
 					const urlParams = new URLSearchParams(
 						window.location.search,
 					);
 					const praProdukId = urlParams.get("use_praproduk");
+					const qParam = urlParams.get("q");
 					console.log(
-						"DEBUG: DOMContentLoaded triggered. use_praproduk ID:",
+						"DEBUG: initPraprodukAutoFill triggered. use_praproduk ID:",
 						praProdukId,
+						"qParam:",
+						qParam,
 					);
-					if (praProdukId) {
+					if (praProdukId || qParam) {
 						const fromPraprodukInput = document.getElementById(
 							"from_praproduk_input",
 						);
@@ -2934,7 +2955,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 										"DEBUG: Parsed stored item:",
 										parsed,
 									);
-									if (parsed && parsed.id == praProdukId) {
+									if (parsed && (parsed.id == praProdukId || String(parsed.id) === String(praProdukId) || (qParam && parsed.kodeitem && parsed.kodeitem.toUpperCase() === qParam.toUpperCase()))) {
 										item = parsed;
 										console.log(
 											"DEBUG: Found matching item in localStorage:",
@@ -2957,37 +2978,54 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 							}
 
 							if (!item) {
-								const qParam = urlParams.get("q");
 								console.log(
-									"DEBUG: LocalStorage empty or mismatched. Fetching from API with qParam:",
+									"DEBUG: LocalStorage empty or mismatched. Fetching from API with qParam/praProdukId:",
 									qParam,
+									praProdukId,
 								);
-								if (qParam) {
+								const queryTerm = qParam || praProdukId;
+								if (queryTerm) {
 									const apiUrl =
 										"https://noir.grace.gracianna.web.id/api/v1/beli1?per_page=12&q=" +
-										encodeURIComponent(qParam);
+										encodeURIComponent(queryTerm);
 									console.log(
 										"DEBUG: Fetching API URL:",
 										apiUrl,
 									);
-									const res = await fetch(apiUrl);
-									const json = await res.json();
-									console.log(
-										"DEBUG: API Response JSON:",
-										json,
-									);
-									if (json.success && json.data) {
-										item = json.data.find(
-											(p) => p.id == praProdukId,
-										);
+									try {
+										const res = await fetch(apiUrl);
+										const json = await res.json();
 										console.log(
-											"DEBUG: Found matched item in API data:",
-											item,
+											"DEBUG: API Response JSON:",
+											json,
 										);
+
+										let listData = [];
+										if (Array.isArray(json)) {
+											listData = json;
+										} else if (Array.isArray(json.data)) {
+											listData = json.data;
+										} else if (json.data && Array.isArray(json.data.data)) {
+											listData = json.data.data;
+										}
+
+										if (listData && listData.length > 0) {
+											item = listData.find(
+												(p) => String(p.id) === String(praProdukId)
+											) || listData.find(
+												(p) => p.kodeitem && qParam && p.kodeitem.toUpperCase() === qParam.toUpperCase()
+											) || listData[0];
+											console.log(
+												"DEBUG: Found matched item in API data:",
+												item,
+											);
+										}
+									} catch (err) {
+										console.error("DEBUG: API fetch error:", err);
 									}
 								} else {
 									console.log(
-										"DEBUG: No q parameter found in URL query string.",
+										"DEBUG: No q or use_praproduk parameter found in URL query string.",
 									);
 								}
 							}
@@ -3173,7 +3211,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									"DEBUG: Item loaded successfully. Starting form auto-fill...",
 								);
 
-								// Auto-detect color from name
+								// Auto-detect color from name (including English color terms like BROWN, BLACK, etc.)
 								const colorList = [
 									"HITAM",
 									"PUTIH",
@@ -3182,7 +3220,18 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									"HIJAU",
 									"BIRU",
 									"COKLAT",
+									"BROWN",
+									"BLACK",
+									"RED",
+									"BLUE",
+									"GREEN",
+									"WHITE",
+									"YELLOW",
+									"ORANGE",
+									"PINK",
 									"ABU-ABU",
+									"GREY",
+									"GRAY",
 									"KREM",
 									"UNGU",
 									"NAVY",
@@ -3198,20 +3247,38 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									"ROSE",
 									"GOLD",
 									"SILVER",
-									"TOSCA",
+									"KHAKI",
 								];
+								const colorsToSelect = new Set();
 								if (item.nama) {
 									const upperName = item.nama.toUpperCase();
 									colorList.forEach((color) => {
 										if (upperName.includes(color)) {
-											console.log(
-												"DEBUG: Auto-detected color from name:",
-												color,
-											);
-											selectColorByName(color);
+											colorsToSelect.add(color);
 										}
 									});
 								}
+								if (item.details) {
+									try {
+										const detailsArr = typeof item.details === "string" ? JSON.parse(item.details) : item.details;
+										if (Array.isArray(detailsArr)) {
+											detailsArr.forEach((d) => {
+												const dUpper = (d.nama || "").toUpperCase();
+												colorList.forEach((color) => {
+													if (dUpper.includes(color)) {
+														colorsToSelect.add(color);
+													}
+												});
+											});
+										}
+									} catch (e) {
+										console.error("Error parsing details for color detection:", e);
+									}
+								}
+								colorsToSelect.forEach((color) => {
+									console.log("DEBUG: Auto-detected color from product/details:", color);
+									selectColorByName(color);
+								});
 
 								// Display Pra-Produk image if exists
 								const photoFile = item.foto || item.img1;
@@ -3279,8 +3346,15 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								const itemCodeInput = document.getElementById(
 									"product_item_code_input",
 								);
-								if (itemCodeInput && item.kodeitem) {
-									itemCodeInput.value = item.kodeitem;
+								if (itemCodeInput && (item.kodeitem || item.kode)) {
+									let rawCode = (item.kodeitem || item.kode || "").trim();
+									// Extract SKU token if rawCode is a full string e.g. "2.00 78122 BROWN"
+									if (rawCode.includes(" ")) {
+										const tokens = rawCode.split(/\s+/);
+										const skuToken = tokens.find(t => /^\d+$/.test(t) || /^[A-Z0-9]{4,}$/i.test(t));
+										if (skuToken) rawCode = skuToken;
+									}
+									itemCodeInput.value = rawCode;
 									itemCodeInput.dispatchEvent(
 										new Event("input", { bubbles: true }),
 									);
@@ -3322,6 +3396,38 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								let categoryName = typeLetter
 									? t2Map[typeLetter]
 									: null;
+
+								// Deteksi jenis Kain & meter kain dari nama produk (misal: "2.00 78122 BROWN" -> 2 meter, jika tidak ada 2.00 -> 1 meter)
+								const itemUpperName = (item.nama || "").toUpperCase();
+								const isKain =
+									(activeCode.length > 0 &&
+										(activeCode.charAt(0).toUpperCase() === "G" ||
+											activeCode.charAt(0).toUpperCase() === "I")) ||
+									itemUpperName.includes("GULUNGAN") ||
+									itemUpperName.includes("KAIN") ||
+									(categoryName && categoryName.toUpperCase().includes("KAIN"));
+
+								if (isKain) {
+									// Cek apakah ada "2.00" (atau desimal meter lain) di nama produk
+									let kainMeter = "1 Meter"; // default 1 meter jika tidak ada 2.00
+									if (itemUpperName.includes("2.00") || /\b2\.00\b/.test(itemUpperName)) {
+										kainMeter = "2 Meter";
+									} else {
+										const decMatch = itemUpperName.match(/\b(\d+\.\d+)\b/);
+										if (decMatch) {
+											const num = parseFloat(decMatch[1]);
+											if (!isNaN(num) && num > 0) {
+												kainMeter = (num % 1 === 0 ? num.toFixed(0) : num) + " Meter";
+											}
+										}
+									}
+									window.praprodukKainMeter = kainMeter;
+									if (!categoryName) {
+										categoryName = "Kain Batik";
+									}
+								} else {
+									window.praprodukKainMeter = "";
+								}
 
 								// Jika mapping dari kode gagal, gunakan nama kategori dari API
 								if (!categoryName && item.kategori) {
@@ -3384,44 +3490,23 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									selectL2ByName(t3Map[motifLetter]);
 								}
 
-								// Deteksi Kain Gulungan (Kode awalan G atau I atau nama mengandung GULUNGAN)
-								const isKainGulungan =
-									(activeCode.length > 0 &&
-										(activeCode.charAt(0).toUpperCase() ===
-											"G" ||
-											activeCode
-												.charAt(0)
-												.toUpperCase() === "I")) ||
-									(item.nama &&
-										item.nama
-											.toUpperCase()
-											.includes("GULUNGAN"));
-								let calculatedPrice = item.hjual;
-								if (isKainGulungan) {
-									calculatedPrice = "285000";
-									console.log(
-										"DEBUG: Kain Gulungan terdeteksi. Mengatur harga ke 285.000/meter",
-									);
-
-									const priceContainer =
-										document.getElementById(
-											"product_price_input_display",
-										)?.parentElement;
-									if (
-										priceContainer &&
-										!document.getElementById(
-											"gulungan_note",
-										)
-									) {
-										const note =
-											document.createElement("div");
-										note.id = "gulungan_note";
-										note.style.cssText =
-											"font-size: 0.65rem; color: #0284c7; margin-top: 0.4rem; font-weight: 600;";
-										note.innerHTML =
-											"✨ Kain Gulungan Terdeteksi: Harga diatur otomatis ke Rp 285.000 / meter.";
-										priceContainer.appendChild(note);
+								// Deteksi divider harga jika desimal awal adalah bilangan bulat (misal 4.00, 2.00, 3.00)
+								let priceDivider = 1;
+								if (item.nama) {
+									const match = (item.nama || '').toString().trim().match(/^(\d+(?:\.\d+)?)/);
+									if (match) {
+										const num = parseFloat(match[1]);
+										if (num > 1 && Number.isInteger(num)) {
+											priceDivider = num;
+										}
 									}
+								}
+								window.praprodukPriceDivider = priceDivider;
+
+								// Ambil harga sesuai database (dibagi priceDivider jika kain bernilai desimal bulat seperti 4.00)
+								let calculatedPrice = item.hjual;
+								if (calculatedPrice && priceDivider > 1) {
+									calculatedPrice = Math.round(parseFloat(calculatedPrice) / priceDivider);
 								}
 
 								if (calculatedPrice) {
@@ -3458,12 +3543,6 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 												? JSON.parse(item.details)
 												: item.details;
 										if (Array.isArray(detailsArray)) {
-											// Override hjual if Kain Gulungan
-											if (isKainGulungan) {
-												detailsArray.forEach(
-													(d) => (d.hjual = "285000"),
-												);
-											}
 											// 1. SISTEM DETEKSI TIPE SETELAN DI FRONTEND
 											const isSetelan =
 												(item.nama || "")
@@ -3854,8 +3933,33 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 														}
 													});
 											} else {
-												// --- LOGIKA ASLI UNTUK NON-SETELAN ---
+												// --- LOGIKA ASLI & DUKUNGAN PEMISAHAN PER WARNA (OPSI A) ---
 												const sizeMap = {};
+												const colorVariantMap = {};
+												const colorTokens = [
+													"BLACK", "KHAKI", "BROWN", "GREY", "ROSE", "GOLD", "WHITE", "RED", "BLUE", "GREEN",
+													"NAVY", "YELLOW", "CREAM", "PURPLE", "ORANGE", "MAROON", "COKLAT", "HITAM", "ABU-ABU",
+													"UNGU", "KUNING", "BIRU", "HIJAU", "KREM", "ORANYE", "SOGA", "PINK", "SILVER", "TOSCA"
+												];
+
+												const extractColor = (det) => {
+													const txt = ((det.nama || '') + ' ' + (det.keterangan || '')).toUpperCase();
+													for (const col of colorTokens) {
+														if (new RegExp('\\b' + col + '\\b', 'i').test(txt)) {
+															return col;
+														}
+													}
+													return null;
+												};
+
+												const uniqueColorsFound = new Set();
+												detailsArray.forEach(d => {
+													const c = extractColor(d);
+													if (c) uniqueColorsFound.add(c);
+												});
+
+												const hasMultipleColors = uniqueColorsFound.size > 1;
+
 												detailsArray.forEach(
 													(detail) => {
 														let sz = (
@@ -3883,17 +3987,21 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 															sz = sz + " SF";
 														}
 
-														const price =
+														let price =
 															parseFloat(
 																detail.hjual ||
 																	0,
 															);
+														if (priceDivider > 1 && price > 0) {
+															price = Math.round(price / priceDivider);
+														}
 														const stock = parseInt(
 															detail.stok || 0,
 														);
 														const dalaman =
 															detail.dalaman ||
 															"";
+														const colorFound = extractColor(detail);
 
 														if (!sizeMap[sz]) {
 															sizeMap[sz] = {
@@ -3923,139 +4031,237 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 																].dalaman =
 																	dalaman;
 															}
-															// Jika tergabung dari beberapa baris ERP, kosongkan SKU agar sinkronisasi backend otomatis fallback ke mode akumulasi ukuran tradisional!
 															sizeMap[sz].kode =
 																"";
+														}
+
+														if (hasMultipleColors && colorFound) {
+															const key = `${colorFound} - ${sz}`;
+															if (!colorVariantMap[key]) {
+																colorVariantMap[key] = { color: colorFound, size: sz, price, stock, dalaman, kode: detail.kode || "" };
+															} else {
+																colorVariantMap[key].stock += stock;
+																if (price > colorVariantMap[key].price) colorVariantMap[key].price = price;
+																if (dalaman) colorVariantMap[key].dalaman = dalaman;
+															}
 														}
 													},
 												);
 
-												// Find all static variant-item-add elements and fill them
-												const isSleeveSplitEnabled =
-													document.getElementById(
-														"toggle_sleeve_options_add",
-													)?.checked;
-
-												document
-													.querySelectorAll(
-														".variant-item-add",
-													)
-													.forEach((parent) => {
-														const cb =
-															parent.querySelector(
-																".variant-cb-add",
-															);
-														if (!cb) return;
-
-														const isInsideCustom =
-															cb.closest(
-																"#custom-sizes-list-container",
-															);
-														if (isInsideCustom)
-															return; // Abaikan input kustom di mode standar
-
-														const isSleeveSplitItem =
-															parent.classList.contains(
-																"variant-sleeve-split",
-															);
-														const isStandardItem =
-															parent.classList.contains(
-																"variant-standard",
-															);
-
-														const shouldProcess =
-															(isSleeveSplitEnabled &&
-																isSleeveSplitItem) ||
-															(!isSleeveSplitEnabled &&
-																isStandardItem);
-
-														const checkboxVal =
-															cb.value
-																.trim()
-																.toUpperCase();
-														let baseSize =
-															checkboxVal;
-														if (
-															checkboxVal.includes(
-																" - LENGAN",
-															)
-														) {
-															baseSize =
-																checkboxVal
-																	.split(
-																		" - LENGAN",
-																	)[0]
-																	.trim();
-														}
-
-														if (
-															shouldProcess &&
-															sizeMap[baseSize]
-														) {
-															const data =
-																sizeMap[
-																	baseSize
-																];
-															cb.checked = true;
-															cb.dispatchEvent(
-																new Event(
-																	"change",
-																),
-															);
-
-															const vPriceDisp =
-																parent.querySelector(
-																	".v-price-input-add",
-																);
-															const vPriceHid =
-																parent.querySelector(
-																	".v-price-hidden-add",
-																);
-															const vStock =
-																parent.querySelector(
-																	".v-stock-input-add",
-																);
-															const vDalaman =
-																parent.querySelector(
-																	".v-dalaman-input-add",
-																);
-															const vSku =
-																parent.querySelector(
-																	".v-sku-input-add",
-																);
-
-															if (vPriceHid)
-																vPriceHid.value =
-																	data.price;
-															if (vPriceDisp)
-																vPriceDisp.value =
-																	new Intl.NumberFormat(
-																		"id-ID",
-																	).format(
-																		data.price,
-																	);
-															if (vStock)
-																vStock.value =
-																	data.stock;
-															if (vDalaman) {
-																vDalaman.value =
-																	data.dalaman ||
-																	"";
-															}
-															if (vSku) {
-																vSku.value =
-																	data.kode ||
-																	"";
-															}
-														} else {
+												if (hasMultipleColors && Object.keys(colorVariantMap).length > 0) {
+													// Matikan seluruh checkbox varian statis reguler
+													document
+														.querySelectorAll(
+															".variant-cb-add",
+														)
+														.forEach((cb) => {
 															cb.checked = false;
 															cb.dispatchEvent(
 																new Event(
 																	"change",
 																),
 															);
-														}
-													});
+														});
+
+													const customCont = document.getElementById("custom-sizes-list-container");
+													if (customCont) {
+														customCont.innerHTML = "";
+														Object.keys(colorVariantMap).forEach((varKey) => {
+															const vData = colorVariantMap[varKey];
+															const row = document.createElement("div");
+															row.className = "variant-item-add variant-standard";
+															row.style.cssText = "display: flex; align-items: center; gap: 1rem; padding: 0.65rem 0.75rem; border: 1px dashed #cbd5e1; border-radius: 6px; background: #ffffff; margin-bottom: 4px;";
+															
+															const formattedPrice = new Intl.NumberFormat("id-ID").format(vData.price);
+															
+															row.innerHTML = `
+																<label style="display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 180px; margin: 0;">
+																	<input type="checkbox" class="variant-cb-add" value="${varKey}" checked style="margin: 0;" />
+																	<span style="display: flex; flex-direction: column;">
+																		<strong style="font-weight: 600; line-height: 1.2;">${varKey}</strong>
+																		<span style="font-size: 0.55rem; font-weight: 700; text-transform: uppercase; color: #0284c7; margin-top: 2px;">+ VARIAN WARNA</span>
+																	</span>
+																</label>
+																<input type="hidden" name="variant_size" value="${varKey}" class="v-size-input-add" />
+																<input type="hidden" name="variant_sku" value="${vData.kode || ''}" class="v-sku-input-add" />
+																<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: flex;">
+																	<div style="flex: 1;">
+																		<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
+																		<input type="text" placeholder="Harga" value="${formattedPrice}" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" class="v-price-input-add" />
+																		<input type="hidden" name="variant_price" value="${vData.price}" class="v-price-hidden-add" />
+																	</div>
+																	<div style="width: 70px;">
+																		<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
+																		<input type="number" name="variant_stock" value="${vData.stock}" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" class="v-stock-input-add" />
+																	</div>
+																	<div style="width: 110px;">
+																		<span style="font-size: 0.6rem; opacity: 0.5;">Dalaman</span>
+																		<select name="variant_dalaman" class="v-dalaman-input-add" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px; appearance: none; background:#fff;">
+																			<option value="" ${!vData.dalaman ? 'selected' : ''}>Tanpa</option>
+																			<option value="F" ${vData.dalaman === 'F' ? 'selected' : ''}>Furing</option>
+																			<option value="TF" ${vData.dalaman === 'TF' ? 'selected' : ''}>Non Furing</option>
+																		</select>
+																	</div>
+																</div>
+															`;
+
+															customCont.appendChild(row);
+
+															const cb = row.querySelector(".variant-cb-add");
+															const hdnPrice = row.querySelector(".v-price-hidden-add");
+															const dispPrice = row.querySelector(".v-price-input-add");
+															const vSizeInput = row.querySelector(".v-size-input-add");
+															const vSkuInput = row.querySelector(".v-sku-input-add");
+															const vStockInput = row.querySelector(".v-stock-input-add");
+															const vDalamanInput = row.querySelector(".v-dalaman-input-add");
+															const vDetails = row.querySelector(".v-details-add");
+
+															cb.addEventListener('change', (e) => {
+																const isChecked = e.target.checked;
+																vSizeInput.disabled = !isChecked;
+																if (vSkuInput) vSkuInput.disabled = !isChecked;
+																dispPrice.disabled = !isChecked;
+																hdnPrice.disabled = !isChecked;
+																vStockInput.disabled = !isChecked;
+																vDalamanInput.disabled = !isChecked;
+																vDetails.style.display = isChecked ? 'flex' : 'none';
+															});
+
+															dispPrice.addEventListener('input', (e) => {
+																let val = e.target.value.replace(/\D/g, '');
+																hdnPrice.value = val;
+																dispPrice.value = val ? Number(val).toLocaleString('id-ID') : "";
+															});
+														});
+													}
+												} else {
+													// Find all static variant-item-add elements and fill them
+													const isSleeveSplitEnabled =
+														document.getElementById(
+															"toggle_sleeve_options_add",
+														)?.checked;
+
+													document
+														.querySelectorAll(
+															".variant-item-add",
+														)
+														.forEach((parent) => {
+															const cb =
+																parent.querySelector(
+																	".variant-cb-add",
+																);
+															if (!cb) return;
+
+															const isInsideCustom =
+																cb.closest(
+																	"#custom-sizes-list-container",
+																);
+															if (isInsideCustom)
+																return; // Abaikan input kustom di mode standar
+
+															const isSleeveSplitItem =
+																parent.classList.contains(
+																	"variant-sleeve-split",
+																);
+															const isStandardItem =
+																parent.classList.contains(
+																	"variant-standard",
+																);
+
+															const shouldProcess =
+																(isSleeveSplitEnabled &&
+																	isSleeveSplitItem) ||
+																(!isSleeveSplitEnabled &&
+																	isStandardItem);
+
+															const checkboxVal =
+																cb.value
+																	.trim()
+																	.toUpperCase();
+															let baseSize =
+																checkboxVal;
+															if (
+																checkboxVal.includes(
+																	" - LENGAN",
+																)
+															) {
+																baseSize =
+																	checkboxVal
+																		.split(
+																			" - LENGAN",
+																		)[0]
+																		.trim();
+															}
+
+															if (
+																shouldProcess &&
+																sizeMap[baseSize]
+															) {
+																const data =
+																	sizeMap[
+																		baseSize
+																	];
+																cb.checked = true;
+																cb.dispatchEvent(
+																	new Event(
+																		"change",
+																	),
+																);
+
+																const vPriceDisp =
+																	parent.querySelector(
+																		".v-price-input-add",
+																	);
+																const vPriceHid =
+																	parent.querySelector(
+																		".v-price-hidden-add",
+																	);
+																const vStock =
+																	parent.querySelector(
+																		".v-stock-input-add",
+																	);
+																const vDalaman =
+																	parent.querySelector(
+																		".v-dalaman-input-add",
+																	);
+																const vSku =
+																	parent.querySelector(
+																		".v-sku-input-add",
+																	);
+
+																if (vPriceHid)
+																	vPriceHid.value =
+																		data.price;
+																if (vPriceDisp)
+																	vPriceDisp.value =
+																		new Intl.NumberFormat(
+																			"id-ID",
+																		).format(
+																			data.price,
+																		);
+																if (vStock)
+																	vStock.value =
+																		data.stock;
+																if (vDalaman) {
+																	vDalaman.value =
+																		data.dalaman ||
+																		"";
+																}
+																if (vSku) {
+																	vSku.value =
+																		data.kode ||
+																		"";
+																}
+															} else {
+																cb.checked = false;
+																cb.dispatchEvent(
+																	new Event(
+																		"change",
+																	),
+																);
+															}
+														});
+												}
 											}
 										}
 									} catch (err) {
@@ -4139,7 +4345,13 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 							console.error("Gagal mengambil data Pra-Produk", e);
 						}
 					}
-				});
+				};
+
+				if (document.readyState === "loading") {
+					document.addEventListener("DOMContentLoaded", initPraprodukAutoFill);
+				} else {
+					initPraprodukAutoFill();
+				}
 
 				// Show loading overlay on form submission
 				const productForm = document.querySelector("form");
@@ -4419,7 +4631,40 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 											}
 										}
 
-										previewContainer.appendChild(canvas);
+										// Wrap canvas in preview card container
+										const cardItem = document.createElement("div");
+										cardItem.className = "preview-card-item";
+										cardItem.style.cssText = "display: flex; flex-direction: column; gap: 6px; align-items: center; background: #ffffff; padding: 6px; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: transform 0.2s;";
+
+										cardItem.appendChild(canvas);
+
+										// Add dropdown for color tagging
+										const colorSelect = document.createElement("select");
+										colorSelect.name = "image_color_tags";
+										colorSelect.className = "img-color-tag-select";
+										colorSelect.style.cssText = "width: 120px; padding: 4px 6px; font-size: 0.7rem; font-weight: 700; border: 1px solid #cbd5e1; border-radius: 4px; background: #f8fafc; color: #0f172a; cursor: pointer; text-align: center;";
+
+										const updateSelectOptions = () => {
+											const checkedInputs = Array.from(document.querySelectorAll('#color-grid input[name="colors"]:checked'));
+											const checkedColors = checkedInputs.map(cb => cb.value.trim()).filter(Boolean);
+											const currentSelected = colorSelect.value;
+											
+											let optionsHtml = '<option value="">-- Tanpa Warna --</option>';
+											if (checkedColors.length > 0) {
+												optionsHtml += checkedColors.map((c, idx) => {
+													const itemIndex = Array.from(previewContainer.children).indexOf(cardItem);
+													const isDefault = !currentSelected && idx === (itemIndex % checkedColors.length);
+													const isSelected = currentSelected === c || isDefault;
+													return `<option value="${c}" ${isSelected ? 'selected' : ''}>🎨 ${c}</option>`;
+												}).join('');
+											}
+											colorSelect.innerHTML = optionsHtml;
+										};
+
+										updateSelectOptions();
+										cardItem.appendChild(colorSelect);
+
+										previewContainer.appendChild(cardItem);
 									};
 									img.src = eResult.target.result;
 								};
@@ -4427,6 +4672,28 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 							});
 						},
 					);
+
+					// Dynamic sync: Update all preview image color dropdowns when colors checkbox grid changes
+					document.addEventListener("change", (e) => {
+						if (e.target && e.target.name === "colors") {
+							const selects = document.querySelectorAll(".img-color-tag-select");
+							const checkedInputs = Array.from(document.querySelectorAll('#color-grid input[name="colors"]:checked'));
+							const checkedColors = checkedInputs.map(cb => cb.value.trim()).filter(Boolean);
+
+							selects.forEach((sel, itemIndex) => {
+								const currentVal = sel.value;
+								let optionsHtml = '<option value="">-- Tanpa Warna --</option>';
+								if (checkedColors.length > 0) {
+									optionsHtml += checkedColors.map((c, idx) => {
+										const isDefault = !currentVal && idx === (itemIndex % checkedColors.length);
+										const isSelected = currentVal === c || isDefault;
+										return `<option value="${c}" ${isSelected ? 'selected' : ''}>🎨 ${c}</option>`;
+									}).join('');
+								}
+								sel.innerHTML = optionsHtml;
+							});
+						}
+					});
 				}
 			</script>
 		</div>

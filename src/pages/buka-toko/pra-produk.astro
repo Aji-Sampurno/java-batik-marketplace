@@ -705,10 +705,24 @@ if (success === "product") {
 					`;
 				}
  
-				const price = parseInt(item.hjual || 0);
+				let priceDivider = 1;
+				if (item.nama) {
+					const match = (item.nama || '').toString().trim().match(/^(\d+(?:\.\d+)?)/);
+					if (match) {
+						const num = parseFloat(match[1]);
+						if (num > 1 && Number.isInteger(num)) {
+							priceDivider = num;
+						}
+					}
+				}
+
+				const rawPrice = parseInt(item.hjual || 0);
+				const price = priceDivider > 1 ? Math.round(rawPrice / priceDivider) : rawPrice;
 				const formattedPrice = price > 0 ? `Rp ${price.toLocaleString('id-ID')}` : 'Harga tidak tersedia';
- 
-				const oldPriceHtml = item.old ? `<span style="font-size: 0.75rem; text-decoration: line-through; color: #94a3b8; margin-left: 0.5rem;">Rp ${parseInt(item.old).toLocaleString('id-ID')}</span>` : '';
+
+				const rawOld = item.old ? parseInt(item.old || 0) : 0;
+				const oldPrice = (priceDivider > 1 && rawOld > 0) ? Math.round(rawOld / priceDivider) : rawOld;
+				const oldPriceHtml = oldPrice > 0 ? `<span style="font-size: 0.75rem; text-decoration: line-through; color: #94a3b8; margin-left: 0.5rem;">Rp ${oldPrice.toLocaleString('id-ID')}</span>` : '';
 
 				let metaItems = [];
 				if (item.total_stok !== undefined) {
@@ -740,6 +754,27 @@ if (success === "product") {
 					</div>
 				` : '';
 
+				let colorsHtml = '';
+				if (item.details && Array.isArray(item.details) && item.details.length > 0) {
+					const knownColors = ["HITAM","PUTIH","MERAH","KUNING","HIJAU","BIRU","COKLAT","BROWN","BLACK","RED","BLUE","GREEN","WHITE","YELLOW","ORANGE","PINK","ABU-ABU","GREY","GRAY","KREM","UNGU","NAVY","MAROON","SOGA","TERACOTTA","PEACH","LAVENDER","MINT","OLIVE","DENIM","DUSTY","ROSE","GOLD","SILVER","TOSCA","KHAKI"];
+					const foundColors = new Set();
+					item.details.forEach(d => {
+						const dName = (d.nama || "").toUpperCase();
+						knownColors.forEach(c => {
+							if (dName.includes(c)) foundColors.add(c);
+						});
+					});
+					if (foundColors.size > 0) {
+						const colorPills = Array.from(foundColors).map(c => `<span style="font-size: 0.65rem; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid #bae6fd;">${c}</span>`).join('');
+						colorsHtml = `
+							<div style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+								<span style="font-size: 0.65rem; color: var(--color-muted); font-weight: 600;">Warna (${foundColors.size}):</span>
+								${colorPills}
+							</div>
+						`;
+					}
+				}
+
 				card.innerHTML = `
 					${photoHtml}
 					<div style="padding: 1.25rem; flex: 1; display: flex; flex-direction: column;">
@@ -755,6 +790,7 @@ if (success === "product") {
 							${item.nama || 'Tanpa Nama'}
 						</h3>
 						${metaHtml}
+						${colorsHtml}
 						<div style="margin-top: auto; padding-top: 1rem;">
 							<div style="font-size: 1.1rem; font-weight: 600; color: var(--color-accent); margin-bottom: 1rem; font-family: var(--font-main);">
 								${formattedPrice}

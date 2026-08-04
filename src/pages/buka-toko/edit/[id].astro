@@ -114,17 +114,31 @@ if (Astro.request.method === "POST") {
 			folderPath = `products/${slug}`;
 		}
 
-		// Handle new image uploads
+		// Handle new image uploads with auto-rename per color variant
 		if (image_files && image_files.length > 0 && image_files[0].size > 0) {
 			const newImages: string[] = [];
-			for (const file of image_files) {
-				if (file.size > 0) {
-					const publicUrl = await uploadToLaravel(file, folderPath);
+			const activeColors = (colors || []) as string[];
+			const itemCodeVal = formData.get("item_code") || code || "PRODUK";
+			const actualCode = itemCodeVal.toString().trim().replace(/[^a-zA-Z0-9]/g, '');
+
+			const imageColorTags = formData.getAll("image_color_tags") as string[];
+			for (let i = 0; i < image_files.length; i++) {
+				const file = image_files[i];
+				if (file && file.size > 0) {
+					const colorTag = imageColorTags[i] || activeColors[i % (activeColors.length || 1)] || "";
+					const cleanColorTag = colorTag ? `_${colorTag.toUpperCase().replace(/[^A-Z0-9]/g, '')}` : "";
+					const ext = file.name.split('.').pop() || 'jpg';
+					const customName = `${actualCode}${cleanColorTag}_${Date.now()}_${i + 1}.${ext}`;
+					
+					const renamedFile = new File([await file.arrayBuffer()], customName, { type: file.type });
+					const publicUrl = await uploadToLaravel(renamedFile, folderPath);
 					newImages.push(publicUrl);
 				}
 			}
-			updatedImages = newImages;
-			primaryImageUrl = newImages[0];
+			if (newImages.length > 0) {
+				updatedImages = newImages;
+				primaryImageUrl = newImages[0];
+			}
 		}
 
 		const variant_sizes = formData.getAll("variant_size") as string[];
@@ -699,6 +713,11 @@ if (Astro.request.method === "POST") {
 							multiple
 							style="width: 100%; padding: 0.6rem; border: 1px solid #ddd; border-radius: var(--radius-sm); background: #fcfcfc; font-size: 0.8rem;"
 						/>
+						<div
+							id="image_upload_preview"
+							style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;"
+						>
+						</div>
 						<p
 							style="font-size: 0.65rem; opacity: 0.5; margin-top: 0.4rem;"
 						>
@@ -1542,6 +1561,97 @@ if (Astro.request.method === "POST") {
 					}
 				}
 			});
+		});
+	}
+
+	// Client-side image preview with Tag Warna dropdown tagging
+	const imageFileInputEdit = document.querySelector('input[name="image_file"]');
+	const previewContainerEdit = document.getElementById("image_upload_preview");
+
+	if (imageFileInputEdit && previewContainerEdit) {
+		imageFileInputEdit.addEventListener("change", function () {
+			previewContainerEdit.innerHTML = "";
+			const files = Array.from(this.files);
+
+			files.forEach((file) => {
+				if (!file.type.startsWith("image/")) return;
+
+				const reader = new FileReader();
+				reader.onload = function (eResult) {
+					const img = new Image();
+					img.onload = function () {
+						const canvas = document.createElement("canvas");
+						const ctx = canvas.getContext("2d");
+						const width = img.width;
+						const height = img.height;
+
+						canvas.width = width;
+						canvas.height = height;
+						canvas.style.width = "110px";
+						canvas.style.height = "auto";
+						canvas.style.borderRadius = "6px";
+						canvas.style.border = "1px solid #ccc";
+
+						ctx.drawImage(img, 0, 0, width, height);
+
+						const cardItem = document.createElement("div");
+						cardItem.className = "preview-card-item";
+						cardItem.style.cssText = "display: flex; flex-direction: column; gap: 6px; align-items: center; background: #ffffff; padding: 6px; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);";
+
+						cardItem.appendChild(canvas);
+
+						const colorSelect = document.createElement("select");
+						colorSelect.name = "image_color_tags";
+						colorSelect.className = "img-color-tag-select-edit";
+						colorSelect.style.cssText = "width: 110px; padding: 4px 6px; font-size: 0.7rem; font-weight: 700; border: 1px solid #cbd5e1; border-radius: 4px; background: #f8fafc; color: #0f172a; cursor: pointer; text-align: center;";
+
+						const updateOptions = () => {
+							const checkedInputs = Array.from(document.querySelectorAll('#color-grid input[name="colors"]:checked'));
+							const checkedColors = checkedInputs.map(cb => cb.value.trim()).filter(Boolean);
+							const currentSelected = colorSelect.value;
+							
+							let optionsHtml = '<option value="">-- Tanpa Warna --</option>';
+							if (checkedColors.length > 0) {
+								optionsHtml += checkedColors.map((c, idx) => {
+									const itemIndex = Array.from(previewContainerEdit.children).indexOf(cardItem);
+									const isDefault = !currentSelected && idx === (itemIndex % checkedColors.length);
+									const isSelected = currentSelected === c || isDefault;
+									return `<option value="${c}" ${isSelected ? 'selected' : ''}>🎨 ${c}</option>`;
+								}).join('');
+							}
+							colorSelect.innerHTML = optionsHtml;
+						};
+
+						updateOptions();
+						cardItem.appendChild(colorSelect);
+
+						previewContainerEdit.appendChild(cardItem);
+					};
+					img.src = eResult.target.result;
+				};
+				reader.readAsDataURL(file);
+			});
+		});
+
+		document.addEventListener("change", (e) => {
+			if (e.target && e.target.name === "colors") {
+				const selects = document.querySelectorAll(".img-color-tag-select-edit");
+				const checkedInputs = Array.from(document.querySelectorAll('#color-grid input[name="colors"]:checked'));
+				const checkedColors = checkedInputs.map(cb => cb.value.trim()).filter(Boolean);
+
+				selects.forEach((sel, itemIndex) => {
+					const currentVal = sel.value;
+					let optionsHtml = '<option value="">-- Tanpa Warna --</option>';
+					if (checkedColors.length > 0) {
+						optionsHtml += checkedColors.map((c, idx) => {
+							const isDefault = !currentVal && idx === (itemIndex % checkedColors.length);
+							const isSelected = currentVal === c || isDefault;
+							return `<option value="${c}" ${isSelected ? 'selected' : ''}>🎨 ${c}</option>`;
+						}).join('');
+					}
+					sel.innerHTML = optionsHtml;
+				});
+			}
 		});
 	}
 </script>
