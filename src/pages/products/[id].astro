@@ -56,7 +56,7 @@ const imagesList: string[] = product.images || (product.image_url ? [product.ima
 
 let detectedColors: string[] = [...colorsList];
 if (detectedColors.length === 0) {
-  const knownColors = ["HITAM","PUTIH","MERAH","KUNING","HIJAU","BIRU","COKLAT","BROWN","BLACK","RED","BLUE","GREEN","WHITE","YELLOW","ORANGE","PINK","ABU-ABU","GREY","GRAY","KREM","UNGU","NAVY","MAROON","SOGA","TERACOTTA","PEACH","LAVENDER","MINT","OLIVE","DENIM","DUSTY","ROSE","GOLD","SILVER","TOSCA","KHAKI"];
+  const knownColors = ["HITAM","PUTIH","MERAH","KUNING","HIJAU","BIRU","COKLAT","BROWN","BLACK","RED","BLUE","GREEN","WHITE","YELLOW","ORANGE","PINK","ABU-ABU","GREY","GRAY","KREM","UNGU","NAVY","MAROON","MARON","SOGA","TERACOTTA","PEACH","LAVENDER","MINT","OLIVE","DENIM","DUSTY","ROSE","GOLD","SILVER","TOSCA","KHAKI"];
   const nameUpper = (product.name || '').toUpperCase();
   const vars = product.variants || product.product_variants || [];
   const found = new Set<string>();

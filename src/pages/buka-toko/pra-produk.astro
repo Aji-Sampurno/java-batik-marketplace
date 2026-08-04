@@ -710,7 +710,7 @@ if (success === "product") {
 					const match = (item.nama || '').toString().trim().match(/^(\d+(?:\.\d+)?)/);
 					if (match) {
 						const num = parseFloat(match[1]);
-						if (num > 1 && Number.isInteger(num)) {
+						if (num > 1 && num <= 20 && (num % 0.5 === 0)) {
 							priceDivider = num;
 						}
 					}
@@ -755,24 +755,35 @@ if (success === "product") {
 				` : '';
 
 				let colorsHtml = '';
+				const knownColors = ["HITAM","PUTIH","MERAH","KUNING","HIJAU","BIRU","COKLAT","BROWN","BLACK","RED","BLUE","GREEN","WHITE","YELLOW","ORANGE","PINK","ABU-ABU","GREY","GRAY","KREM","UNGU","NAVY","MAROON","MARON","SOGA","TERACOTTA","PEACH","LAVENDER","MINT","OLIVE","DENIM","DUSTY","ROSE","GOLD","SILVER","TOSCA","KHAKI"];
+				const foundColors = new Set();
+				
+				const mainTxt = ((item.nama || "") + " " + (item.keterangan || "")).toUpperCase();
+				knownColors.forEach(c => {
+					if (new RegExp('\\b' + c + '\\b', 'i').test(mainTxt)) {
+						foundColors.add(c);
+					}
+				});
+
 				if (item.details && Array.isArray(item.details) && item.details.length > 0) {
-					const knownColors = ["HITAM","PUTIH","MERAH","KUNING","HIJAU","BIRU","COKLAT","BROWN","BLACK","RED","BLUE","GREEN","WHITE","YELLOW","ORANGE","PINK","ABU-ABU","GREY","GRAY","KREM","UNGU","NAVY","MAROON","SOGA","TERACOTTA","PEACH","LAVENDER","MINT","OLIVE","DENIM","DUSTY","ROSE","GOLD","SILVER","TOSCA","KHAKI"];
-					const foundColors = new Set();
 					item.details.forEach(d => {
-						const dName = (d.nama || "").toUpperCase();
+						const dTxt = ((d.nama || "") + " " + (d.keterangan || "")).toUpperCase();
 						knownColors.forEach(c => {
-							if (dName.includes(c)) foundColors.add(c);
+							if (new RegExp('\\b' + c + '\\b', 'i').test(dTxt) || dTxt.includes(c)) {
+								foundColors.add(c);
+							}
 						});
 					});
-					if (foundColors.size > 0) {
-						const colorPills = Array.from(foundColors).map(c => `<span style="font-size: 0.65rem; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid #bae6fd;">${c}</span>`).join('');
-						colorsHtml = `
-							<div style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
-								<span style="font-size: 0.65rem; color: var(--color-muted); font-weight: 600;">Warna (${foundColors.size}):</span>
-								${colorPills}
-							</div>
-						`;
-					}
+				}
+
+				if (foundColors.size > 0) {
+					const colorPills = Array.from(foundColors).map(c => `<span style="font-size: 0.65rem; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 0.15rem 0.45rem; border-radius: 4px; border: 1px solid #bae6fd;">${c}</span>`).join('');
+					colorsHtml = `
+						<div style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+							<span style="font-size: 0.65rem; color: var(--color-muted); font-weight: 600;">Warna (${foundColors.size}):</span>
+							${colorPills}
+						</div>
+					`;
 				}
 
 				card.innerHTML = `

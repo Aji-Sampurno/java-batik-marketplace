@@ -3236,6 +3236,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									"UNGU",
 									"NAVY",
 									"MAROON",
+									"MARON",
 									"SOGA",
 									"TERACOTTA",
 									"PEACH",
@@ -3490,13 +3491,13 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									selectL2ByName(t3Map[motifLetter]);
 								}
 
-								// Deteksi divider harga jika desimal awal adalah bilangan bulat (misal 4.00, 2.00, 3.00)
+								// Deteksi divider harga jika angka awal adalah meter kain (misal 3.50, 2.00, 4.00, 1.50)
 								let priceDivider = 1;
 								if (item.nama) {
 									const match = (item.nama || '').toString().trim().match(/^(\d+(?:\.\d+)?)/);
 									if (match) {
 										const num = parseFloat(match[1]);
-										if (num > 1 && Number.isInteger(num)) {
+										if (num > 1 && num <= 20 && (num % 0.5 === 0)) {
 											priceDivider = num;
 										}
 									}
@@ -3938,7 +3939,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 												const colorVariantMap = {};
 												const colorTokens = [
 													"BLACK", "KHAKI", "BROWN", "GREY", "ROSE", "GOLD", "WHITE", "RED", "BLUE", "GREEN",
-													"NAVY", "YELLOW", "CREAM", "PURPLE", "ORANGE", "MAROON", "COKLAT", "HITAM", "ABU-ABU",
+													"NAVY", "YELLOW", "CREAM", "PURPLE", "ORANGE", "MAROON", "MARON", "COKLAT", "HITAM", "ABU-ABU",
 													"UNGU", "KUNING", "BIRU", "HIJAU", "KREM", "ORANYE", "SOGA", "PINK", "SILVER", "TOSCA"
 												];
 
