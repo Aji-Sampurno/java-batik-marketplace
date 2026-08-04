@@ -2228,6 +2228,12 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 
 					nameInput.value = parts.join(" ");
 
+					if (jenis && jenis.toLowerCase().includes("kain")) {
+						document.querySelectorAll(".v-stock-input-add").forEach((input) => {
+							input.value = "55";
+						});
+					}
+
 					// --- SERIALIZE CATEGORY CHAIN FOR SUBMIT ---
 					// Constructs valid waterfall logic: Array chain of [L1Val, L2Val, L3Val]
 					const chainBox = document.getElementById(
@@ -4007,9 +4013,11 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 														if (detailDivider > 1 && price > 0) {
 															price = Math.round(price / detailDivider);
 														}
-														const stock = parseInt(
-															detail.stok || 0,
-														);
+														const stock = isKain
+															? 55
+															: parseInt(
+																	detail.stok || 0,
+																);
 														const dalaman =
 															detail.dalaman ||
 															"";
@@ -4026,8 +4034,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 																	"",
 															};
 														} else {
-															sizeMap[sz].stock +=
-																stock;
+															sizeMap[sz].stock = isKain ? 55 : (sizeMap[sz].stock + stock);
 															if (
 																price >
 																sizeMap[sz]
@@ -4052,7 +4059,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 															if (!colorVariantMap[key]) {
 																colorVariantMap[key] = { color: colorFound, size: sz, price, stock, dalaman, kode: detail.kode || "" };
 															} else {
-																colorVariantMap[key].stock += stock;
+																colorVariantMap[key].stock = isKain ? 55 : (colorVariantMap[key].stock + stock);
 																if (price > colorVariantMap[key].price) colorVariantMap[key].price = price;
 																if (dalaman) colorVariantMap[key].dalaman = dalaman;
 															}
@@ -4309,20 +4316,17 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 											markupPctEl &&
 											markupPreview
 										) {
-											oldInput.value = item.old;
-											markupVal.innerText = parseInt(
-												item.old,
-											).toLocaleString("id-ID");
+											let oldPriceVal = parseFloat(item.old);
+											if (priceDivider > 1 && oldPriceVal > 0) {
+												oldPriceVal = Math.round(oldPriceVal / priceDivider);
+											}
 
-											const price = parseFloat(
-												item.hjual || 0,
-											);
-											const oldPrice = parseFloat(
-												item.old,
-											);
-											markupPctEl.innerText = (
-												oldPrice - price
-											).toLocaleString("id-ID");
+											oldInput.value = oldPriceVal;
+											markupVal.innerText = oldPriceVal.toLocaleString("id-ID");
+
+											const currentPrice = parseFloat(calculatedPrice || 0);
+											const savings = Math.max(0, oldPriceVal - currentPrice);
+											markupPctEl.innerText = savings.toLocaleString("id-ID");
 
 											markupPreview.style.display =
 												"block";
@@ -4365,12 +4369,51 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 					initPraprodukAutoFill();
 				}
 
-				// Show loading overlay on form submission
+				// Form Validation & Loading Overlay on submission
 				const productForm = document.querySelector("form");
 				if (productForm) {
-					productForm.addEventListener("submit", () => {
-						const overlay =
-							document.getElementById("loadingOverlay");
+					productForm.addEventListener("submit", (e) => {
+						const l1Input = document.getElementById("l1_category_input");
+						const l1Val = l1Input ? l1Input.value.trim() : "";
+						const visibleL1 = document.querySelector('[data-ss-type="product-l1"] .ss-input');
+						const l1Text = visibleL1 ? visibleL1.value.trim() : "";
+
+						if (!l1Val && !l1Text) {
+							e.preventDefault();
+							alert("⚠️ Harap pilih Kategori Produk (L1) terlebih dahulu!");
+							return;
+						}
+
+						const l2Container = document.getElementById("l2-selection-row");
+						if (l2Container && l2Container.style.display !== "none" && l2Container.querySelectorAll("input").length > 0) {
+							const checkedL2 = l2Container.querySelector("input:checked");
+							if (!checkedL2) {
+								e.preventDefault();
+								alert("⚠️ Harap pilih Jenis Produk (Level 2) terlebih dahulu (misal: Gulungan atau Potongan)!");
+								l2Container.scrollIntoView({ behavior: "smooth", block: "center" });
+								l2Container.style.outline = "2px dashed #ef4444";
+								l2Container.style.outlineOffset = "4px";
+								setTimeout(() => { l2Container.style.outline = "none"; }, 3000);
+								return;
+							}
+						}
+
+						const l3Area = document.getElementById("l3-selection-area");
+						const l3Grid = document.getElementById("l3-grid");
+						if (l3Area && l3Area.style.display !== "none" && l3Grid && l3Grid.querySelectorAll("input").length > 0) {
+							const checkedL3 = l3Grid.querySelector("input:checked");
+							if (!checkedL3) {
+								e.preventDefault();
+								alert("⚠️ Harap lengkapi pilihan Sub-Jenis Produk (Level 3) terlebih dahulu!");
+								l3Area.scrollIntoView({ behavior: "smooth", block: "center" });
+								l3Area.style.outline = "2px dashed #ef4444";
+								l3Area.style.outlineOffset = "4px";
+								setTimeout(() => { l3Area.style.outline = "none"; }, 3000);
+								return;
+							}
+						}
+
+						const overlay = document.getElementById("loadingOverlay");
 						if (overlay) {
 							overlay.style.display = "flex";
 						}
