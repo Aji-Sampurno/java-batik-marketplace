@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.PUBLIC_API_URL || "https://api.katalog.batik.gooproper.id/api";
+const API_URL = import.meta.env.PUBLIC_API_URL || "https://java.batik.katalog.gooproper.id/api";
 
 export async function apiFetch<T = any>(endpoint: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {

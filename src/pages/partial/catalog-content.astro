@@ -75,22 +75,49 @@ let activePathIds: any[] = [];
 let targetType: any = null;
 let settings: any = { contact_whatsapp: "628123456789" };
 
+const itemsPerPage = 12;
+const currentPage = Number(searchParams.get("page") || "1");
+
+let totalItems = 0;
+let totalPages = 1;
+let paginatedProducts: any[] = [];
+
+const productParams = new URLSearchParams();
+productParams.set("page", String(currentPage));
+productParams.set("per_page", String(itemsPerPage));
+if (typeFilter) productParams.set("type", typeFilter);
+if (motifFilter) productParams.set("motif", motifFilter);
+if (sizeFilter) productParams.set("size", sizeFilter);
+if (colorFilter) productParams.set("color", colorFilter);
+if (searchQuery) productParams.set("search", searchQuery);
+if (minPrice) productParams.set("min_price", String(minPrice));
+if (maxPrice) productParams.set("max_price", String(maxPrice));
+productParams.set("sort", sort);
+
 try {
-	const tRes = await apiFetch<any>("types");
+	const [tRes, mRes, szRes, colRes, sRes, pRes] = await Promise.all([
+		apiFetch<any>("types").catch(() => []),
+		apiFetch<any>("motifs").catch(() => []),
+		apiFetch<any>("sizes").catch(() => []),
+		apiFetch<any>("colors").catch(() => []),
+		apiFetch<any>("settings").catch(() => null),
+		apiFetch<any>(`products?${productParams.toString()}`).catch(() => null),
+	]);
+
 	typesData = tRes?.data || tRes || [];
-
-	const mRes = await apiFetch<any>("motifs");
 	motifsData = mRes?.data || mRes || [];
-
-	const szRes = await apiFetch<any>("sizes");
 	sizesData = szRes?.data || szRes || [];
-
-	const colRes = await apiFetch<any>("colors");
 	colorsData = colRes?.data || colRes || [];
 
-	const sRes = await apiFetch<any>("settings");
 	const s = sRes?.data || sRes;
 	if (s) settings = s;
+
+	if (pRes) {
+		paginatedProducts = pRes?.data || [];
+		const meta = pRes?.meta || pRes;
+		totalItems = Number(meta?.total || paginatedProducts.length);
+		totalPages = Number(meta?.last_page || Math.ceil(totalItems / itemsPerPage));
+	}
 
 	const buildCategoryTree = (
 		list: any[],
@@ -130,37 +157,7 @@ try {
 
 	activePathIds = getAncestry(typesData, targetType?.id || null);
 } catch (e: any) {
-	console.error("API Fetch Error", e.message);
-}
-
-const itemsPerPage = 12;
-const currentPage = Number(searchParams.get("page") || "1");
-
-let totalItems = 0;
-let totalPages = 1;
-let paginatedProducts: any[] = [];
-
-const productParams = new URLSearchParams();
-productParams.set("page", String(currentPage));
-productParams.set("per_page", String(itemsPerPage));
-if (typeFilter) productParams.set("type", typeFilter);
-if (motifFilter) productParams.set("motif", motifFilter);
-if (sizeFilter) productParams.set("size", sizeFilter);
-if (colorFilter) productParams.set("color", colorFilter);
-if (searchQuery) productParams.set("search", searchQuery);
-if (minPrice) productParams.set("min_price", String(minPrice));
-if (maxPrice) productParams.set("max_price", String(maxPrice));
-productParams.set("sort", sort);
-
-try {
-	const pRes = await apiFetch<any>(`products?${productParams.toString()}`);
-	paginatedProducts = pRes?.data || [];
-	
-	const meta = pRes?.meta || pRes;
-	totalItems = Number(meta?.total || paginatedProducts.length);
-	totalPages = Number(meta?.last_page || Math.ceil(totalItems / itemsPerPage));
-} catch (pError: any) {
-	console.error("Backend Product Fetch Failed:", pError.message);
+	console.error("Parallel API Fetch Error", e.message);
 }
 ---
 
