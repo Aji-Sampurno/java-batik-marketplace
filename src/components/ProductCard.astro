@@ -93,6 +93,12 @@ const waBaseUrl = "https://wa.me/";
 						: ""
 				}
 			/>
+			{(p.outlet_location || p.counter) && (
+				<div class="outlet-tag">
+					<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+					<span>Outlet {p.outlet_location || p.counter}</span>
+				</div>
+			)}
 			{isOutOfStock && (
 				<div class="ribbon-wrapper">
 					<div class="ribbon">
@@ -268,6 +274,27 @@ const waBaseUrl = "https://wa.me/";
 
 	.out-of-stock-img {
 		filter: grayscale(1) contrast(0.8);
+	}
+
+	.outlet-tag {
+		position: absolute;
+		top: 10px;
+		left: 10px;
+		z-index: 6;
+		background: rgba(255, 255, 255, 0.92);
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
+		border: 1px solid rgba(226, 232, 240, 0.9);
+		border-radius: 4px;
+		padding: 3px 8px;
+		font-size: 0.65rem;
+		font-weight: 600;
+		color: #1e293b;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+		letter-spacing: 0.2px;
 	}
 
 	/* Diagonal Ribbon */
