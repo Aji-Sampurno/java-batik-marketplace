@@ -20,8 +20,14 @@ try {
 
 <style is:inline>
 	@keyframes fadeInUpLazy {
-		from { opacity: 0; transform: translateY(25px); }
-		to { opacity: 1; transform: translateY(0); }
+		from {
+			opacity: 0;
+			transform: translateY(25px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 	.product-lazy-card {
 		animation: fadeInUpLazy 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -34,10 +40,7 @@ try {
 			class="product-card product-lazy-card"
 			style={`${!p.is_active ? "opacity: 0.8;" : "opacity: 0;"} animation-delay: ${index * 120}ms;`}
 		>
-			<div
-				class="product-image"
-				style="position: relative;"
-			>
+			<div class="product-image" style="position: relative;">
 				<a href={`/products/${p.id}`}>
 					<img
 						src={
@@ -46,11 +49,7 @@ try {
 						}
 						alt={p.name}
 						loading="lazy"
-						class={
-							!p.is_active
-								? "out-of-stock-img"
-								: ""
-						}
+						class={!p.is_active ? "out-of-stock-img" : ""}
 					/>
 					{!p.is_active && (
 						<div class="ribbon-wrapper">
@@ -64,8 +63,12 @@ try {
 					class="text-uppercase opacity-50"
 					style="font-size: 0.65rem;"
 				>
-					{(p.type?.name || p.types?.name || "-")} •{" "}
-					{(p.motifs?.map((m: any) => m.name).join(", ") || p.product_motifs?.map((pm: any) => pm.motifs?.name).join(", ") || "-")}
+					{p.type?.name || p.types?.name || "-"} •{" "}
+					{p.motifs?.map((m: any) => m.name).join(", ") ||
+						p.product_motifs
+							?.map((pm: any) => pm.motifs?.name)
+							.join(", ") ||
+						"-"}
 				</p>
 				<h3 style="font-family: var(--font-main); font-weight: 500;">
 					<a
@@ -80,15 +83,21 @@ try {
 						<>
 							{p.original_price && p.original_price > p.price && (
 								<span style="text-decoration: line-through; color: #999; font-size: 0.8rem; margin-right: 0.5rem;">
-									Rp {Number(p.original_price).toLocaleString("id-ID")}
+									Rp{" "}
+									{Number(p.original_price).toLocaleString(
+										"id-ID",
+									)}
 								</span>
 							)}
 							<span>
 								{(() => {
 									let displayPrice = `Rp ${Number(p.price).toLocaleString("id-ID")}`;
-									const variants = p.variants || p.product_variants || [];
-									if(variants && variants.length > 0) {
-										const vPrices = variants.map((v:any) => v.price);
+									const variants =
+										p.variants || p.product_variants || [];
+									if (variants && variants.length > 0) {
+										const vPrices = variants.map(
+											(v: any) => v.price,
+										);
 										const vMin = Math.min(...vPrices);
 										if (vMin > 0) {
 											displayPrice = `Rp ${vMin.toLocaleString("id-ID")}`;

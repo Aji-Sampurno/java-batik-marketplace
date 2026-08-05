@@ -4,14 +4,20 @@ interface Props {
 	product: any;
 	index: number;
 	settings: any;
+	activeSize?: string;
 }
 
-const { product: p, index, settings } = Astro.props;
+const { product: p, index, settings, activeSize } = Astro.props;
 
 const getProductDisplaySizes = (prod: any) => {
 	const variants = prod.variants || prod.product_variants || [];
 	if (variants.length > 0) {
-		const mappedSizes = variants.map((v: any) => {
+		// Only display sizes that have stock > 0 (or stock undefined)
+		const inStockVariants = variants.filter(
+			(v: any) => v.stock === undefined || Number(v.stock) > 0
+		);
+		const targetVariants = inStockVariants.length > 0 ? inStockVariants : variants;
+		const mappedSizes = targetVariants.map((v: any) => {
 			let sizeName = v.size_name || "";
 			let baseSize = sizeName.trim();
 			if (sizeName.includes(" - ")) {
@@ -55,6 +61,8 @@ const getProductDisplaySizes = (prod: any) => {
 	}
 	return [];
 };
+
+const normalizedActiveSize = activeSize ? activeSize.trim().toUpperCase() : null;
 
 const isOutOfStock =
 	!p.is_active ||
@@ -138,11 +146,18 @@ const waBaseUrl = "https://wa.me/";
 
 		<div class="product-meta">
 			{getProductDisplaySizes(p).map(
-				(sz: any) => (
-					<span style="font-size: 0.65rem; border: 1px solid #e2e8f0; padding: 2px 8px; border-radius: 4px; color: #475569; background: #f8fafc; font-weight: 500; text-transform: uppercase;">
-						{sz}
-					</span>
-				),
+				(sz: any) => {
+					const isMatched = normalizedActiveSize && (
+						sz === normalizedActiveSize ||
+						normalizedActiveSize.startsWith(sz) ||
+						sz.startsWith(normalizedActiveSize)
+					);
+					return (
+						<span class={`size-chip ${isMatched ? "size-chip-active" : ""}`}>
+							{sz}
+						</span>
+					);
+				}
 			)}
 		</div>
 
@@ -302,6 +317,26 @@ const waBaseUrl = "https://wa.me/";
 		flex-wrap: wrap;
 		gap: 0.4rem;
 		margin-bottom: 1rem;
+	}
+
+	.size-chip {
+		font-size: 0.65rem;
+		border: 1px solid #e2e8f0;
+		padding: 2px 8px;
+		border-radius: 4px;
+		color: #475569;
+		background: #f8fafc;
+		font-weight: 500;
+		text-transform: uppercase;
+		transition: all 0.2s ease;
+	}
+
+	.size-chip-active {
+		border-color: var(--color-accent, #8c7851) !important;
+		background: var(--color-accent, #8c7851) !important;
+		color: #ffffff !important;
+		font-weight: 700 !important;
+		box-shadow: 0 2px 6px rgba(140, 120, 81, 0.25);
 	}
 
 	.actions {

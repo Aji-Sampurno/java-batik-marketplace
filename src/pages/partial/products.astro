@@ -19,6 +19,7 @@ passThrough.forEach(key => {
     if (val) productParams.set(key, val);
 });
 
+const sizeFilter = searchParams.get("size");
 let paginatedProducts = [];
 let settings = { contact_whatsapp: "628123456789" };
 
@@ -35,5 +36,5 @@ try {
 ---
 
 {paginatedProducts.map((p, i) => (
-    <ProductCard product={p} index={i} settings={settings} />
+    <ProductCard product={p} index={i} settings={settings} activeSize={sizeFilter || undefined} />
 ))}

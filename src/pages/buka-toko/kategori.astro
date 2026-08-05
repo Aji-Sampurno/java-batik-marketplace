@@ -8,7 +8,9 @@ const session = Astro.cookies.get("admin_session");
 if (session?.value !== "authenticated") {
 	return Astro.redirect("/login");
 }
-const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://api.katalog.batik.gooproper.id/api";
+const publicApiUrl =
+	import.meta.env.PUBLIC_API_URL ||
+	"https://api.katalog.batik.gooproper.id/api";
 
 let settings: any = { site_name: "Batik Nusantara" };
 let message = "";
@@ -60,7 +62,9 @@ if (Astro.request.method === "POST") {
 		}
 	} catch (e: any) {
 		isError = true;
-		return Astro.redirect(`/buka-toko/kategori?error=${encodeURIComponent(e.message || "Gagal memproses tindakan")}`);
+		return Astro.redirect(
+			`/buka-toko/kategori?error=${encodeURIComponent(e.message || "Gagal memproses tindakan")}`,
+		);
 	}
 }
 
@@ -71,11 +75,15 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 ---
 
 <Layout title={`Kelola Kategori - ${settings?.site_name || "Batik Nusantara"}`}>
-	<section style="padding: 130px 0 var(--spacing-2xl) 0; background: #fdfcfb; min-height: 100vh;">
+	<section
+		style="padding: 130px 0 var(--spacing-2xl) 0; background: #fdfcfb; min-height: 100vh;"
+	>
 		<div class="container" style="max-width: 1000px;">
 			<!-- Header -->
 			<div style="margin-bottom: var(--spacing-xl);">
-				<h1 style="font-family: var(--font-serif); font-size: 2.2rem; margin: 0; font-weight: 400;">
+				<h1
+					style="font-family: var(--font-serif); font-size: 2.2rem; margin: 0; font-weight: 400;"
+				>
 					Manajemen <span style="font-style: italic;">Kategori</span>
 				</h1>
 				<p style="opacity: 0.5; margin-top: 0.5rem; font-size: 0.9rem;">
@@ -86,10 +94,17 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 			<!-- Flash Message -->
 			{
 				message && (
-					<div
-						style="background: #e6f9e9; color: #0d5a15; padding: 1rem 1.5rem; border-radius: 8px; margin-bottom: 2rem; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; border: 1px solid rgba(13, 90, 21, 0.1);"
-					>
-						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+					<div style="background: #e6f9e9; color: #0d5a15; padding: 1rem 1.5rem; border-radius: 8px; margin-bottom: 2rem; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; border: 1px solid rgba(13, 90, 21, 0.1);">
+						<svg
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+						>
+							<path d="M20 6L9 17l-5-5" />
+						</svg>
 						{message}
 					</div>
 				)
@@ -98,34 +113,49 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 			<!-- Error Message -->
 			{
 				error && (
-					<div
-						style="background: #fff5f5; color: #b91c1c; padding: 1rem 1.5rem; border-radius: 8px; margin-bottom: 2rem; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; border: 1px solid rgba(185, 28, 28, 0.1);"
-					>
-						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 8v4M12 16h.01"/></svg>
+					<div style="background: #fff5f5; color: #b91c1c; padding: 1rem 1.5rem; border-radius: 8px; margin-bottom: 2rem; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; border: 1px solid rgba(185, 28, 28, 0.1);">
+						<svg
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+						>
+							<path d="M12 8v4M12 16h.01" />
+						</svg>
 						<strong>Error:</strong> {error}
 					</div>
 				)
 			}
 
-			<div style="display: grid; grid-template-columns: 1fr; gap: var(--spacing-lg);">
-				<div style="background: white; border: 1px solid var(--color-border); padding: 2.5rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
-					<h3 style="font-size: 0.85rem; margin-bottom: 1.5rem; font-weight: 700; letter-spacing: 1px;" class="text-uppercase">
+			<div
+				style="display: grid; grid-template-columns: 1fr; gap: var(--spacing-lg);"
+			>
+				<div
+					style="background: white; border: 1px solid var(--color-border); padding: 2.5rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);"
+				>
+					<h3
+						style="font-size: 0.85rem; margin-bottom: 1.5rem; font-weight: 700; letter-spacing: 1px;"
+						class="text-uppercase"
+					>
 						Tambah Kategori Baru
 					</h3>
-					
+
 					<form
 						method="POST"
 						style="display: flex; flex-direction: column; gap: 1.2rem; margin-bottom: 2.5rem;"
 					>
-						<input
-							type="hidden"
-							name="action"
-							value="add_type"
-						/>
-						
+						<input type="hidden" name="action" value="add_type" />
+
 						<div>
-							<label class="input-label">Pilih Induk Kategori (Opsional)</label>
-							<div class="searchable-select" data-ss-type="parent">
+							<label class="input-label"
+								>Pilih Induk Kategori (Opsional)</label
+							>
+							<div
+								class="searchable-select"
+								data-ss-type="parent"
+							>
 								<input
 									type="hidden"
 									name="parent_id"
@@ -140,17 +170,35 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 								/>
 								<div class="ss-dropdown">
 									<div class="ss-search-container">
-										<svg class="ss-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg>
+										<svg
+											class="ss-search-icon"
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.5"
+											><circle cx="11" cy="11" r="8"
+											></circle><path
+												d="M21 21l-4.35-4.35"
+											></path></svg
+										>
 										<input
 											type="text"
 											class="ss-search"
 											placeholder="Cari induk kategori..."
 										/>
 									</div>
-									<div class="ss-options" id="dropdown-options-container">
+									<div
+										class="ss-options"
+										id="dropdown-options-container"
+									>
 										<div class="ss-option" data-value="">
-											<span>Kategori Utama (Root)...</span>
-											<span class="lvl-badge lvl-1">Root</span>
+											<span>Kategori Utama (Root)...</span
+											>
+											<span class="lvl-badge lvl-1"
+												>Root</span
+											>
 										</div>
 										<!-- Dynamic parent options will populate asynchronously -->
 									</div>
@@ -180,21 +228,48 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 						</div>
 					</form>
 
-					<div style="border-top: 1px solid #f3f4f6; padding-top: 2rem;">
-						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-							<p class="text-uppercase opacity-50" style="font-size: 0.7rem; font-weight: 700; letter-spacing: 1.5px;">
+					<div
+						style="border-top: 1px solid #f3f4f6; padding-top: 2rem;"
+					>
+						<div
+							style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;"
+						>
+							<p
+								class="text-uppercase opacity-50"
+								style="font-size: 0.7rem; font-weight: 700; letter-spacing: 1.5px;"
+							>
 								Daftar Kategori Terdaftar
 							</p>
-							<span style="font-size: 0.75rem; color: #9ca3af; font-weight: 600;" id="category-count-text">
+							<span
+								style="font-size: 0.75rem; color: #9ca3af; font-weight: 600;"
+								id="category-count-text"
+							>
 								-- Kategori
 							</span>
 						</div>
 
-						<div class="category-tree-wrapper" id="category-tree-container">
+						<div
+							class="category-tree-wrapper"
+							id="category-tree-container"
+						>
 							<!-- High-performance visual skeleton placeholder -->
-							<div style="padding: 4rem; text-align: center; opacity: 0.6;">
-								<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation: spin 1.2s linear infinite; margin: 0 auto 1rem auto; display: block;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-								<p style="font-size: 0.8rem; font-weight: 500;">Memuat struktur kategori...</p>
+							<div
+								style="padding: 4rem; text-align: center; opacity: 0.6;"
+							>
+								<svg
+									width="24"
+									height="24"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									style="animation: spin 1.2s linear infinite; margin: 0 auto 1rem auto; display: block;"
+									><path d="M21 12a9 9 0 1 1-6.219-8.56"
+									></path></svg
+								>
+								<p style="font-size: 0.8rem; font-weight: 500;">
+									Memuat struktur kategori...
+								</p>
 							</div>
 						</div>
 					</div>
@@ -208,14 +283,39 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 		<div class="modal-content">
 			<div class="modal-header">
 				<div class="warning-icon">
-					<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/></svg>
+					<svg
+						width="24"
+						height="24"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						><path
+							d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"
+						></path></svg
+					>
 				</div>
-				<h3 style="font-family: var(--font-serif); font-size: 1.5rem; font-weight: 400; margin: 0;">Konfirmasi <span style="font-style: italic;">Hapus</span></h3>
+				<h3
+					style="font-family: var(--font-serif); font-size: 1.5rem; font-weight: 400; margin: 0;"
+				>
+					Konfirmasi <span style="font-style: italic;">Hapus</span>
+				</h3>
 			</div>
-			<p style="opacity: 0.6; line-height: 1.6; margin: 1.5rem 0; font-size: 0.95rem;">Apakah Anda yakin ingin menghapus kategori ini? Pastikan tidak ada sub-kategori atau produk yang menggunakannya.</p>
+			<p
+				style="opacity: 0.6; line-height: 1.6; margin: 1.5rem 0; font-size: 0.95rem;"
+			>
+				Apakah Anda yakin ingin menghapus kategori ini? Pastikan tidak
+				ada sub-kategori atau produk yang menggunakannya.
+			</p>
 			<div class="modal-footer">
-				<button type="button" id="cancel-btn" class="btn-admin-secondary">Batal</button>
-				<button type="button" id="confirm-btn" class="btn-admin-danger">Ya, Hapus</button>
+				<button
+					type="button"
+					id="cancel-btn"
+					class="btn-admin-secondary">Batal</button
+				>
+				<button type="button" id="confirm-btn" class="btn-admin-danger"
+					>Ya, Hapus</button
+				>
 			</div>
 		</div>
 	</div>
@@ -225,10 +325,13 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 		function flattenCategoryTree(nestedList, depth = 0) {
 			let result = [];
 			if (!Array.isArray(nestedList)) return result;
-			nestedList.forEach(item => {
+			nestedList.forEach((item) => {
 				result.push({ ...item, depth });
 				if (item.children && item.children.length > 0) {
-					const childList = flattenCategoryTree(item.children, depth + 1);
+					const childList = flattenCategoryTree(
+						item.children,
+						depth + 1,
+					);
 					result = result.concat(childList);
 				}
 			});
@@ -237,25 +340,34 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 
 		// Main Hydration Sequence
 		async function fetchAndHydrateCategories() {
-			const treeContainer = document.getElementById('category-tree-container');
-			const dropdownContainer = document.getElementById('dropdown-options-container');
-			const countText = document.getElementById('category-count-text');
+			const treeContainer = document.getElementById(
+				"category-tree-container",
+			);
+			const dropdownContainer = document.getElementById(
+				"dropdown-options-container",
+			);
+			const countText = document.getElementById("category-count-text");
 
 			try {
 				const res = await fetch(`${publicApiUrl}/types`);
 				const json = await res.json();
 				const list = json.data || json || [];
-				
+
 				const tree = flattenCategoryTree(list);
-				
+
 				// 1. Inject Dropdown parent options (Only depth 0 and 1)
-				const dropdownHtml = tree.filter(t => t.depth < 2).map(t => `
+				const dropdownHtml = tree
+					.filter((t) => t.depth < 2)
+					.map(
+						(t) => `
 					<div class="ss-option" data-value="${t.id}">
 						<span>${"--".repeat(t.depth)} ${t.name}</span>
 						<span class="lvl-badge lvl-${t.depth + 1}">L${t.depth + 1}</span>
 					</div>
-				`).join('');
-				
+				`,
+					)
+					.join("");
+
 				if (dropdownContainer) {
 					dropdownContainer.innerHTML = `
 						<div class="ss-option" data-value="">
@@ -275,12 +387,14 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 							</div>
 						`;
 					} else {
-						treeContainer.innerHTML = tree.map(t => `
-							<div class="category-item" style="margin-left: ${t.depth * 28}px; border-color: ${t.depth === 0 ? '#f3f4f6' : 'transparent'};">
-								${t.depth > 0 ? '<div class="tree-connector"></div>' : ''}
+						treeContainer.innerHTML = tree
+							.map(
+								(t) => `
+							<div class="category-item" style="margin-left: ${t.depth * 28}px; border-color: ${t.depth === 0 ? "#f3f4f6" : "transparent"};">
+								${t.depth > 0 ? '<div class="tree-connector"></div>' : ""}
 								<div class="cat-content">
 									<span class="lvl-badge lvl-${t.depth + 1}">L${t.depth + 1}</span>
-									<span class="cat-name" style="font-weight: ${t.depth === 0 ? '600' : '400'}; color: ${t.depth === 0 ? '#111827' : '#4b5563'};">${t.name}</span>
+									<span class="cat-name" style="font-weight: ${t.depth === 0 ? "600" : "400"}; color: ${t.depth === 0 ? "#111827" : "#4b5563"};">${t.name}</span>
 								</div>
 								<div class="cat-actions">
 									<form method="POST" class="delete-form">
@@ -292,7 +406,9 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 									</form>
 								</div>
 							</div>
-						`).join('');
+						`,
+							)
+							.join("");
 					}
 				}
 
@@ -303,9 +419,8 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 
 				// 4. Setup searchable selections AFTER nodes exist in DOM
 				initSearchableSelect();
-
 			} catch (err) {
-				console.error('[Category Hydration Fail]:', err);
+				console.error("[Category Hydration Fail]:", err);
 				if (treeContainer) {
 					treeContainer.innerHTML = `<p style="color: #b91c1c; font-weight: 600; text-align: center; padding: 2rem;">Koneksi API gagal.</p>`;
 				}
@@ -314,11 +429,14 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 
 		// Searchable dropdown logic
 		function initSearchableSelect() {
-			const selectContainers = document.querySelectorAll(".searchable-select");
+			const selectContainers =
+				document.querySelectorAll(".searchable-select");
 
 			selectContainers.forEach((container) => {
 				const input = container.querySelector(".ss-input");
-				const hiddenInput = container.querySelector('input[type="hidden"]');
+				const hiddenInput = container.querySelector(
+					'input[type="hidden"]',
+				);
 				const dropdown = container.querySelector(".ss-dropdown");
 				const searchInput = container.querySelector(".ss-search");
 				const options = container.querySelectorAll(".ss-option");
@@ -335,7 +453,9 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 					const term = e.target.value.toLowerCase();
 					options.forEach((opt) => {
 						const text = opt.textContent.toLowerCase();
-						opt.style.display = text.includes(term) ? "flex" : "none";
+						opt.style.display = text.includes(term)
+							? "flex"
+							: "none";
 					});
 				});
 
@@ -343,7 +463,9 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 					opt.addEventListener("click", (e) => {
 						e.stopPropagation();
 						const val = opt.getAttribute("data-value");
-						const text = opt.querySelector("span").textContent.trim();
+						const text = opt
+							.querySelector("span")
+							.textContent.trim();
 
 						hiddenInput.value = val;
 						input.value = text;
@@ -359,25 +481,25 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 
 		// Delete Confirmation Modal
 		let currentForm = null;
-		const modal = document.getElementById('delete-modal');
-		const confirmBtn = document.getElementById('confirm-btn');
-		const cancelBtn = document.getElementById('cancel-btn');
+		const modal = document.getElementById("delete-modal");
+		const confirmBtn = document.getElementById("confirm-btn");
+		const cancelBtn = document.getElementById("cancel-btn");
 
-		window.openDeleteModal = function(form) {
+		window.openDeleteModal = function (form) {
 			currentForm = form;
-			modal.classList.add('active');
-			document.body.style.overflow = 'hidden';
-		}
+			modal.classList.add("active");
+			document.body.style.overflow = "hidden";
+		};
 
 		function closeModal() {
-			modal.classList.remove('active');
-			document.body.style.overflow = '';
+			modal.classList.remove("active");
+			document.body.style.overflow = "";
 			currentForm = null;
 		}
 
-		cancelBtn.addEventListener('click', closeModal);
-		
-		confirmBtn.addEventListener('click', () => {
+		cancelBtn.addEventListener("click", closeModal);
+
+		confirmBtn.addEventListener("click", () => {
 			if (currentForm) {
 				confirmBtn.disabled = true;
 				confirmBtn.innerText = "Menghapus...";
@@ -385,7 +507,7 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 			}
 		});
 
-		modal.addEventListener('click', (e) => {
+		modal.addEventListener("click", (e) => {
 			if (e.target === modal) closeModal();
 		});
 
@@ -418,7 +540,7 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 			background: white;
 			border: 1px solid #e5e7eb;
 			border-radius: 8px;
-			box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+			box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
 			z-index: 100;
 			margin-top: 5px;
 			display: none;
@@ -508,9 +630,18 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 			font-weight: 800;
 			letter-spacing: 0.5px;
 		}
-		.lvl-1 { background: #fffbeb; color: #b45309; }
-		.lvl-2 { background: #eff6ff; color: #1d4ed8; }
-		.lvl-3 { background: #f0fdf4; color: #15803d; }
+		.lvl-1 {
+			background: #fffbeb;
+			color: #b45309;
+		}
+		.lvl-2 {
+			background: #eff6ff;
+			color: #1d4ed8;
+		}
+		.lvl-3 {
+			background: #f0fdf4;
+			color: #15803d;
+		}
 
 		.btn-trash {
 			background: none;
@@ -557,7 +688,7 @@ if (success === "deleted") message = "Kategori berhasil dihapus!";
 			max-width: 400px;
 			padding: 2.5rem;
 			border-radius: 16px;
-			box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+			box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
 			transform: translateY(20px);
 			transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 		}

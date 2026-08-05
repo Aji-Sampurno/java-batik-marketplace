@@ -24,6 +24,48 @@ const getSortUrl = (newSort: string) => {
 	return `?${p.toString()}`;
 };
 
+const hasActiveFilters = Boolean(
+	typeFilter || motifFilter || sizeFilter || colorFilter || searchQuery || minPrice || maxPrice
+);
+
+const getClearFilterUrl = (paramToRemove: string) => {
+	const p = new URLSearchParams(searchParams);
+	p.delete(paramToRemove);
+	p.delete("page");
+	return `?${p.toString()}`;
+};
+
+const getCleanBaseSizes = (rawSizes: any[]) => {
+	if (!rawSizes || rawSizes.length === 0) return [];
+	const sfRegex = /\bSF\b|\bSlim\s*Fit\b|\bSlim\b/i;
+	const mapped = rawSizes.map((s: any) => {
+		let name = typeof s === "string" ? s : (s?.name || "");
+		let base = name.trim();
+		if (base.includes(" - ")) {
+			base = base.split(" - ")[0].trim();
+		}
+		if (sfRegex.test(base)) {
+			base = base.replace(sfRegex, "").replace(/[-_\s/]+$/, "").trim();
+		}
+		return base.toUpperCase();
+	});
+
+	const unique = [...new Set(mapped)].filter(
+		(sz) => sz && (isNaN(Number(sz)) || sz.length <= 3)
+	);
+
+	const sizeOrder = ["S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL", "ALL SIZE"];
+	unique.sort((a, b) => {
+		const idxA = sizeOrder.indexOf(a);
+		const idxB = sizeOrder.indexOf(b);
+		if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+		if (idxA !== -1) return -1;
+		if (idxB !== -1) return 1;
+		return a.localeCompare(b);
+	});
+	return unique;
+};
+
 let typesData: any[] = [];
 let motifsData: any[] = [];
 let sizesData: any[] = [];
@@ -311,19 +353,23 @@ try {
 					style="font-size: 0.7rem;">Semua</a
 				>
 				{
-					sizesData?.map((s) => (
-						<a
-							href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: s.name, page: "1" })}`}
-							class={
-								sizeFilter === s.name
-									? "active-chip"
-									: "chip"
-							}
-							style="font-size: 0.7rem;"
-						>
-							{s.name}
-						</a>
-					))
+					getCleanBaseSizes(sizesData).map((sName) => {
+						const normFilter = sizeFilter ? sizeFilter.trim().toUpperCase() : "";
+						const isActive = normFilter && (
+							normFilter === sName ||
+							normFilter.startsWith(sName) ||
+							sName.startsWith(normFilter)
+						);
+						return (
+							<a
+								href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: sName, page: "1" })}`}
+								class={isActive ? "active-chip" : "chip"}
+								style="font-size: 0.7rem;"
+							>
+								{sName === "ALL SIZE" ? "All Size" : sName}
+							</a>
+						);
+					})
 				}
 			</div>
 		</div>
@@ -547,10 +593,54 @@ try {
 				</div>
 			</div>
 		</div>
+
+		{hasActiveFilters && (
+			<div class="active-filters-bar" style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; padding: 0.8rem 1rem; background: #fdfbf7; border: 1px solid #f3ece1; border-radius: 8px;">
+				<span style="font-size: 0.75rem; font-weight: 600; color: var(--color-accent); text-transform: uppercase; letter-spacing: 1px; margin-right: 0.3rem;">Filter Aktif:</span>
+				{typeFilter && (
+					<a href={getClearFilterUrl("type")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
+						Jenis: <strong>{typeFilter.includes('>') ? typeFilter.split('>').pop()?.trim() : typeFilter}</strong>
+						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
+					</a>
+				)}
+				{sizeFilter && (
+					<a href={getClearFilterUrl("size")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
+						Ukuran: <strong>{sizeFilter}</strong>
+						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
+					</a>
+				)}
+				{colorFilter && (
+					<a href={getClearFilterUrl("color")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
+						Warna: <strong>{colorFilter}</strong>
+						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
+					</a>
+				)}
+				{motifFilter && (
+					<a href={getClearFilterUrl("motif")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
+						Motif: <strong>{motifFilter}</strong>
+						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
+					</a>
+				)}
+				{searchQuery && (
+					<a href={getClearFilterUrl("q")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
+						Cari: <strong>"{searchQuery}"</strong>
+						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
+					</a>
+				)}
+				{(minPrice || maxPrice) && (
+					<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), minP: "", maxP: "", page: "1" })}`} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
+						Harga: <strong>{minPrice ? `Rp ${minPrice.toLocaleString("id-ID")}` : "0"} - {maxPrice ? `Rp ${maxPrice.toLocaleString("id-ID")}` : "Max"}</strong>
+						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
+					</a>
+				)}
+				<a href="/products" style="margin-left: auto; font-size: 0.75rem; color: #b91c1c; text-decoration: underline; font-weight: 600;">Hapus Semua Filter</a>
+			</div>
+		)}
+
 		<div class="product-grid" style="margin-top: 0;">
 			{
 				paginatedProducts.map((p, index) => (
-					<ProductCard product={p} index={index} settings={settings} />
+					<ProductCard product={p} index={index} settings={settings} activeSize={sizeFilter || undefined} />
 				))
 			}
 		</div>
