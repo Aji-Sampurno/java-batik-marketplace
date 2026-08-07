@@ -1,6 +1,20 @@
 const API_URL = import.meta.env.PUBLIC_API_URL || "https://java.batik.katalog.gooproper.id/api";
 
+const apiCache = new Map<string, { data: any; expiry: number }>();
+const CACHEABLE_ENDPOINTS = new Set(["types", "motifs", "sizes", "colors", "settings"]);
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+
 export async function apiFetch<T = any>(endpoint: string, options?: RequestInit): Promise<T> {
+  const method = (options?.method || "GET").toUpperCase();
+  const isCacheable = method === "GET" && CACHEABLE_ENDPOINTS.has(endpoint);
+
+  if (isCacheable) {
+    const cached = apiCache.get(endpoint);
+    if (cached && Date.now() < cached.expiry) {
+      return cached.data as T;
+    }
+  }
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "Accept": "application/json",
@@ -40,6 +54,13 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
   } catch (err) {
     console.error("DEBUG: Server returned non-JSON response:", text.slice(0, 1000));
     throw new Error(`Respon server bukan JSON yang valid (kemungkinan HTML/Error Backend). Teks awal: ${text.slice(0, 150)}...`);
+  }
+
+  if (isCacheable) {
+    apiCache.set(endpoint, {
+      data,
+      expiry: Date.now() + CACHE_TTL_MS,
+    });
   }
 
   // Deep recursive loading for category types

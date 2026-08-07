@@ -7,6 +7,7 @@ const { searchParams } = Astro.url;
 const typeFilter = searchParams.get("type");
 const motifFilter = searchParams.get("motif");
 const sizeFilter = searchParams.get("size"); 
+const fitFilter = searchParams.get("fit");
 const colorFilter = searchParams.get("color");
 const searchQuery = searchParams.get("q");
 const minPrice = searchParams.get("minP")
@@ -25,7 +26,7 @@ const getSortUrl = (newSort: string) => {
 };
 
 const hasActiveFilters = Boolean(
-	typeFilter || motifFilter || sizeFilter || colorFilter || searchQuery || minPrice || maxPrice
+	typeFilter || motifFilter || sizeFilter || fitFilter || colorFilter || searchQuery || minPrice || maxPrice
 );
 
 const getClearFilterUrl = (paramToRemove: string) => {
@@ -87,7 +88,17 @@ productParams.set("page", String(currentPage));
 productParams.set("per_page", String(itemsPerPage));
 if (typeFilter) productParams.set("type", typeFilter);
 if (motifFilter) productParams.set("motif", motifFilter);
-if (sizeFilter) productParams.set("size", sizeFilter);
+
+let effectiveSizeParam = sizeFilter || "";
+if (fitFilter === "slim_fit" || fitFilter === "sf" || fitFilter === "Slim Fit") {
+	if (sizeFilter) {
+		effectiveSizeParam = `${sizeFilter} SF`;
+	} else {
+		effectiveSizeParam = "%SF%";
+	}
+}
+if (effectiveSizeParam) productParams.set("size", effectiveSizeParam);
+
 if (colorFilter) productParams.set("color", colorFilter);
 if (searchQuery) productParams.set("search", searchQuery);
 if (minPrice) productParams.set("min_price", String(minPrice));
@@ -113,10 +124,92 @@ try {
 	if (s) settings = s;
 
 	if (pRes) {
-		paginatedProducts = pRes?.data || [];
+		let rawProducts = pRes?.data || [];
 		const meta = pRes?.meta || pRes;
-		totalItems = Number(meta?.total || paginatedProducts.length);
-		totalPages = Number(meta?.last_page || Math.ceil(totalItems / itemsPerPage));
+		const lastPage = Number(meta?.last_page || 1);
+
+		const isSlimFit = (sizeName: string) => /\bSF\b|\bSlim\s*Fit\b|\bSlim\b/i.test(sizeName || "");
+		const getBaseSize = (sizeName: string) => {
+			let s = (sizeName || "").trim();
+			if (s.includes(" - ")) s = s.split(" - ")[0].trim();
+			const sfRegex = /\bSF\b|\bSlim\s*Fit\b|\bSlim\b/i;
+			if (sfRegex.test(s)) {
+				s = s.replace(sfRegex, "").replace(/[-_\s/]+$/, "").trim();
+			}
+			return s.toUpperCase();
+		};
+
+		const isSlimFitMode = (fit: string | null) => {
+			if (!fit) return false;
+			const norm = fit.trim().toLowerCase();
+			return norm === "slim_fit" || norm === "sf" || norm === "slim fit" || norm === "slim";
+		};
+
+		const isRegularMode = (fit: string | null) => {
+			if (!fit) return false;
+			const norm = fit.trim().toLowerCase();
+			return norm === "regular" || norm === "reguler" || norm === "regular fit" || norm === "reguler fit";
+		};
+
+		const realSizeFilter = (sizeFilter && !sizeFilter.includes("%")) ? sizeFilter.trim().toUpperCase() : null;
+
+		const filterProduct = (p: any) => {
+			if (!fitFilter && !realSizeFilter) return true;
+			const variants = p.variants || p.product_variants || [];
+			if (variants.length === 0) {
+				if (p.sizes && Array.isArray(p.sizes) && p.sizes.length > 0) {
+					return p.sizes.some((sName: string) => {
+						const sf = isSlimFit(sName);
+						if (isSlimFitMode(fitFilter) && !sf) return false;
+						if (isRegularMode(fitFilter) && sf) return false;
+						if (realSizeFilter) return getBaseSize(sName) === realSizeFilter;
+						return true;
+					});
+				}
+				return false;
+			}
+
+			return variants.some((v: any) => {
+				const sName = v.size_name || "";
+				const sf = isSlimFit(sName);
+				if (isSlimFitMode(fitFilter) && !sf) return false;
+				if (isRegularMode(fitFilter) && sf) return false;
+				if (realSizeFilter) {
+					const base = getBaseSize(sName);
+					if (base !== realSizeFilter && sName.trim().toUpperCase() !== realSizeFilter) {
+						return false;
+					}
+				}
+				return true;
+			});
+		};
+
+		rawProducts = rawProducts.filter(filterProduct);
+
+		let fetchPage = currentPage;
+		while (rawProducts.length < itemsPerPage && fetchPage < lastPage) {
+			fetchPage++;
+			productParams.set("page", String(fetchPage));
+			const nextPageRes = await apiFetch<any>(`products?${productParams.toString()}`).catch(() => null);
+			const nextPageData = nextPageRes?.data || [];
+			if (nextPageData.length === 0) break;
+			const filteredNext = nextPageData.filter(filterProduct);
+			rawProducts.push(...filteredNext);
+		}
+
+		paginatedProducts = rawProducts.slice(0, itemsPerPage);
+		if (fitFilter || sizeFilter) {
+			if (fetchPage >= lastPage && rawProducts.length < itemsPerPage) {
+				totalItems = (currentPage - 1) * itemsPerPage + rawProducts.length;
+				totalPages = currentPage;
+			} else {
+				totalItems = Number(meta?.total || paginatedProducts.length);
+				totalPages = lastPage;
+			}
+		} else {
+			totalItems = Number(meta?.total || paginatedProducts.length);
+			totalPages = lastPage;
+		}
 	}
 
 	const buildCategoryTree = (
@@ -379,6 +472,37 @@ try {
 				class="text-uppercase"
 				style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;"
 			>
+				Potongan Baju
+			</h3>
+			<div
+				style="display: flex; flex-wrap: wrap; gap: 0.6rem;"
+			>
+				<a
+					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), fit: "", page: "1" })}`}
+					class={!fitFilter ? "active-chip" : "chip"}
+					style="font-size: 0.7rem;">Semua</a
+				>
+				<a
+					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), fit: "slim_fit", page: "1" })}`}
+					class={fitFilter === "slim_fit" ? "active-chip" : "chip"}
+					style="font-size: 0.7rem;">Slim Fit</a
+				>
+				<a
+					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), fit: "regular", page: "1" })}`}
+					class={fitFilter === "regular" ? "active-chip" : "chip"}
+					style="font-size: 0.7rem;">Regular Fit</a
+				>
+			</div>
+		</div>
+
+		<div
+			class="filter-group"
+			style="padding-bottom: var(--spacing-sm);"
+		>
+			<h3
+				class="text-uppercase"
+				style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;"
+			>
 				Warna
 			</h3>
 			<div
@@ -606,6 +730,12 @@ try {
 						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
 					</a>
 				)}
+				{fitFilter && (
+					<a href={getClearFilterUrl("fit")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
+						Potongan: <strong>{fitFilter === "slim_fit" ? "Slim Fit" : fitFilter === "regular" ? "Regular Fit" : fitFilter}</strong>
+						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
+					</a>
+				)}
 				{colorFilter && (
 					<a href={getClearFilterUrl("color")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
 						Warna: <strong>{colorFilter}</strong>
@@ -637,7 +767,7 @@ try {
 		<div class="product-grid" style="margin-top: 0;">
 			{
 				paginatedProducts.map((p, index) => (
-					<ProductCard product={p} index={index} settings={settings} activeSize={sizeFilter || undefined} />
+					<ProductCard product={p} index={index} settings={settings} activeSize={sizeFilter || undefined} activeFit={fitFilter || undefined} />
 				))
 			}
 		</div>
@@ -650,7 +780,10 @@ try {
 					<p style="font-size: 0.7rem; letter-spacing: 1px; text-transform: uppercase; color: var(--color-accent); font-weight: 600; opacity: 0.7;">Memuat Koleksi...</p>
 				</div>
 				
-				<button id="manual-load-more" style="padding: 12px 24px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; font-family: var(--font-main); font-size: 0.8rem; font-weight: 600; cursor: pointer; display: none; color: var(--color-text); transition: all 0.2s;">Tampilkan Lebih Banyak</button>
+				<button id="manual-load-more" style="padding: 12px 28px; background: #ffffff; border: 1px solid var(--color-accent); border-radius: 30px; font-family: var(--font-main); font-size: 0.8rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; color: var(--color-accent); transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+					<span>Tampilkan Produk Lainnya</span>
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+				</button>
 				
 				<div id="infinite-scroll-sentinel" style="height: 1px; width: 100%;"></div>
 			</div>

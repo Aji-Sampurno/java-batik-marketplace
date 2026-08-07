@@ -12,20 +12,108 @@ const productParams = new URLSearchParams();
 productParams.set("page", String(currentPage));
 productParams.set("per_page", String(itemsPerPage));
 
-const passThrough = ["type", "motif", "size", "search", "min_price", "max_price", "sort"];
+
+const sizeFilter = searchParams.get("size");
+const fitFilter = searchParams.get("fit");
+
+const passThrough = ["type", "motif", "fit", "search", "min_price", "max_price", "sort"];
 passThrough.forEach(key => {
     const altKey = key === "search" ? "q" : (key === "min_price" ? "minP" : (key === "max_price" ? "maxP" : key));
     const val = searchParams.get(key) || searchParams.get(altKey);
     if (val) productParams.set(key, val);
 });
 
-const sizeFilter = searchParams.get("size");
+let effectiveSize = sizeFilter || "";
+if (fitFilter === "slim_fit" || fitFilter === "sf" || fitFilter === "Slim Fit") {
+    if (sizeFilter) {
+        effectiveSize = `${sizeFilter} SF`;
+    } else {
+        effectiveSize = "%SF%";
+    }
+}
+if (effectiveSize) {
+    productParams.set("size", effectiveSize);
+}
+
 let paginatedProducts = [];
 let settings = { contact_whatsapp: "628123456789" };
 
 try {
     const pRes = await apiFetch<any>(`products?${productParams.toString()}`);
-    paginatedProducts = pRes?.data || [];
+    let rawProducts = pRes?.data || [];
+    const meta = pRes?.meta || pRes;
+    const lastPage = Number(meta?.last_page || 1);
+
+    const isSlimFit = (sizeName: string) => /\bSF\b|\bSlim\s*Fit\b|\bSlim\b/i.test(sizeName || "");
+    const getBaseSize = (sizeName: string) => {
+        let s = (sizeName || "").trim();
+        if (s.includes(" - ")) s = s.split(" - ")[0].trim();
+        const sfRegex = /\bSF\b|\bSlim\s*Fit\b|\bSlim\b/i;
+        if (sfRegex.test(s)) {
+            s = s.replace(sfRegex, "").replace(/[-_\s/]+$/, "").trim();
+        }
+        return s.toUpperCase();
+    };
+
+    const isSlimFitMode = (fit: string | null) => {
+        if (!fit) return false;
+        const norm = fit.trim().toLowerCase();
+        return norm === "slim_fit" || norm === "sf" || norm === "slim fit" || norm === "slim";
+    };
+
+    const isRegularMode = (fit: string | null) => {
+        if (!fit) return false;
+        const norm = fit.trim().toLowerCase();
+        return norm === "regular" || norm === "reguler" || norm === "regular fit" || norm === "reguler fit";
+    };
+
+    const realSizeFilter = (sizeFilter && !sizeFilter.includes("%")) ? sizeFilter.trim().toUpperCase() : null;
+
+    const filterProduct = (p: any) => {
+        if (!fitFilter && !realSizeFilter) return true;
+        const variants = p.variants || p.product_variants || [];
+        if (variants.length === 0) {
+            if (p.sizes && Array.isArray(p.sizes) && p.sizes.length > 0) {
+                return p.sizes.some((sName: string) => {
+                    const sf = isSlimFit(sName);
+                    if (isSlimFitMode(fitFilter) && !sf) return false;
+                    if (isRegularMode(fitFilter) && sf) return false;
+                    if (realSizeFilter) return getBaseSize(sName) === realSizeFilter;
+                    return true;
+                });
+            }
+            return false;
+        }
+
+        return variants.some((v: any) => {
+            const sName = v.size_name || "";
+            const sf = isSlimFit(sName);
+            if (isSlimFitMode(fitFilter) && !sf) return false;
+            if (isRegularMode(fitFilter) && sf) return false;
+            if (realSizeFilter) {
+                const base = getBaseSize(sName);
+                if (base !== realSizeFilter && sName.trim().toUpperCase() !== realSizeFilter) {
+                    return false;
+                }
+            }
+            return true;
+        });
+    };
+
+    rawProducts = rawProducts.filter(filterProduct);
+
+    let fetchPage = currentPage;
+    while (rawProducts.length < itemsPerPage && fetchPage < lastPage) {
+        fetchPage++;
+        productParams.set("page", String(fetchPage));
+        const nextPageRes = await apiFetch<any>(`products?${productParams.toString()}`).catch(() => null);
+        const nextPageData = nextPageRes?.data || [];
+        if (nextPageData.length === 0) break;
+        const filteredNext = nextPageData.filter(filterProduct);
+        rawProducts.push(...filteredNext);
+    }
+
+    paginatedProducts = rawProducts.slice(0, itemsPerPage);
 
     const sRes = await apiFetch<any>("settings");
     const s = sRes?.data || sRes;
@@ -36,5 +124,5 @@ try {
 ---
 
 {paginatedProducts.map((p, i) => (
-    <ProductCard product={p} index={i} settings={settings} activeSize={sizeFilter || undefined} />
+    <ProductCard product={p} index={i} settings={settings} activeSize={sizeFilter || undefined} activeFit={fitFilter || undefined} />
 ))}

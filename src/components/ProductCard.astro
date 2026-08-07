@@ -5,25 +5,46 @@ interface Props {
 	index: number;
 	settings: any;
 	activeSize?: string;
+	activeFit?: string;
 }
 
-const { product: p, index, settings, activeSize } = Astro.props;
+const { product: p, index, settings, activeSize, activeFit } = Astro.props;
+
+const isSlimFitMode = (fit?: string) => {
+	if (!fit) return false;
+	const norm = fit.trim().toLowerCase();
+	return norm === "slim_fit" || norm === "sf" || norm === "slim fit" || norm === "slim";
+};
+
+const isRegularMode = (fit?: string) => {
+	if (!fit) return false;
+	const norm = fit.trim().toLowerCase();
+	return norm === "regular" || norm === "reguler" || norm === "regular fit" || norm === "reguler fit";
+};
 
 const getProductDisplaySizes = (prod: any) => {
-	const variants = prod.variants || prod.product_variants || [];
-	if (variants.length > 0) {
+	const rawVariants = prod.variants || prod.product_variants || [];
+	const sfRegex = /\bSF\b|\bSlim\s*Fit\b|\bSlim\b/i;
+
+	if (rawVariants.length > 0) {
+		let filteredVariants = rawVariants;
+		if (isSlimFitMode(activeFit)) {
+			filteredVariants = rawVariants.filter((v: any) => sfRegex.test(v.size_name || ""));
+		} else if (isRegularMode(activeFit)) {
+			filteredVariants = rawVariants.filter((v: any) => !sfRegex.test(v.size_name || ""));
+		}
+
 		// Only display sizes that have stock > 0 (or stock undefined)
-		const inStockVariants = variants.filter(
+		const inStockVariants = filteredVariants.filter(
 			(v: any) => v.stock === undefined || Number(v.stock) > 0
 		);
-		const targetVariants = inStockVariants.length > 0 ? inStockVariants : variants;
+		const targetVariants = inStockVariants.length > 0 ? inStockVariants : filteredVariants;
 		const mappedSizes = targetVariants.map((v: any) => {
 			let sizeName = v.size_name || "";
 			let baseSize = sizeName.trim();
 			if (sizeName.includes(" - ")) {
 				baseSize = sizeName.split(" - ")[0].trim();
 			}
-			const sfRegex = /\bSF\b|\bSlim\s*Fit\b|\bSlim\b/i;
 			if (sfRegex.test(baseSize)) {
 				baseSize = baseSize
 					.replace(sfRegex, "")
@@ -46,8 +67,13 @@ const getProductDisplaySizes = (prod: any) => {
 		});
 		return uniqueSizes;
 	} else if (prod.sizes && prod.sizes.length > 0) {
-		const mappedSizes = prod.sizes.map((s: any) => {
-			const sfRegex = /\bSF\b|\bSlim\s*Fit\b|\bSlim\b/i;
+		let filteredSizes = prod.sizes;
+		if (activeFit === "slim_fit" || activeFit === "sf" || activeFit === "Slim Fit") {
+			filteredSizes = prod.sizes.filter((s: any) => sfRegex.test(s || ""));
+		} else if (activeFit === "regular") {
+			filteredSizes = prod.sizes.filter((s: any) => !sfRegex.test(s || ""));
+		}
+		const mappedSizes = filteredSizes.map((s: any) => {
 			return s
 				.replace(sfRegex, "")
 				.replace(/[-_\s/]+$/, "")
@@ -61,6 +87,11 @@ const getProductDisplaySizes = (prod: any) => {
 	}
 	return [];
 };
+
+const sfRegex = /\bSF\b|\bSlim\s*Fit\b|\bSlim\b/i;
+const rawVariantsForCard = p.variants || p.product_variants || [];
+const isSlimFitProduct = rawVariantsForCard.some((v: any) => sfRegex.test(v.size_name || "")) ||
+	(p.sizes && p.sizes.some((s: any) => sfRegex.test(s || "")));
 
 const normalizedActiveSize = activeSize ? activeSize.trim().toUpperCase() : null;
 
@@ -93,6 +124,11 @@ const waBaseUrl = "https://wa.me/";
 						: ""
 				}
 			/>
+			{isSlimFitProduct && (
+				<div class="fit-tag" style="position: absolute; top: 0.6rem; right: 0.6rem; background: rgba(140, 120, 81, 0.92); backdrop-filter: blur(4px); color: #ffffff; font-size: 0.6rem; font-weight: 700; padding: 3px 8px; border-radius: 4px; letter-spacing: 0.8px; text-transform: uppercase; z-index: 2; box-shadow: 0 2px 5px rgba(0,0,0,0.18);">
+					SLIM FIT
+				</div>
+			)}
 			{(p.outlet_location || p.counter) && (
 				<div class="outlet-tag">
 					<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
