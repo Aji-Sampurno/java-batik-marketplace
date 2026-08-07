@@ -1,4 +1,6 @@
 ---
+import { getOutletAlias } from '../lib/outlet';
+
 // Extract current Props
 interface Props {
 	product: any;
@@ -100,6 +102,7 @@ const isOutOfStock =
 	(p.total_inventory !== undefined ? Number(p.total_inventory) === 0 : (p.total_stock === 0 || p.stock_status === "habis"));
 
 const waBaseUrl = "https://wa.me/";
+const outletDisplay = getOutletAlias(p.outlet_location || p.counter);
 ---
 
 <div
@@ -124,15 +127,15 @@ const waBaseUrl = "https://wa.me/";
 						: ""
 				}
 			/>
-			{isSlimFitProduct && (
-				<div class="fit-tag" style="position: absolute; top: 0.6rem; right: 0.6rem; background: rgba(140, 120, 81, 0.92); backdrop-filter: blur(4px); color: #ffffff; font-size: 0.6rem; font-weight: 700; padding: 3px 8px; border-radius: 4px; letter-spacing: 0.8px; text-transform: uppercase; z-index: 2; box-shadow: 0 2px 5px rgba(0,0,0,0.18);">
-					SLIM FIT
-				</div>
-			)}
-			{(p.outlet_location || p.counter) && (
+			{outletDisplay && (
 				<div class="outlet-tag">
 					<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-					<span>Outlet {p.outlet_location || p.counter}</span>
+					<span>{outletDisplay}</span>
+				</div>
+			)}
+			{isSlimFitProduct && (
+				<div class="fit-tag">
+					SLIM FIT
 				</div>
 			)}
 			{isOutOfStock && (
@@ -331,6 +334,26 @@ const waBaseUrl = "https://wa.me/";
 		gap: 4px;
 		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 		letter-spacing: 0.2px;
+	}
+
+	.fit-tag {
+		position: absolute;
+		bottom: 10px;
+		left: 10px;
+		z-index: 6;
+		background: rgba(140, 120, 81, 0.92);
+		backdrop-filter: blur(4px);
+		-webkit-backdrop-filter: blur(4px);
+		color: #ffffff;
+		font-size: 0.6rem;
+		font-weight: 700;
+		padding: 3px 8px;
+		border-radius: 4px;
+		letter-spacing: 0.8px;
+		text-transform: uppercase;
+		box-shadow: 0 2px 5px rgba(0,0,0,0.18);
+		display: inline-flex;
+		align-items: center;
 	}
 
 	/* Diagonal Ribbon */
