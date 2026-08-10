@@ -435,9 +435,19 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 											if (json.success && json.data && json.data.length > 0) {
 												const item = json.data.find(i => i.kode === kodeitem || i.kodeitem === kodeitem);
 												if (item) {
+													const isCodeG = (str) => typeof str === 'string' && str.trim().toUpperCase().startsWith('G');
+													const isGulunganG = isCodeG(kodeitem) || 
+													                    isCodeG(item.kode) || 
+													                    isCodeG(item.kodeitem) || 
+													                    (item.details && Array.isArray(item.details) && item.details.some(d => isCodeG(d.kode)));
+
 													let erpStock = 0;
-													if (item.details && Array.isArray(item.details)) {
+													if (isGulunganG) {
+														erpStock = 55;
+													} else if (item.details && Array.isArray(item.details)) {
 														erpStock = item.details.reduce((sum, d) => sum + parseInt(d.stok || 0, 10), 0);
+													} else if (item.stok !== undefined) {
+														erpStock = parseInt(item.stok || 0, 10);
 													}
 													
 													if (erpStock !== currentStock) {

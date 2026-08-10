@@ -2228,7 +2228,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 
 					nameInput.value = parts.join(" ");
 
-					if (jenis && jenis.toLowerCase().includes("kain")) {
+					if (itemCodeInput && itemCodeInput.value && itemCodeInput.value.trim().toUpperCase().startsWith("G")) {
 						document.querySelectorAll(".v-stock-input-add").forEach((input) => {
 							input.value = "55";
 						});
@@ -4013,7 +4013,10 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 														if (detailDivider > 1 && price > 0) {
 															price = Math.round(price / detailDivider);
 														}
-														const stock = isKain
+														const isCodeStartingWithG = (codeStr) => typeof codeStr === "string" && codeStr.trim().toUpperCase().startsWith("G");
+														const isGulunganG = isCodeStartingWithG(detail.kode) || isCodeStartingWithG(item.kode) || isCodeStartingWithG(item.kodeitem) || isCodeStartingWithG(activeCode);
+
+														const stock = isGulunganG
 															? 55
 															: parseInt(
 																	detail.stok || 0,
@@ -4034,7 +4037,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 																	"",
 															};
 														} else {
-															sizeMap[sz].stock = isKain ? 55 : (sizeMap[sz].stock + stock);
+															sizeMap[sz].stock = isGulunganG ? 55 : (sizeMap[sz].stock + stock);
 															if (
 																price >
 																sizeMap[sz]
@@ -4059,7 +4062,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 															if (!colorVariantMap[key]) {
 																colorVariantMap[key] = { color: colorFound, size: sz, price, stock, dalaman, kode: detail.kode || "" };
 															} else {
-																colorVariantMap[key].stock = isKain ? 55 : (colorVariantMap[key].stock + stock);
+																colorVariantMap[key].stock = isGulunganG ? 55 : (colorVariantMap[key].stock + stock);
 																if (price > colorVariantMap[key].price) colorVariantMap[key].price = price;
 																if (dalaman) colorVariantMap[key].dalaman = dalaman;
 															}
