@@ -4,6 +4,18 @@ interface Props {
 }
 
 const { product: p } = Astro.props;
+
+const rawImagesList: string[] = p.raw_images || (p.raw_image_url ? [p.raw_image_url] : []);
+const catalogImagesList: string[] = p.images || (p.image_url ? [p.image_url] : []);
+
+const effectiveRawImages: string[] = rawImagesList.length > 0
+    ? rawImagesList
+    : catalogImagesList.map((url: string) => {
+        if (url.includes('_raw_')) return url;
+        return url.replace(/_(\d+_\d+)\.(webp|jpg|jpeg|png)$/i, '_raw_$1.$2').replace(/\.webp$/i, '.jpg');
+      });
+
+const mainRawUrl = effectiveRawImages[0] || p.raw_image_url || p.image_url;
 ---
 
 <tr
@@ -150,8 +162,26 @@ const { product: p } = Astro.props;
         </form>
     </td>
     <td style="padding: 1rem; text-align: center;">
-        <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+        <div style="display: flex; flex-direction: column; gap: 0.6rem; align-items: center;">
             <div style="display: flex; gap: 0.4rem; justify-content: center;">
+                <a
+                    href={`/products/${p.id}`}
+                    target="_blank"
+                    title="Lihat Detail Produk"
+                    style="background: #f0fdf4; color: #16a34a; padding: 0.4rem; border-radius: 4px; display: inline-flex; align-items: center; transition: 0.2s;"
+                >
+                    <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                    >
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                </a>
                 <a
                     href={`/buka-toko/edit/${p.id}`}
                     title="Edit Produk"
@@ -205,11 +235,47 @@ const { product: p } = Astro.props;
                     </button>
                 </form>
             </div>
-            
-            <div class="manual-sync-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; margin-top: 4px;">
-                <button type="button" class="btn-cek-stok" style="background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; padding: 4px 8px; font-size: 0.65rem; border-radius: 4px; font-weight: 600; cursor: pointer; transition: 0.2s;">Cek Stok ERP</button>
-                <span class="sync-msg" style="display: none; font-size: 0.6rem; font-weight: 600;"></span>
-                <button type="button" class="btn-sync-stock" style="display: none; background: #f59e0b; color: white; border: none; padding: 4px 8px; font-size: 0.65rem; border-radius: 4px; font-weight: 600; cursor: pointer;">Sync</button>
+
+            <!-- Download RAW Image Button (Replacing Cek Stok ERP) -->
+            <div style="margin-top: 2px;">
+                {effectiveRawImages.length <= 1 ? (
+                    <a
+                        href={`/api/proxy-image?url=${encodeURIComponent(mainRawUrl)}`}
+                        download
+                        class="btn-download-raw-row"
+                        style="display: inline-flex; align-items: center; gap: 4px; background: #0f172a; color: #ffffff; border: none; padding: 4px 10px; font-size: 0.68rem; border-radius: 4px; font-weight: 600; cursor: pointer; text-decoration: none; transition: 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.1);"
+                        title="Download Gambar RAW Kosongan (Tanpa Watermark)"
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Download RAW
+                    </a>
+                ) : (
+                    <div class="raw-dropdown-container" style="position: relative; display: inline-block;">
+                        <button
+                            type="button"
+                            class="btn-download-raw-row js-raw-dropdown-toggle"
+                            onclick="const menu = this.nextElementSibling; menu.style.display = menu.style.display === 'none' ? 'block' : 'none';"
+                            style="display: inline-flex; align-items: center; gap: 4px; background: #0f172a; color: #ffffff; border: none; padding: 4px 8px; font-size: 0.68rem; border-radius: 4px; font-weight: 600; cursor: pointer; transition: 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.1);"
+                            title="Download Gambar RAW Kosongan"
+                        >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Download RAW ({effectiveRawImages.length}) ▾
+                        </button>
+                        <div class="raw-dropdown-menu" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; min-width: 130px; padding: 4px 0; text-align: left;">
+                            {effectiveRawImages.map((rawUrl: string, idx: number) => (
+                                <a
+                                    href={`/api/proxy-image?url=${encodeURIComponent(rawUrl)}`}
+                                    download
+                                    style="display: block; padding: 6px 12px; font-size: 0.7rem; color: #0f172a; font-weight: 600; text-decoration: none; transition: background 0.15s;"
+                                    onmouseover="this.style.background='#f1f5f9'"
+                                    onmouseout="this.style.background='transparent'"
+                                >
+                                    📥 Unduh RAW #{idx + 1}
+                                </a>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     </td>

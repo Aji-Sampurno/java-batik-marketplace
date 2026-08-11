@@ -257,6 +257,8 @@ if (Astro.request.method === "POST") {
 
 				let image_url = "";
 				let images: string[] = [];
+				let raw_image_url = "";
+				let raw_images: string[] = [];
 				const fromPraproduk = formData.get("from_praproduk") === "true";
 
 				// Fetch logo buffer once if needed
@@ -282,70 +284,66 @@ if (Astro.request.method === "POST") {
 				if (image_files && image_files.length > 0) {
 					for (const file of image_files) {
 						if (file.size > 0) {
-							let fileToUpload = file;
+							const activeColors = (colors || []) as string[];
+							const imageColorTags = formData.getAll("image_color_tags") as string[];
+							const imgIndex = images.length;
+							const actualCode = (item_code || code || "PRODUK").toString().trim().replace(/[^a-zA-Z0-9]/g, '');
+							const colorTag = imageColorTags[imgIndex] || activeColors[imgIndex % (activeColors.length || 1)] || "";
+							const cleanColorTag = colorTag ? `_${colorTag.toUpperCase().replace(/[^A-Z0-9]/g, '')}` : "";
+							const timestamp = Date.now();
+							const originalExt = file.name.split('.').pop() || 'jpg';
 
-							if (fromPraproduk) {
-								try {
-									const imgBuffer = Buffer.from(
-										await file.arrayBuffer(),
-									);
-									const imgSharp = sharp(imgBuffer);
-									const metadata = await imgSharp.metadata();
-									const width = metadata.width || 1000;
-									const height = metadata.height || 1000;
+							// 1. Upload Original Kosongan Image (Raw Archive)
+							const rawCustomName = `${actualCode}${cleanColorTag}_raw_${timestamp}_${imgIndex + 1}.${originalExt}`;
+							const rawFileToUpload = new File([await file.arrayBuffer()], rawCustomName, { type: file.type });
+							const rawPublicUrl = await uploadToLaravel(rawFileToUpload, folderPath).catch(e => {
+								console.error("Raw original image upload error:", e);
+								return "";
+							});
+							if (rawPublicUrl) {
+								raw_images.push(rawPublicUrl);
+							}
 
-									const compositeArr: any[] = [];
+							// 2. Process Watermarked & WebP Compressed Image for Catalog
+							let webpBuffer: Buffer;
+							try {
+								const imgBuffer = Buffer.from(await file.arrayBuffer());
+								const imgSharp = sharp(imgBuffer);
+								const metadata = await imgSharp.metadata();
+								const width = metadata.width || 1000;
+								const height = metadata.height || 1000;
 
+								const compositeArr: any[] = [];
+
+								if (fromPraproduk) {
 									// Add Logo top right
 									if (logoBuffer) {
-										// Logo width = 18% of image width
-										const logoWidth = Math.round(
-											width * 0.18,
-										);
-										const resizedLogo = await sharp(
-											logoBuffer,
-										)
-											.resize({
-												width: logoWidth,
-												withoutEnlargement: true,
-											})
+										const logoWidth = Math.round(width * 0.18);
+										const resizedLogo = await sharp(logoBuffer)
+											.resize({ width: logoWidth, withoutEnlargement: true })
 											.toBuffer();
-
-										const resizedMeta =
-											await sharp(resizedLogo).metadata();
-										const actualLogoW =
-											resizedMeta.width || logoWidth;
-										const logoMargin = Math.round(
-											width * 0.04,
-										);
+										const resizedMeta = await sharp(resizedLogo).metadata();
+										const actualLogoW = resizedMeta.width || logoWidth;
+										const logoMargin = Math.round(width * 0.04);
 
 										compositeArr.push({
 											input: resizedLogo,
 											top: logoMargin,
-											left:
-												width -
-												actualLogoW -
-												logoMargin,
+											left: width - actualLogoW - logoMargin,
 											blend: "over",
 										});
 									}
 
 									// Add text bottom right
-									const actualCode = (item_code || code || "")
+									const textCode = (item_code || code || "")
 										.toString()
+										.replace(/[\r\n\t\f\v\u00A0\uFEFF]/g, '')
+										.replace(/[^a-zA-Z0-9_\-\s]/g, '')
 										.trim();
-									if (actualCode) {
-										// Font size ~2.2% of height
-										const fontSize = Math.max(
-											Math.round(height * 0.022),
-											12,
-										);
-										// margin kanan 4%, margin bawah 5% dari height
-										const textMarginRight = Math.round(
-											width * 0.04,
-										);
-										const textY =
-											height - Math.round(height * 0.05);
+									if (textCode) {
+										const fontSize = Math.max(Math.round(height * 0.022), 12);
+										const textMarginRight = Math.round(width * 0.04);
+										const textY = height - Math.round(height * 0.05);
 										const svgText = `
 											<svg width="${width}" height="${height}">
 												<style>
@@ -356,8 +354,8 @@ if (Astro.request.method === "POST") {
 													.title { fill: white; font-size: ${fontSize}px; font-weight: bold; font-family: 'Roboto', sans-serif; }
 													.shadow { fill: black; font-size: ${fontSize}px; font-weight: bold; font-family: 'Roboto', sans-serif; }
 												</style>
-												<text x="${width - textMarginRight + 2}" y="${textY + 2}" text-anchor="end" class="shadow">${actualCode}</text>
-												<text x="${width - textMarginRight}" y="${textY}" text-anchor="end" class="title">${actualCode}</text>
+												<text x="${width - textMarginRight + 2}" y="${textY + 2}" text-anchor="end" class="shadow">${textCode}</text>
+												<text x="${width - textMarginRight}" y="${textY}" text-anchor="end" class="title">${textCode}</text>
 											</svg>
 										`;
 										compositeArr.push({
@@ -366,44 +364,36 @@ if (Astro.request.method === "POST") {
 											left: 0,
 										});
 									}
-
-									if (compositeArr.length > 0) {
-										const watermarkedBuffer = await imgSharp
-											.composite(compositeArr)
-											.jpeg({ quality: 90 })
-											.toBuffer();
-										fileToUpload = new File(
-											[watermarkedBuffer],
-											file.name,
-											{ type: "image/jpeg" },
-										);
-									}
-								} catch (e) {
-									console.error("Watermark error:", e);
-									// Fallback to original file
 								}
+
+								if (compositeArr.length > 0) {
+									webpBuffer = await imgSharp
+										.composite(compositeArr)
+										.webp({ quality: 80 })
+										.toBuffer();
+								} else {
+									webpBuffer = await imgSharp
+										.webp({ quality: 80 })
+										.toBuffer();
+								}
+							} catch (e) {
+								console.error("Sharp WebP & Watermark error:", e);
+								webpBuffer = Buffer.from(await file.arrayBuffer());
 							}
 
-							// Auto-rename file to include item code and color variant name for storage & gallery auto-detection
-							const activeColors = (colors || []) as string[];
-							const imageColorTags = formData.getAll("image_color_tags") as string[];
-							const imgIndex = images.length;
-							const actualCode = (item_code || code || "PRODUK").toString().trim().replace(/[^a-zA-Z0-9]/g, '');
-							const colorTag = imageColorTags[imgIndex] || activeColors[imgIndex % (activeColors.length || 1)] || "";
-							const cleanColorTag = colorTag ? `_${colorTag.toUpperCase().replace(/[^A-Z0-9]/g, '')}` : "";
-							const ext = file.name.split('.').pop() || 'jpg';
-							const customName = `${actualCode}${cleanColorTag}_${Date.now()}_${imgIndex + 1}.${ext}`;
-							
-							const renamedFile = new File([await fileToUpload.arrayBuffer()], customName, { type: fileToUpload.type });
+							// 3. Upload Watermarked WebP Image for Catalog Display
+							const webpCustomName = `${actualCode}${cleanColorTag}_${timestamp}_${imgIndex + 1}.webp`;
+							const webpFileToUpload = new File([webpBuffer], webpCustomName, { type: "image/webp" });
 
 							const publicUrl = await uploadToLaravel(
-								renamedFile,
+								webpFileToUpload,
 								folderPath,
 							);
 							images.push(publicUrl);
 						}
 					}
 					if (images.length > 0) image_url = images[0];
+					if (raw_images.length > 0) raw_image_url = raw_images[0];
 				}
 
 				// Build variants array
@@ -451,6 +441,8 @@ if (Astro.request.method === "POST") {
 						item_code,
 						image_url,
 						images,
+						raw_image_url,
+						raw_images,
 						tokopedia_url,
 						variants,
 						is_active: true,
@@ -3354,7 +3346,10 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									"product_item_code_input",
 								);
 								if (itemCodeInput && (item.kodeitem || item.kode)) {
-									let rawCode = (item.kodeitem || item.kode || "").trim();
+									let rawCode = (item.kodeitem || item.kode || "")
+										.toString()
+										.replace(/[\r\n\t\f\v\u00A0\uFEFF]/g, '')
+										.trim();
 									// Extract SKU token if rawCode is a full string e.g. "2.00 78122 BROWN"
 									if (rawCode.includes(" ")) {
 										const tokens = rawCode.split(/\s+/);
@@ -4656,6 +4651,14 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 												: "";
 											if (!codeTxt && skuInputNode)
 												codeTxt = skuInputNode.value;
+
+											if (codeTxt) {
+												codeTxt = codeTxt
+													.toString()
+													.replace(/[\r\n\t\f\v\u00A0\uFEFF]/g, '')
+													.replace(/[^a-zA-Z0-9_\-\s]/g, '')
+													.trim();
+											}
 
 											if (codeTxt) {
 												const fontSize = Math.max(

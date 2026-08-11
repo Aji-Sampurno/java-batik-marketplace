@@ -53,6 +53,17 @@ const isOutOfStock = !product.is_active || product.total_stock === 0 || product.
 
 const colorsList: string[] = product.colors || [];
 const imagesList: string[] = product.images || (product.image_url ? [product.image_url] : []);
+const rawImagesList: string[] = product.raw_images || (product.raw_image_url ? [product.raw_image_url] : []);
+
+// Fallback logic for raw image URLs if raw_images array is not explicitly set
+const effectiveRawImages: string[] = rawImagesList.length > 0
+  ? rawImagesList
+  : imagesList.map((url: string) => {
+      if (url.includes('_raw_')) return url;
+      return url.replace(/_(\d+_\d+)\.(webp|jpg|jpeg|png)$/i, '_raw_$1.$2').replace(/\.webp$/i, '.jpg');
+    });
+
+const isAdminMode = Astro.url.searchParams.get("admin") === "true" || Astro.url.searchParams.get("from") === "admin" || Astro.url.searchParams.has("admin");
 
 let detectedColors: string[] = [...colorsList];
 if (detectedColors.length === 0) {
