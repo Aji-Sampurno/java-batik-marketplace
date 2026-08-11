@@ -1,0 +1,553 @@
+---
+export const prerender = false;
+import Layout from "../../layouts/Layout.astro";
+import { apiFetch } from "../../lib/api";
+
+// Authentication check
+const session = Astro.cookies.get("admin_session");
+if (session?.value !== "authenticated") {
+	return Astro.redirect("/login");
+}
+
+let settings: any = { site_name: "Batik Nusantara" };
+try {
+	const sRes = await apiFetch<any>("settings");
+	const s = sRes?.data || sRes;
+	if (s) settings = s;
+} catch (e: any) {
+	console.error("Settings fetch error:", e.message);
+}
+
+// Fetch categories to build dynamic product folders
+let categoryFolders: string[] = [
+	"products/accessories",
+	"products/kain",
+	"products/kemeja",
+	"products/tunik",
+	"products/potongan",
+	"products/sarong",
+	"products/sepatu",
+	"products",
+	"promotions",
+	"settings",
+	"general"
+];
+
+try {
+	const typesRes = await apiFetch<any>("types");
+	const typesData = typesRes?.data || typesRes || [];
+	if (Array.isArray(typesData)) {
+		typesData.forEach((t: any) => {
+			if (t.name) {
+				const slug = t.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+				const folderPath = `products/${slug}`;
+				if (!categoryFolders.includes(folderPath)) {
+					categoryFolders.splice(7, 0, folderPath);
+				}
+			}
+		});
+	}
+} catch (e) {}
+
+const currentFolder = Astro.url.searchParams.get("folder") || "products/accessories";
+---
+
+<Layout title={`Folder Gambar Firebase - Admin Panel ${settings?.site_name || "Batik Nusantara"}`}>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" is:inline></script>
+	
+	<section style="padding: 130px 0 var(--spacing-2xl) 0; background: #fdfcfb; min-height: 100vh;">
+		<div class="container" style="max-width: 1200px;">
+			<!-- Page Header -->
+			<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--spacing-xl); flex-wrap: wrap; gap: 1rem;">
+				<div>
+					<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+						<span style="background: #0284c7; color: white; font-size: 0.65rem; font-weight: 800; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;">ADMIN TOOL</span>
+						<span style="font-size: 0.85rem; color: #64748b; font-weight: 600;">Firebase Storage Explorer</span>
+					</div>
+					<h1 style="font-family: var(--font-serif); font-size: 2.2rem; margin: 0; font-weight: 400; color: #0f172a;">
+						Folder <span style="font-style: italic; color: #0284c7;">Gambar</span> Storage
+					</h1>
+					<p style="opacity: 0.6; margin-top: 0.4rem; font-size: 0.9rem; max-width: 650px;">
+						Kelola & unduh seluruh berkas foto katalog maupun foto asli RAW (kosongan) langsung dari direktori Firebase Storage.
+					</p>
+				</div>
+
+				<div style="display: flex; gap: 0.5rem; align-items: center;">
+					<a href="/buka-toko" style="display: inline-flex; align-items: center; gap: 6px; padding: 0.6rem 1rem; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; color: #475569; font-weight: 600; font-size: 0.85rem; text-decoration: none; transition: 0.2s;">
+						&larr; Kembali ke Dashboard
+					</a>
+				</div>
+			</div>
+
+			<!-- Main Storage Explorer Card -->
+			<div style="background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px rgba(0,0,0,0.04); overflow: hidden;">
+				<!-- Top Bar Controls -->
+				<div style="padding: 1.25rem 1.5rem; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 1rem;">
+					
+					<!-- Row 1: Folder Selector -->
+					<div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+						<div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 280px;">
+							<label for="folderSelect" style="font-weight: 700; font-size: 0.85rem; color: #334155; white-space: nowrap; display: flex; align-items: center; gap: 6px;">
+								<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+								Direktori Folder:
+							</label>
+							<select id="folderSelect" style="flex: 1; padding: 0.65rem 1rem; border-radius: 8px; border: 1px solid #cbd5e1; background: #ffffff; font-weight: 600; font-size: 0.9rem; color: #0f172a; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+								{categoryFolders.map(f => (
+									<option value={f} selected={f === currentFolder}>📁 {f}</option>
+								))}
+							</select>
+						</div>
+
+						<div style="display: flex; gap: 0.5rem; align-items: center;">
+							<input type="text" id="customFolderInput" placeholder="Ketik path folder lain..." style="padding: 0.6rem 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.85rem; width: 180px;" />
+							<button type="button" id="btnGoCustomFolder" style="padding: 0.6rem 1rem; background: #0284c7; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer;">
+								Buka
+							</button>
+						</div>
+					</div>
+
+					<!-- Row 2: Search, Filters & Bulk Actions -->
+					<div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; pt-2;">
+						<!-- Filter Tabs -->
+						<div style="display: flex; background: #e2e8f0; padding: 3px; border-radius: 8px; gap: 2px;">
+							<button type="button" class="filter-tab active" data-filter="all" style="padding: 6px 12px; border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; background: #ffffff; color: #0f172a; transition: 0.2s;">
+								Semua Gambar (<span id="count-all">0</span>)
+							</button>
+							<button type="button" class="filter-tab" data-filter="raw" style="padding: 6px 12px; border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; background: transparent; color: #64748b; transition: 0.2s;">
+								📷 RAW Kosongan (<span id="count-raw">0</span>)
+							</button>
+							<button type="button" class="filter-tab" data-filter="watermark" style="padding: 6px 12px; border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; background: transparent; color: #64748b; transition: 0.2s;">
+								🖼️ Katalog WebP (<span id="count-wm">0</span>)
+							</button>
+						</div>
+
+						<!-- Live Search Input -->
+						<div style="position: relative; width: 250px;">
+							<input type="text" id="searchInput" placeholder="Cari nama file..." style="width: 100%; padding: 0.55rem 0.8rem 0.55rem 2.2rem; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.85rem;" />
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%);"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+						</div>
+
+						<!-- Batch Download Actions -->
+						<div style="display: flex; items-center; gap: 0.5rem; flex-wrap: wrap;">
+							<button type="button" id="btnSelectAll" style="padding: 0.55rem 0.85rem; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.8rem; font-weight: 600; color: #334155; cursor: pointer;">
+								☑️ Pilih Semua
+							</button>
+							<button type="button" id="btnDownloadSelectedZip" style="padding: 0.55rem 1rem; background: #16a34a; color: white; border: none; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(22, 163, 74, 0.2);">
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+								Unduh Terpilih (.ZIP)
+							</button>
+							<button type="button" id="btnDownloadAllZip" style="padding: 0.55rem 1rem; background: #0f172a; color: white; border: none; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+								⚡ Unduh Semua Folder (.ZIP)
+							</button>
+						</div>
+					</div>
+
+				</div>
+
+				<!-- Status & Progress Indicator -->
+				<div id="zipProgressContainer" style="display: none; padding: 0.75rem 1.5rem; background: #eff6ff; border-bottom: 1px solid #bfdbfe; color: #1e40af; font-size: 0.85rem; font-weight: 600;">
+					<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+						<span id="zipProgressMsg">Memproses kompresi ZIP...</span>
+						<span id="zipPercent">0%</span>
+					</div>
+					<div style="width: 100%; height: 6px; background: #dbeafe; border-radius: 3px; overflow: hidden;">
+						<div id="zipProgressBar" style="width: 0%; height: 100%; background: #2563eb; transition: width 0.2s;"></div>
+					</div>
+				</div>
+
+				<!-- Gallery Content Container -->
+				<div style="padding: 1.5rem;">
+					<div id="loadingState" style="text-align: center; padding: 4rem 1rem; color: #64748b;">
+						<div style="width: 40px; height: 40px; border: 4px solid #cbd5e1; border-top-color: #0284c7; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem auto;"></div>
+						<p style="font-weight: 600; font-size: 0.95rem;">Memuat daftar berkas gambar dari Firebase Storage...</p>
+					</div>
+
+					<div id="emptyState" style="display: none; text-align: center; padding: 4rem 1rem; color: #94a3b8;">
+						<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 1rem; opacity: 0.5;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+						<h3 style="font-size: 1.1rem; color: #475569; margin-bottom: 0.25rem;">Tidak Ada Gambar</h3>
+						<p style="font-size: 0.85rem;">Tidak ditemukan berkas gambar pada folder ini.</p>
+					</div>
+
+					<!-- Image Cards Grid -->
+					<div id="imageGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.25rem;">
+						<!-- Dynamic Items will be rendered here -->
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<style>
+		@keyframes spin {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
+
+		.image-card {
+			background: #ffffff;
+			border: 1px solid #e2e8f0;
+			border-radius: 12px;
+			overflow: hidden;
+			transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+			position: relative;
+			display: flex;
+			flex-direction: column;
+		}
+
+		.image-card:hover {
+			transform: translateY(-4px);
+			box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+			border-color: #cbd5e1;
+		}
+
+		.image-card.selected {
+			border-color: #0284c7;
+			box-shadow: 0 0 0 2px #0284c7;
+		}
+
+		.card-thumb-container {
+			aspect-ratio: 4/3;
+			background: #f8fafc;
+			position: relative;
+			overflow: hidden;
+		}
+
+		.card-thumb {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			display: block;
+			transition: transform 0.4s;
+		}
+
+		.image-card:hover .card-thumb {
+			transform: scale(1.05);
+		}
+
+		.badge-raw {
+			position: absolute;
+			top: 8px;
+			left: 8px;
+			background: #2563eb;
+			color: white;
+			font-size: 0.62rem;
+			font-weight: 800;
+			padding: 2px 6px;
+			border-radius: 4px;
+			text-transform: uppercase;
+			box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+		}
+
+		.badge-wm {
+			position: absolute;
+			top: 8px;
+			left: 8px;
+			background: #16a34a;
+			color: white;
+			font-size: 0.62rem;
+			font-weight: 800;
+			padding: 2px 6px;
+			border-radius: 4px;
+			text-transform: uppercase;
+			box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+		}
+
+		.card-checkbox {
+			position: absolute;
+			top: 8px;
+			right: 8px;
+			width: 20px;
+			height: 20px;
+			cursor: pointer;
+			accent-color: #0284c7;
+			z-index: 10;
+		}
+	</style>
+
+	<script is:inline>
+		let allFiles = [];
+		let activeFilter = 'all';
+		let searchQuery = '';
+
+		const folderSelect = document.getElementById('folderSelect');
+		const customFolderInput = document.getElementById('customFolderInput');
+		const btnGoCustomFolder = document.getElementById('btnGoCustomFolder');
+		const searchInput = document.getElementById('searchInput');
+		const filterTabs = document.querySelectorAll('.filter-tab');
+		const imageGrid = document.getElementById('imageGrid');
+		const loadingState = document.getElementById('loadingState');
+		const emptyState = document.getElementById('emptyState');
+		const btnSelectAll = document.getElementById('btnSelectAll');
+		const btnDownloadSelectedZip = document.getElementById('btnDownloadSelectedZip');
+		const btnDownloadAllZip = document.getElementById('btnDownloadAllZip');
+		const zipProgressContainer = document.getElementById('zipProgressContainer');
+		const zipProgressMsg = document.getElementById('zipProgressMsg');
+		const zipProgressBar = document.getElementById('zipProgressBar');
+		const zipPercent = document.getElementById('zipPercent');
+
+		function formatBytes(bytes, decimals = 1) {
+			if (!bytes || bytes === 0) return '0 B';
+			const k = 1024;
+			const dm = decimals < 0 ? 0 : decimals;
+			const sizes = ['B', 'KB', 'MB', 'GB'];
+			const i = Math.floor(Math.log(bytes) / Math.log(k));
+			return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+		}
+
+		async function loadFiles(folder) {
+			loadingState.style.display = 'block';
+			emptyState.style.display = 'none';
+			imageGrid.innerHTML = '';
+			allFiles = [];
+
+			try {
+				const response = await fetch(`/api/storage/files?folder=${encodeURIComponent(folder)}`);
+				const resData = await response.json();
+
+				if (resData.success && Array.isArray(resData.data) && resData.data.length > 0) {
+					allFiles = resData.data;
+				} else {
+					// Fallback: Direct fetch from Firebase Storage REST API for katalog-batik bucket
+					const cleanFolder = folder.replace(/\/$/, '') + '/';
+					const fbUrl = `https://firebasestorage.googleapis.com/v0/b/katalog-batik/o?prefix=${encodeURIComponent(cleanFolder)}`;
+					const fbRes = await fetch(fbUrl);
+					const fbData = await fbRes.json();
+
+					if (fbData && Array.isArray(fbData.items)) {
+						allFiles = fbData.items.map(item => {
+							const name = item.name;
+							const filename = name.substring(name.lastIndexOf('/') + 1);
+							if (!filename) return null;
+							const encodedPath = encodeURIComponent(name);
+							const fileUrl = `https://firebasestorage.googleapis.com/v0/b/katalog-batik/o/${encodedPath}?alt=media`;
+							const isRaw = filename.includes('_raw_') || filename.toLowerCase().endsWith('.jpg') || filename.toLowerCase().endsWith('.jpeg');
+							return {
+								name: name,
+								filename: filename,
+								url: fileUrl,
+								size: 0,
+								updated_at: '',
+								is_raw: isRaw
+							};
+						}).filter(Boolean);
+					}
+				}
+			} catch (err) {
+				console.error('Error fetching files:', err);
+			} finally {
+				loadingState.style.display = 'none';
+				renderGrid();
+			}
+		}
+
+		function renderGrid() {
+			const filtered = allFiles.filter(item => {
+				// Filter type
+				if (activeFilter === 'raw' && !item.is_raw) return false;
+				if (activeFilter === 'watermark' && item.is_raw) return false;
+
+				// Search query
+				if (searchQuery) {
+					const q = searchQuery.toLowerCase();
+					return item.filename.toLowerCase().includes(q) || item.name.toLowerCase().includes(q);
+				}
+				return true;
+			});
+
+			// Update counts
+			document.getElementById('count-all').innerText = allFiles.length;
+			document.getElementById('count-raw').innerText = allFiles.filter(f => f.is_raw).length;
+			document.getElementById('count-wm').innerText = allFiles.filter(f => !f.is_raw).length;
+
+			if (filtered.length === 0) {
+				emptyState.style.display = 'block';
+				imageGrid.innerHTML = '';
+				return;
+			}
+
+			emptyState.style.display = 'none';
+			imageGrid.innerHTML = filtered.map((item, idx) => `
+				<div class="image-card" data-url="${item.url}" data-filename="${item.filename}">
+					<input type="checkbox" class="card-checkbox item-checkbox" data-idx="${idx}" />
+					<div class="card-thumb-container">
+						<img src="${item.url}" alt="${item.filename}" class="card-thumb" loading="lazy" />
+						${item.is_raw 
+							? '<span class="badge-raw">RAW Kosongan</span>' 
+							: '<span class="badge-wm">Katalog WebP</span>'}
+					</div>
+					<div style="padding: 0.85rem; display: flex; flex-direction: column; flex: 1; justify-content: space-between;">
+						<div style="margin-bottom: 0.5rem;">
+							<p style="font-weight: 700; font-size: 0.8rem; color: #0f172a; word-break: break-all; margin: 0 0 2px 0; line-height: 1.3;" title="${item.filename}">
+								${item.filename}
+							</p>
+							<p style="font-size: 0.7rem; color: #64748b; margin: 0;">
+								${formatBytes(item.size)} ${item.updated_at ? '• ' + item.updated_at.split(' ')[0] : ''}
+							</p>
+						</div>
+						<a 
+							href="/api/proxy-image?url=${encodeURIComponent(item.url)}" 
+							download="${item.filename}"
+							style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0.45rem; background: #0f172a; color: #ffffff; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 0.75rem; transition: background 0.2s;"
+							onmouseover="this.style.background='#0284c7'"
+							onmouseout="this.style.background='#0f172a'"
+						>
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+							Unduh File
+						</a>
+					</div>
+				</div>
+			`).join('');
+
+			// Add event listeners to checkboxes
+			document.querySelectorAll('.item-checkbox').forEach(cb => {
+				cb.addEventListener('change', function() {
+					const card = this.closest('.image-card');
+					if (this.checked) card.classList.add('selected');
+					else card.classList.remove('selected');
+				});
+			});
+		}
+
+		// Event Listeners
+		folderSelect.addEventListener('change', function() {
+			const selected = this.value;
+			const url = new URL(window.location.href);
+			url.searchParams.set('folder', selected);
+			window.history.pushState({}, '', url);
+			loadFiles(selected);
+		});
+
+		btnGoCustomFolder.addEventListener('click', function() {
+			const folder = customFolderInput.value.trim();
+			if (folder) {
+				const url = new URL(window.location.href);
+				url.searchParams.set('folder', folder);
+				window.history.pushState({}, '', url);
+				loadFiles(folder);
+			}
+		});
+
+		filterTabs.forEach(tab => {
+			tab.addEventListener('click', function() {
+				filterTabs.forEach(t => {
+					t.classList.remove('active');
+					t.style.background = 'transparent';
+					t.style.color = '#64748b';
+				});
+				this.classList.add('active');
+				this.style.background = '#ffffff';
+				this.style.color = '#0f172a';
+				activeFilter = this.getAttribute('data-filter');
+				renderGrid();
+			});
+		});
+
+		searchInput.addEventListener('input', function() {
+			searchQuery = this.value;
+			renderGrid();
+		});
+
+		let isAllSelected = false;
+		btnSelectAll.addEventListener('click', function() {
+			isAllSelected = !isAllSelected;
+			document.querySelectorAll('.item-checkbox').forEach(cb => {
+				cb.checked = isAllSelected;
+				const card = cb.closest('.image-card');
+				if (isAllSelected) card.classList.add('selected');
+				else card.classList.remove('selected');
+			});
+			btnSelectAll.innerText = isAllSelected ? '❌ Batal Pilih' : '☑️ Pilih Semua';
+		});
+
+		// ZIP Batch Download Logic
+		async function downloadAsZip(filesToZip, zipName) {
+			if (typeof JSZip === 'undefined') {
+				alert('Library JSZip belum dimuat. Silakan muat ulang halaman.');
+				return;
+			}
+
+			if (!filesToZip || filesToZip.length === 0) {
+				alert('Pilih minimal 1 gambar untuk diunduh.');
+				return;
+			}
+
+			zipProgressContainer.style.display = 'block';
+			zipProgressBar.style.width = '0%';
+			zipPercent.innerText = '0%';
+			zipProgressMsg.innerText = `Mengambil 1 dari ${filesToZip.length} gambar...`;
+
+			const zip = new JSZip();
+			let completed = 0;
+
+			for (let i = 0; i < filesToZip.length; i++) {
+				const item = filesToZip[i];
+				zipProgressMsg.innerText = `Mengunduh (${i + 1}/${filesToZip.length}): ${item.filename}...`;
+
+				try {
+					const imgRes = await fetch(`/api/proxy-image?url=${encodeURIComponent(item.url)}`);
+					const blob = await imgRes.blob();
+					zip.file(item.filename, blob);
+				} catch (err) {
+					console.error('Failed to fetch image for ZIP:', item.filename, err);
+				}
+
+				completed++;
+				const pct = Math.round((completed / filesToZip.length) * 80);
+				zipProgressBar.style.width = pct + '%';
+				zipPercent.innerText = pct + '%';
+			}
+
+			zipProgressMsg.innerText = 'Membuat berkas .ZIP... Mohon tunggu...';
+			
+			zip.generateAsync({ type: 'blob' }, (metadata) => {
+				const pct = 80 + Math.round((metadata.percent / 100) * 20);
+				zipProgressBar.style.width = pct + '%';
+				zipPercent.innerText = pct + '%';
+			}).then((content) => {
+				zipProgressMsg.innerText = 'Selesai! Mengunduh berkas ZIP...';
+				const a = document.createElement('a');
+				a.href = URL.createObjectURL(content);
+				a.download = zipName;
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+
+				setTimeout(() => {
+					zipProgressContainer.style.display = 'none';
+				}, 2000);
+			});
+		}
+
+		btnDownloadSelectedZip.addEventListener('click', function() {
+			const selectedCards = document.querySelectorAll('.image-card.selected');
+			if (selectedCards.length === 0) {
+				alert('Silakan beri tanda centang pada gambar yang ingin diunduh.');
+				return;
+			}
+
+			const filesToZip = [];
+			selectedCards.forEach(card => {
+				filesToZip.push({
+					url: card.getAttribute('data-url'),
+					filename: card.getAttribute('data-filename')
+				});
+			});
+
+			const folderName = folderSelect.value.replace(/[^a-z0-9]/gi, '_');
+			downloadAsZip(filesToZip, `gambar_terpilih_${folderName}.zip`);
+		});
+
+		btnDownloadAllZip.addEventListener('click', function() {
+			if (allFiles.length === 0) {
+				alert('Tidak ada gambar di folder ini untuk diunduh.');
+				return;
+			}
+
+			const folderName = folderSelect.value.replace(/[^a-z0-9]/gi, '_');
+			downloadAsZip(allFiles, `semua_gambar_${folderName}.zip`);
+		});
+
+		// Initial Load
+		loadFiles(folderSelect.value);
+	</script>
+</Layout>

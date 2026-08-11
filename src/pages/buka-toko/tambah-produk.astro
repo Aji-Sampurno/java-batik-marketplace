@@ -36,7 +36,10 @@ try {
 	motifs = mRes?.data || mRes || [];
 
 	const szRes = await apiFetch<any>("sizes");
-	sizesData = szRes?.data || szRes || [];
+	sizesData = (szRes?.data || szRes || []).filter((s: any) => {
+		const name = (s.name || "").trim().toUpperCase();
+		return !name.endsWith(" SF") && !name.includes("LENGAN");
+	});
 
 	const colRes = await apiFetch<any>("colors");
 	colorsData = colRes?.data || colRes || [];
@@ -2253,15 +2256,28 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 						"atasan",
 						"blouse",
 						"tunik",
-						"gamis",
 						"koko",
 						"pdh",
 						"jaket",
 					];
+					const nonSleeveKeywords = [
+						"dress",
+						"gaun",
+						"gamis",
+						"rok",
+						"celana",
+						"kain",
+						"sarung",
+						"jas",
+						"syal",
+					];
 					const jenisLower = jenis.toLowerCase();
-					const needsSleeve = sleeveKeywords.some((kw) =>
+					const isNonSleeve = nonSleeveKeywords.some((kw) =>
 						jenisLower.includes(kw),
 					);
+					const needsSleeve =
+						!isNonSleeve &&
+						sleeveKeywords.some((kw) => jenisLower.includes(kw));
 					const sleeveWrapper = document.getElementById(
 						"sleeve_toggle_wrapper",
 					);
@@ -3363,8 +3379,8 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								}
 
 								let typeLetter = "";
-								const activeCode =
-									item.kode || item.kodeitem || "";
+								// Klasifikasi kategori & bahan memakai item.kode (SKU POS), sedangkan nama produk memakai item.kodeitem
+								const activeCode = (item.kode || item.kodeitem || "").toString().trim();
 
 								if (activeCode.length === 1) {
 									typeLetter = activeCode.toUpperCase();
@@ -3374,6 +3390,27 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 										.toUpperCase();
 								}
 
+								const t1Map = {
+									L: "LADYS",
+									M: "MAN",
+									B: "BLANK",
+									A: "ASESORIS",
+									T: "TAS",
+									J: "JAM",
+									K: "KOSMETIK",
+									S: "SEPATU",
+									D: "SANDAL",
+									E: "DOMPET",
+									W: "WANITA",
+									Y: "YUAN-YUAN",
+									X: "KONSI",
+									I: "KAIN",
+									R: "SARIMBIT",
+									G: "GULUNGAN",
+									C: "METERAN",
+									P: "KPJ",
+								};
+
 								const t2Map = {
 									C: "CELANA",
 									K: "KEMEJA",
@@ -3382,16 +3419,23 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									T: "T - SHIRT",
 									B: "BLUES",
 									S: "STELAN",
+									0: "BLANK",
 									N: "TANK TOP",
 									A: "JAS",
 									M: "SARIMBIT",
 									L: "SYAL",
 									U: "JUMPSUIT",
 									G: "GAUN",
+									I: "TOPI",
+									D: "SABUK",
+									E: "LEGGING",
 									P: "DRESS",
+									H: "SELENDANG",
 									O: "OUTER",
 									F: "SARUNG",
 									V: "KEBAYA",
+									Q: "KLG/ANTG",
+									W: "BROS",
 									X: "GAMIS",
 								};
 
@@ -3399,15 +3443,13 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									? t2Map[typeLetter]
 									: null;
 
-								// Deteksi jenis Kain & meter kain dari nama produk (misal: "2.00 78122 BROWN" -> 2 meter, jika tidak ada 2.00 -> 1 meter)
+								// Deteksi jenis Kain & meter kain dari nama produk (misal: "2.00 78122 BROWN" -> 2 meter)
 								const itemUpperName = (item.nama || "").toUpperCase();
 								const isKain =
-									(activeCode.length > 0 &&
-										(activeCode.charAt(0).toUpperCase() === "G" ||
-											activeCode.charAt(0).toUpperCase() === "I")) ||
 									itemUpperName.includes("GULUNGAN") ||
 									itemUpperName.includes("KAIN") ||
-									(categoryName && categoryName.toUpperCase().includes("KAIN"));
+									(categoryName && categoryName.toUpperCase().includes("KAIN")) ||
+									(!categoryName && activeCode.length > 0 && activeCode.charAt(0).toUpperCase() === "G");
 
 								if (isKain) {
 									// Cek apakah ada "2.00" (atau desimal meter lain) di nama produk
@@ -3985,7 +4027,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 																.trim()
 																.toUpperCase()
 																.endsWith("SF");
-														if (isSF) {
+														if (isSF && !sz.endsWith("SF")) {
 															sz = sz + " SF";
 														}
 

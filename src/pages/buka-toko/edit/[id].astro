@@ -41,7 +41,10 @@ try {
 	motifs = mRes?.data || mRes || [];
 
 	const szRes = await apiFetch<any>("sizes");
-	sizesData = szRes?.data || szRes || [];
+	sizesData = (szRes?.data || szRes || []).filter((s: any) => {
+		const name = (s.name || "").trim().toUpperCase();
+		return !name.endsWith(" SF") && !name.includes("LENGAN");
+	});
 
 	const colRes = await apiFetch<any>("colors");
 	colorsData = colRes?.data || colRes || [];
@@ -484,11 +487,13 @@ if (Astro.request.method === "POST") {
 							<p style="font-size: 0.7rem; color: var(--color-muted); margin-bottom: 1rem;">Centang ukuran yang tersedia, lalu isi harga khususnya jika berbeda.</p>
 
 							{(() => {
-								const sleeveKeywords = ['kemeja', 'baju', 'hem', 'atasan', 'blouse', 'tunik', 'gamis', 'koko', 'pdh', 'jaket'];
+								const sleeveKeywords = ['kemeja', 'baju', 'hem', 'atasan', 'blouse', 'tunik', 'koko', 'pdh', 'jaket'];
+								const nonSleeveKeywords = ['dress', 'gaun', 'gamis', 'rok', 'celana', 'kain', 'sarung', 'jas', 'syal'];
 								const categoryNames = (product.categories || product.product_categories || []).map((pc:any) => (pc.name || pc.types?.name || '').toLowerCase()) || [];
 								if (product.types?.name) categoryNames.push(product.types?.name?.toLowerCase());
 								const jenisStr = categoryNames.join(" ");
-								const needsSleeve = sleeveKeywords.some(kw => jenisStr.includes(kw));
+								const isNonSleeve = nonSleeveKeywords.some(kw => jenisStr.includes(kw));
+								const needsSleeve = !isNonSleeve && sleeveKeywords.some(kw => jenisStr.includes(kw));
 								
 								const hasLengan = (product.variants || product.product_variants || [])?.some((v:any) => v.size_name?.includes('Lengan Pendek') || v.size_name?.includes('Lengan Panjang'));
 								
