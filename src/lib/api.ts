@@ -56,21 +56,10 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
     throw new Error(`Respon server bukan JSON yang valid (kemungkinan HTML/Error Backend). Teks awal: ${text.slice(0, 150)}...`);
   }
 
-  if (isCacheable) {
-    apiCache.set(endpoint, {
-      data,
-      expiry: Date.now() + CACHE_TTL_MS,
-    });
-  }
-
   // Deep recursive loading for category types
   if (endpoint === "types") {
     const rawData = data?.data || data;
     if (Array.isArray(rawData)) {
-      // Backend now sends native children.children natively via updated eager loader.
-      // No additional nested network fetches required!
-      
-      // 3. Standard recursive flattener to restore component-facing list format
       const flatten = (items: any[]): any[] => {
         let flat: any[] = [];
         for (const item of items) {
@@ -84,11 +73,18 @@ export async function apiFetch<T = any>(endpoint: string, options?: RequestInit)
       };
       
       const flatList = flatten(rawData);
-      return (data?.data ? { ...data, data: flatList } : flatList) as T;
+      data = data?.data ? { ...data, data: flatList } : flatList;
     }
   }
 
-  return data;
+  if (isCacheable) {
+    apiCache.set(endpoint, {
+      data,
+      expiry: Date.now() + CACHE_TTL_MS,
+    });
+  }
+
+  return data as T;
 }
 
 export async function uploadToLaravel(file: File, folder?: string): Promise<string> {
