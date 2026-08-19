@@ -14,9 +14,11 @@ if (Astro.request.method === 'POST') {
       Astro.cookies.set('admin_session', 'authenticated', {
         path: '/',
         httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
         maxAge: 60 * 60 * 24,
       });
-      return Astro.redirect('/buka-toko');
+      return Astro.redirect('/buka-toko?auth=1', 303);
     } else {
       errorMessage = 'Password salah. Silakan coba lagi.';
     }
@@ -28,7 +30,7 @@ if (Astro.request.method === 'POST') {
 // Redirect if already logged in
 const session = Astro.cookies.get('admin_session');
 if (session?.value === 'authenticated') {
-  return Astro.redirect('/buka-toko');
+  return Astro.redirect('/buka-toko?auth=1', 303);
 }
 ---
 

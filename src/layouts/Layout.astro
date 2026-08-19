@@ -58,6 +58,10 @@ const restWords = nameParts.slice(1).join(" ");
 // Admin Visibility Check
 const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
 const isBukaTokoPage = Astro.url.pathname.startsWith('/buka-toko');
+
+// Favicon URL formatting (handle existing query string in logo_url)
+const rawFavicon = settings?.logo_url || "/favicon.png";
+const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${rawFavicon}?v=20260819`;
 ---
 
 <!doctype html>
@@ -67,9 +71,10 @@ const isBukaTokoPage = Astro.url.pathname.startsWith('/buka-toko');
 		<meta name="description" content="Marketplace Batik Eksklusif - Modern & Minimalist" />
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
-		<link rel="icon" href={`${settings.logo_url || "/favicon.png"}?v=1774431418`} />
-		<link rel="shortcut icon" href={`${settings.logo_url || "/favicon.png"}?v=1774431418`} />
-		<title>{title} | {settings.site_name}</title>
+		<link rel="icon" type="image/png" href={faviconUrl} />
+		<link rel="shortcut icon" type="image/png" href={faviconUrl} />
+		<link rel="apple-touch-icon" href={faviconUrl} />
+		<title>{title} | {settings?.site_name || "Java Batik"}</title>
 	</head>
 	<body style="scroll-behavior: smooth;">
 		<header id="main-header" style="position: absolute; top: 0; left: 0; right: 0; z-index: 100; transition: var(--transition); padding: 1.2rem 0;">

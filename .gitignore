@@ -25,3 +25,8 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+
+# Archives & Temporary test files
+*.zip
+cookies.txt
+*.bak
