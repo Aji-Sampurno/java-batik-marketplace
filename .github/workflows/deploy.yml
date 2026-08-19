@@ -34,7 +34,7 @@ jobs:
           cp package.json deploy_payload/
           cp package-lock.json deploy_payload/
           mkdir -p deploy_payload/tmp
-          touch deploy_payload/tmp/restart.txt
+          echo "Restart at $(date '+%Y-%m-%d %H:%M:%S') - ${{ github.sha }}" > deploy_payload/tmp/restart.txt
 
       - name: 🚀 Sync ke cPanel via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
