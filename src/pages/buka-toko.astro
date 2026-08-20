@@ -11,7 +11,7 @@ if (session?.value !== "authenticated") {
 	return Astro.redirect("/login");
 }
 
-const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://api.katalog.batik.gooproper.id/api";
+const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://java.batik.katalog.gooproper.id/api";
 
 // Handle Logout & Search
 const { searchParams } = Astro.url;
