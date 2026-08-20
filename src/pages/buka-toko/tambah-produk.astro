@@ -4615,17 +4615,14 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 							const isPraproduk =
 								fromPraprodukInputNode &&
 								fromPraprodukInputNode.value === "true";
-							const logoUrl = logoUrlInput
-								? logoUrlInput.value
-								: "/images/java_batik_gold.png";
+							const logoUrl = "/images/java_batik_gold.png";
 							let logoImg = null;
 							try {
 								logoImg = new Image();
 								await new Promise((resolve) => {
 									logoImg.onload = resolve;
 									logoImg.onerror = () => resolve();
-									logoImg.src =
-										logoUrl || "/images/java_batik_gold.png";
+									logoImg.src = logoUrl;
 								});
 							} catch (err) {
 								console.error(
