@@ -24,6 +24,7 @@ const mainRawUrl = effectiveRawImages[0] || p.raw_image_url || p.image_url;
     data-product-id={p.id}
     data-kodeitem={p.item_code || p.code}
     data-stock={p.total_inventory ?? p.total_stock ?? p.stock_accumulated ?? p.stock ?? 0}
+    data-price={p.price || 0}
 >
     <td style="padding: 1rem;">
         <div style="display: flex; gap: 0.8rem; align-items: center;">

@@ -224,25 +224,20 @@ const outletDisplay = getOutletAlias(p.outlet_location || p.counter);
 				style="margin: 0;"
 			>
 				{(() => {
-					let displayPrice = `Rp ${Number(p.price).toLocaleString("id-ID")}`;
+					let maxPrice = Number(p.price) || 0;
 					const variants = p.variants || p.product_variants || [];
-					if (
-						variants.length > 0
-					) {
-						const vPrices =
-							variants.map(
-								(v: any) =>
-									v.price,
-							);
-						const vMin =
-							Math.min(
-								...vPrices,
-							);
-						if (vMin > 0) {
-							displayPrice = `Rp ${vMin.toLocaleString("id-ID")}`;
+					if (variants.length > 0) {
+						const vPrices = variants
+							.map((v: any) => Number(v.price) || 0)
+							.filter((pr: number) => pr > 0);
+						if (vPrices.length > 0) {
+							const vMax = Math.max(...vPrices);
+							if (vMax > maxPrice) {
+								maxPrice = vMax;
+							}
 						}
 					}
-					return displayPrice;
+					return maxPrice > 0 ? `Rp ${maxPrice.toLocaleString("id-ID")}` : `Rp ${Number(p.price || 0).toLocaleString("id-ID")}`;
 				})()}
 			</p>
 		</div>

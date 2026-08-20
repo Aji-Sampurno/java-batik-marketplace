@@ -11,10 +11,11 @@ if (Astro.request.method === 'POST') {
 
     if (password === adminPassword) {
       // Set session cookie (valid for 24 hours)
+      const isHttps = Astro.url.protocol === 'https:';
       Astro.cookies.set('admin_session', 'authenticated', {
         path: '/',
         httpOnly: true,
-        secure: true,
+        secure: isHttps,
         sameSite: 'lax',
         maxAge: 60 * 60 * 24,
       });

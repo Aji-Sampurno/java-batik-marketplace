@@ -317,7 +317,7 @@ if (success === "product") {
         const BASE_PHOTO_URL_FALLBACK = "https://noir.grace.gracianna.web.id/storage/";
         const BASE_PHOTO_URL_IMAGES = "https://noir.grace.gracianna.web.id/images/";
  
-		let existingCodes = [];
+		let existingCodesSet = new Set();
 
 		// Asynchronous Background Catalog Hydration to prevent UI blocking
 		async function fetchExistingCodes() {
@@ -325,9 +325,24 @@ if (success === "product") {
 				const response = await fetch(`${publicApiUrl}/products?per_page=1000`);
 				const json = await response.json();
 				const products = json.data || json || [];
+				existingCodesSet.clear();
 				products.forEach(p => {
-					if (p.code) existingCodes.push(p.code);
-					if (p.item_code) existingCodes.push(p.item_code);
+					if (p.code) {
+						existingCodesSet.add(String(p.code).trim().toUpperCase());
+						existingCodesSet.add(String(p.code).replace(/\s+/g, '').toUpperCase());
+					}
+					if (p.item_code) {
+						existingCodesSet.add(String(p.item_code).trim().toUpperCase());
+						existingCodesSet.add(String(p.item_code).replace(/\s+/g, '').toUpperCase());
+					}
+					if (p.variants && Array.isArray(p.variants)) {
+						p.variants.forEach(v => {
+							if (v.sku) {
+								existingCodesSet.add(String(v.sku).trim().toUpperCase());
+								existingCodesSet.add(String(v.sku).replace(/\s+/g, '').toUpperCase());
+							}
+						});
+					}
 				});
 				// Smoothly refresh visibility markers without UI glitching
 				if (fetchedProducts && fetchedProducts.length > 0) {
@@ -336,6 +351,36 @@ if (success === "product") {
 			} catch (err) {
 				console.error("[Catalog Hydration Error]:", err);
 			}
+		}
+
+		function checkIsItemSaved(item) {
+			if (!existingCodesSet || existingCodesSet.size === 0 || !item) return false;
+
+			const candidates = [];
+			const addCandidate = (val) => {
+				if (!val) return;
+				const str = String(val).trim().toUpperCase();
+				if (str) {
+					candidates.push(str);
+					candidates.push(str.replace(/\s+/g, ''));
+				}
+			};
+
+			addCandidate(item.kodeitem);
+			addCandidate(item.counter);
+			addCandidate(item.kode);
+			addCandidate(item.kodeitem_original);
+
+			if (item.details && Array.isArray(item.details)) {
+				item.details.forEach(d => {
+					addCandidate(d.kode);
+					addCandidate(d.counter);
+					addCandidate(d.kodeitem);
+					addCandidate(d.kodeitem_original);
+				});
+			}
+
+			return candidates.some(c => existingCodesSet.has(c));
 		}
 
 		let currentPage = 1;
@@ -652,9 +697,7 @@ if (success === "product") {
 			const showUnsavedOnly = document.getElementById('unsavedToggle')?.checked;
 			let filtered = products;
 			if (showUnsavedOnly) {
-				filtered = products.filter(item => {
-					return !existingCodes.includes(item.kodeitem) && !existingCodes.includes(item.counter);
-				});
+				filtered = products.filter(item => !checkIsItemSaved(item));
 			}
 
             if(filtered.length === 0) {
@@ -667,16 +710,18 @@ if (success === "product") {
             }
  
 			filtered.forEach(item => {
+				const isSaved = checkIsItemSaved(item);
 				const card = document.createElement('div');
 				card.className = 'pra-card';
-				card.style.background = 'white';
+				card.style.background = isSaved ? '#f8fafc' : 'white';
 				card.style.borderRadius = 'var(--radius-md)';
 				card.style.boxShadow = 'var(--shadow-sm)';
 				card.style.overflow = 'hidden';
 				card.style.display = 'flex';
 				card.style.flexDirection = 'column';
-				card.style.border = '1px solid #eee';
+				card.style.border = isSaved ? '1px solid #bbf7d0' : '1px solid #eee';
 				card.style.transition = 'transform 0.2s, box-shadow 0.2s';
+				card.style.position = 'relative';
  
 				// Prioritize foto, fallback to img1
 				const photoFile = item.foto || item.img1;
@@ -716,11 +761,66 @@ if (success === "product") {
 					}
 				}
 
-				const rawPrice = parseInt(item.hjual || 0);
+				// Deteksi jika kategori STELAN
+				const activeCode = (item.kode || item.kodeitem || "").toString().trim();
+				const typeLetter = activeCode.length >= 2 ? activeCode.charAt(1).toUpperCase() : (activeCode.length === 1 ? activeCode.toUpperCase() : "");
+				const upperNama = (item.nama || "").toUpperCase();
+				const upperKat = (item.kategori || "").toUpperCase();
+				const isSetelan =
+					typeLetter === "S" ||
+					upperKat.includes("STELAN") ||
+					upperKat.includes("SETELAN") ||
+					upperNama.startsWith("S ") ||
+					upperNama.includes("STLAN") ||
+					upperNama.includes("SETELAN") ||
+					upperNama.includes("STELAN");
+
+				let rawPrice = parseInt(item.hjual || 0);
+				let rawOld = item.old ? parseInt(item.old || 0) : 0;
+
+				if (item.details) {
+					try {
+						const detailsArr = typeof item.details === "string" ? JSON.parse(item.details) : item.details;
+						if (Array.isArray(detailsArr) && detailsArr.length > 0) {
+							const validPrices = detailsArr
+								.map(d => parseFloat(d.hjual ?? d.price ?? 0))
+								.filter(p => !isNaN(p) && p > 0)
+								.sort((a, b) => b - a);
+
+							if (isSetelan) {
+								if (validPrices.length >= 2) {
+									rawPrice = validPrices[0] + validPrices[1];
+								} else if (validPrices.length === 1) {
+									rawPrice = validPrices[0];
+								}
+							} else if (validPrices.length > 0) {
+								// Untuk produk BUKAN stelan, ambil harga termahal (tertinggi)
+								rawPrice = validPrices[0];
+							}
+
+							const validOldPrices = detailsArr
+								.map(d => parseFloat(d.old ?? 0))
+								.filter(p => !isNaN(p) && p > 0)
+								.sort((a, b) => b - a);
+
+							if (isSetelan) {
+								if (validOldPrices.length >= 2) {
+									rawOld = validOldPrices[0] + validOldPrices[1];
+								} else if (validOldPrices.length === 1) {
+									rawOld = validOldPrices[0];
+								}
+							} else if (validOldPrices.length > 0) {
+								rawOld = validOldPrices[0];
+							}
+						}
+					} catch (e) {
+						console.error("Error calculating price in pra-produk:", e);
+					}
+				}
+
 				const price = priceDivider > 1 ? Math.round(rawPrice / priceDivider) : rawPrice;
 				const formattedPrice = price > 0 ? `Rp ${price.toLocaleString('id-ID')}` : 'Harga tidak tersedia';
 
-				const rawOld = item.old ? parseInt(item.old || 0) : 0;
 				const oldPrice = (priceDivider > 1 && rawOld > 0) ? Math.round(rawOld / priceDivider) : rawOld;
 				const oldPriceHtml = oldPrice > 0 ? `<span style="font-size: 0.75rem; text-decoration: line-through; color: #94a3b8; margin-left: 0.5rem;">Rp ${oldPrice.toLocaleString('id-ID')}</span>` : '';
 
@@ -786,7 +886,25 @@ if (success === "product") {
 					`;
 				}
 
+				const savedBadgeHtml = isSaved ? `
+					<div style="position: absolute; top: 10px; right: 10px; z-index: 10; background: #16a34a; color: white; padding: 4px 8px; border-radius: 6px; font-size: 0.65rem; font-weight: 700; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+						<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+						SUDAH DI KATALOG
+					</div>
+				` : '';
+
+				const btnHtml = isSaved ? `
+					<a href="/buka-toko/tambah-produk?use_praproduk=${item.id}&q=${encodeURIComponent(item.kodeitem || item.nama || '')}" class="btn-gunakan" style="display: block; width: 100%; text-align: center; background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 0.7rem; border-radius: var(--radius-sm); text-decoration: none; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s;">
+						✓ Sudah Tersimpan (Edit)
+					</a>
+				` : `
+					<a href="/buka-toko/tambah-produk?use_praproduk=${item.id}&q=${encodeURIComponent(item.kodeitem || item.nama || '')}" class="btn-gunakan" style="display: block; width: 100%; text-align: center; background: var(--color-text); color: white; padding: 0.7rem; border-radius: var(--radius-sm); text-decoration: none; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1.5px; transition: opacity 0.2s;">
+						Gunakan Data Ini
+					</a>
+				`;
+
 				card.innerHTML = `
+					${savedBadgeHtml}
 					${photoHtml}
 					<div style="padding: 1.25rem; flex: 1; display: flex; flex-direction: column;">
 						<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
@@ -807,9 +925,7 @@ if (success === "product") {
 								${formattedPrice}
 								${oldPriceHtml}
 							</div>
-							<a href="/buka-toko/tambah-produk?use_praproduk=${item.id}&q=${encodeURIComponent(item.kodeitem || item.nama || '')}" class="btn-gunakan" style="display: block; width: 100%; text-align: center; background: var(--color-text); color: white; padding: 0.7rem; border-radius: var(--radius-sm); text-decoration: none; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1.5px; transition: opacity 0.2s;">
-								Gunakan Data Ini
-							</a>
+							${btnHtml}
 						</div>
 					</div>
 				`;
