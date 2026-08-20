@@ -4617,6 +4617,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								fromPraprodukInputNode.value === "true";
 							const logoUrl = logoUrlInput
 								? logoUrlInput.value
+								: "/images/java_batik_gold.png";
 							let logoImg = null;
 							try {
 								logoImg = new Image();
@@ -4624,7 +4625,7 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 									logoImg.onload = resolve;
 									logoImg.onerror = () => resolve();
 									logoImg.src =
-										"/images/java_batik_gold.png";
+										logoUrl || "/images/java_batik_gold.png";
 								});
 							} catch (err) {
 								console.error(
@@ -4767,7 +4768,6 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 													textY,
 												);
 											}
-										}
 
 										// Wrap canvas in preview card container
 										const cardItem = document.createElement("div");
