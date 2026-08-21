@@ -677,16 +677,47 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 
 					<!-- Submit Button -->
 					<div style="margin-top: var(--spacing-sm);">
-						<button type="submit" style="background: var(--color-text); color: white; padding: 0.95rem; border: none; text-transform: uppercase; letter-spacing: 2px; width: 100%; cursor: pointer; font-weight: 800; font-size: 0.85rem; border-radius: 6px; transition: var(--transition); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+						<button type="submit" id="btnSubmitProduct" style="background: var(--color-text); color: white; padding: 0.95rem; border: none; text-transform: uppercase; letter-spacing: 2px; width: 100%; cursor: pointer; font-weight: 800; font-size: 0.85rem; border-radius: 6px; transition: var(--transition); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
 							Simpan Produk ke Katalog
 						</button>
 					</div>
 				</form>
 			</div>
 		</div>
+
+		<!-- Loading Overlay Popup on Submit -->
+		<div
+			id="loadingOverlay"
+			style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(8px); z-index: 99999; align-items: center; justify-content: center; flex-direction: column; color: white; transition: opacity 0.3s ease;"
+		>
+			<div
+				style="background: white; padding: 2.5rem 2rem; border-radius: 14px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column; align-items: center; gap: 1.25rem; max-width: 440px; width: 90%; text-align: center; border: 1px solid rgba(226, 232, 240, 0.8);"
+			>
+				<div
+					class="spinner-overlay"
+					style="width: 52px; height: 52px; border: 4px solid #f1f5f9; border-top: 4px solid #0f172a; border-radius: 50%; animation: spinOverlay 0.85s linear infinite;"
+				>
+				</div>
+				<h3
+					style="color: #0f172a; font-size: 1.2rem; font-weight: 800; margin: 0; letter-spacing: -0.2px;"
+				>
+					Sedang Menyimpan Produk...
+				</h3>
+				<p
+					style="color: #64748b; font-size: 0.85rem; margin: 0; line-height: 1.6;"
+				>
+					Mohon tunggu sebentar, sistem sedang memproses watermark WebP, mengunggah foto motif, dan menyinkronkan data ke Noir & Marketplace.
+				</p>
+			</div>
+		</div>
 	</section>
 
 	<style>
+		@keyframes spinOverlay {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
+
 		.searchable-select { position: relative; width: 100%; }
 		.ss-input { width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
 		.ss-dropdown { display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #cbd5e1; border-radius: 6px; max-height: 220px; overflow-y: auto; z-index: 50; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
@@ -2313,6 +2344,33 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			}
 		}
 
+		function setupFormSubmitLoading() {
+			const form = document.getElementById("counterProductForm");
+			if (form) {
+				form.addEventListener("submit", (e) => {
+					// Check active variants
+					const activeCheckboxes = Array.from(document.querySelectorAll(".v-counter-cb:checked"));
+					if (activeCheckboxes.length === 0) {
+						e.preventDefault();
+						alert("⚠️ Harap pilih minimal 1 counter/varian untuk disimpan!");
+						return;
+					}
+
+					const overlay = document.getElementById("loadingOverlay");
+					if (overlay) {
+						overlay.style.display = "flex";
+					}
+
+					const submitBtn = document.getElementById("btnSubmitProduct");
+					if (submitBtn) {
+						submitBtn.disabled = true;
+						submitBtn.style.opacity = "0.6";
+						submitBtn.textContent = "Sedang Menyimpan...";
+					}
+				});
+			}
+		}
+
 		// Run all setup on load
 		setupCategoryDropdown();
 		setupPriceMasking();
@@ -2320,5 +2378,6 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 		setupMotifEngine();
 		setupAutoNamingListeners();
 		setupDescGenerator();
+		setupFormSubmitLoading();
 	</script>
 </Layout>
