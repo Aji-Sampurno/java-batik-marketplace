@@ -2,8 +2,10 @@
 export const prerender = false;
 import Layout from "../../layouts/Layout.astro";
 import { apiFetch, uploadToLaravel } from "../../lib/api";
+import { uploadToFirebase } from "../../lib/firebase";
 import sharp from "sharp";
 import fs from "node:fs";
+import path from "node:path";
 
 // Check for session (Authentication Gate)
 const session = Astro.cookies.get("admin_session");
@@ -134,9 +136,18 @@ if (Astro.request.method === "POST") {
 				let logoBuffer: Buffer | null = null;
 				let fontBase64 = "";
 				try {
-					logoBuffer = fs.readFileSync(process.cwd() + "/public/images/java_batik_gold.png");
-					const fontBuffer = fs.readFileSync(process.cwd() + "/public/fonts/Roboto-Bold.ttf");
-					fontBase64 = fontBuffer.toString("base64");
+					const logoPath = path.join(process.cwd(), "public/images/java_batik_gold.png");
+					const fontPath = path.join(process.cwd(), "public/fonts/Roboto-Bold.ttf");
+					if (fs.existsSync(logoPath)) {
+						logoBuffer = fs.readFileSync(logoPath);
+						console.log(`[Watermark] Gold Logo loaded (${logoBuffer.length} bytes)`);
+					} else {
+						console.warn(`[Watermark] Logo file not found at: ${logoPath}`);
+					}
+					if (fs.existsSync(fontPath)) {
+						const fontBuffer = fs.readFileSync(fontPath);
+						fontBase64 = fontBuffer.toString("base64");
+					}
 				} catch (e) {
 					console.error("Failed to load assets for watermark", e);
 				}
@@ -176,22 +187,38 @@ if (Astro.request.method === "POST") {
 					if (imgData.file && imgData.file.size > 0) {
 						const file = imgData.file;
 						const actualCode = (item_code || code || "PRODUK").toString().trim().replace(/[^a-zA-Z0-9]/g, '');
-						const cleanMotifTag = `_${motifKey.toUpperCase().replace(/[^A-Z0-9]/g, '')}`;
+						const cleanMotifTag = motifKey.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_');
 						const timestamp = Date.now();
-						const originalExt = file.name.split('.').pop() || 'jpg';
 
-						// 1. Upload Raw Original Image
-						const rawCustomName = `${actualCode}${cleanMotifTag}_raw_${timestamp}_${motifIdx}.${originalExt}`;
-						const rawFileToUpload = new File([await file.arrayBuffer()], rawCustomName, { type: file.type });
-						const rawPublicUrl = await uploadToLaravel(rawFileToUpload, folderPath).catch(e => {
-							console.error("Raw original image upload error:", e);
-							return "";
-						});
+						// 1. Process & Compress Raw Image to WebP (No Watermark, No Code) and Upload to Firebase
+						let rawWebpBuffer: Buffer;
+						try {
+							rawWebpBuffer = await sharp(Buffer.from(await file.arrayBuffer()))
+								.webp({ quality: 85 })
+								.toBuffer();
+						} catch (e) {
+							console.error("Raw WebP compression error:", e);
+							rawWebpBuffer = Buffer.from(await file.arrayBuffer());
+						}
+
+						const rawCustomName = `${actualCode}_${cleanMotifTag}_raw_${timestamp}_${motifIdx}.webp`;
+						const rawFileToUpload = new File([new Uint8Array(rawWebpBuffer)], rawCustomName, { type: "image/webp" });
+
+						let rawPublicUrl = "";
+						try {
+							const fbPathRaw = `${folderPath}/${rawCustomName}`;
+							rawPublicUrl = await uploadToFirebase(rawFileToUpload, fbPathRaw);
+							console.log(`[Firebase Raw] Upload success -> ${rawPublicUrl}`);
+						} catch (fbErr) {
+							console.warn("[Firebase Raw] Firebase failed, fallback to Laravel:", fbErr);
+							rawPublicUrl = await uploadToLaravel(rawFileToUpload, folderPath).catch(() => "");
+						}
+
 						if (rawPublicUrl) {
 							raw_images.push(rawPublicUrl);
 						}
 
-						// 2. Process Watermarked & WebP Compressed Image
+						// 2. Process Watermarked & WebP Compressed Image (Logo + Code Text) and Upload to Firebase
 						let webpBuffer: Buffer;
 						try {
 							const imgBuffer = Buffer.from(await file.arrayBuffer());
@@ -264,16 +291,26 @@ if (Astro.request.method === "POST") {
 							webpBuffer = Buffer.from(await file.arrayBuffer());
 						}
 
-						const webpCustomName = `${actualCode}${cleanMotifTag}_${timestamp}_${motifIdx}.webp`;
+						const webpCustomName = `${actualCode}_${cleanMotifTag}_${timestamp}_${motifIdx}.webp`;
 						const webpFileToUpload = new File([new Uint8Array(webpBuffer)], webpCustomName, { type: "image/webp" });
 
-						const publicUrl = await uploadToLaravel(webpFileToUpload, folderPath);
+						let publicUrl = "";
+						try {
+							const fbPathWebp = `${folderPath}/${webpCustomName}`;
+							publicUrl = await uploadToFirebase(webpFileToUpload, fbPathWebp);
+							console.log(`[Firebase WebP] Upload success -> ${publicUrl}`);
+						} catch (fbErr) {
+							console.warn("[Firebase WebP] Firebase failed, fallback to Laravel:", fbErr);
+							publicUrl = await uploadToLaravel(webpFileToUpload, folderPath).catch(() => "");
+						}
+
 						if (publicUrl) {
 							images.push(publicUrl);
 							finalMotifUrl = publicUrl;
 						}
 					} else if (imgData.existingUrl) {
 						images.push(imgData.existingUrl);
+						raw_images.push(imgData.existingUrl);
 						finalMotifUrl = imgData.existingUrl;
 					}
 
@@ -285,8 +322,17 @@ if (Astro.request.method === "POST") {
 				// Final deduplication & primary image
 				images = [...new Set(images.filter(Boolean))];
 				raw_images = [...new Set(raw_images.filter(Boolean))];
-				const image_url = images[0] || "";
-				const raw_image_url = raw_images[0] || "";
+
+				// Fallback: If raw_images is empty, use images, and vice versa
+				if (raw_images.length === 0 && images.length > 0) {
+					raw_images = [...images];
+				}
+				if (images.length === 0 && raw_images.length > 0) {
+					images = [...raw_images];
+				}
+
+				const image_url = images[0] || null;
+				const raw_image_url = raw_images[0] || image_url || null;
 
 				// -------------------------------------------------------------
 				// UPDATE AI_FOTO KE NOIR API (PUT /v1/beli1/{id}/ai-foto)
@@ -2355,6 +2401,29 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 						alert("⚠️ Harap pilih minimal 1 counter/varian untuk disimpan!");
 						return;
 					}
+
+					// Synchronize files from motifPhotoStore to row inputs before submit
+					document.querySelectorAll(".counter-table-row").forEach(row => {
+						const isChecked = row.querySelector(".v-counter-cb")?.checked;
+						if (!isChecked) return;
+						const motif = row.querySelector(".v-motif-select")?.value;
+						const fileInp = row.querySelector(".v-row-file-input");
+						const photoHidden = row.querySelector(".v-photo-url-hidden");
+
+						if (motif && motifPhotoStore.has(motif)) {
+							const data = motifPhotoStore.get(motif);
+							if (data.file && fileInp && window.DataTransfer) {
+								try {
+									const dt = new DataTransfer();
+									dt.items.add(data.file);
+									fileInp.files = dt.files;
+								} catch(err) {}
+							}
+							if (photoHidden && data.previewUrl && !photoHidden.value) {
+								photoHidden.value = data.previewUrl;
+							}
+						}
+					});
 
 					const overlay = document.getElementById("loadingOverlay");
 					if (overlay) {
