@@ -47,6 +47,22 @@ const productCategories = (product.categories || product.product_categories || [
   .filter(Boolean)
   .sort((a: any, b: any) => (a.category_level || a.level || 0) - (b.category_level || b.level || 0)) || [];
 
+const isSetelanProduct =
+  productCategories.some((c: any) => (c.name || '').toUpperCase().includes('SETELAN') || (c.name || '').toUpperCase().includes('STELAN')) ||
+  (product.types?.name || '').toUpperCase().includes('SETELAN') ||
+  (product.types?.name || '').toUpperCase().includes('STELAN') ||
+  (product.name || '').toUpperCase().includes('SETELAN') ||
+  (product.name || '').toUpperCase().startsWith('S ');
+
+let effectiveProductPrice = Number(product.price || 0);
+const rawProductVariants = product.variants || product.product_variants || [];
+if (isSetelanProduct && rawProductVariants.length > 0) {
+  const validPrices = rawProductVariants.map((v: any) => Number(v.price || 0)).filter((p: number) => p > 0);
+  if (validPrices.length >= 2 && effectiveProductPrice < (validPrices[0] + validPrices[1])) {
+    effectiveProductPrice = validPrices[0] + validPrices[1];
+  }
+}
+
 const waNumber = settings.contact_whatsapp || "628123456789";
 const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${product.name} (${product.code || ''}). Apakah masih tersedia?`);
 const isOutOfStock = !product.is_active || product.total_stock === 0 || product.stock_status === 'habis';
@@ -82,6 +98,107 @@ if (detectedColors.length === 0) {
   });
   detectedColors = Array.from(found);
 }
+
+const colorSwatches = detectedColors.map((colorName: string, idx: number) => {
+  const searchColor = colorName.toLowerCase();
+  const foundImg = imagesList.find((imgUrl: string) => imgUrl.toLowerCase().includes(searchColor));
+  const matchedImg = foundImg || imagesList[idx % imagesList.length] || product.image_url;
+  return {
+    name: colorName,
+    image: matchedImg
+  };
+});
+
+const variants = product.variants || product.product_variants || [];
+let parsedVariantsList = variants.map((v: any) => {
+  let sizeName = v.size_name || '';
+  let baseSize = sizeName;
+  let isSF = false;
+  let sleeve = '';
+
+  if (sizeName.includes(' SF')) {
+    isSF = true;
+    sizeName = sizeName.replace(' SF', '');
+  }
+
+  if (sizeName.includes(' - ')) {
+    const parts = sizeName.split(' - ');
+    baseSize = parts[0].trim();
+    sleeve = parts[1].trim();
+  } else {
+    baseSize = sizeName.trim();
+  }
+
+  baseSize = baseSize.toUpperCase();
+
+  let subName = isSF ? 'Slim Fit' : 'Regular Fit';
+  if (sleeve && !isSetelanProduct) {
+    subName += ' - ' + sleeve;
+  }
+
+  return {
+    ...v,
+    baseSize,
+    subName,
+    isSF
+  };
+});
+
+if (isSetelanProduct) {
+  const consolidatedMap = new Map<string, any>();
+  parsedVariantsList.forEach((v: any) => {
+    const key = v.baseSize;
+    if (!consolidatedMap.has(key)) {
+      consolidatedMap.set(key, { ...v, parts: [v] });
+    } else {
+      const existing = consolidatedMap.get(key);
+      existing.parts.push(v);
+    }
+  });
+
+  parsedVariantsList = Array.from(consolidatedMap.values()).map((c: any) => {
+    const parts = c.parts;
+    let combinedPrice = Number(c.price || 0);
+    if (parts.length >= 2) {
+      const partPrices = parts.map((p: any) => Number(p.price || 0)).filter((pr: number) => pr > 0);
+      if (partPrices.length >= 2) {
+        combinedPrice = partPrices[0] + partPrices[1];
+      }
+    }
+    if (combinedPrice < effectiveProductPrice) {
+      combinedPrice = effectiveProductPrice;
+    }
+
+    let combinedStock = Math.min(...parts.map((p: any) => parseInt(p.stock || 0)));
+    let combinedDalaman = parts.some((p: any) => p.dalaman === 'F') ? 'F' : (c.dalaman || '');
+
+    return {
+      ...c,
+      price: combinedPrice,
+      stock: combinedStock,
+      dalaman: combinedDalaman,
+      size_name: c.baseSize,
+      subName: c.isSF ? 'Slim Fit (1 Set)' : 'Regular Fit (1 Set)'
+    };
+  });
+}
+
+const baseSizesList = [...new Set(parsedVariantsList.map((v: any) => v.baseSize))].filter(Boolean);
+const sizeOrder = ['S', 'M', 'L', 'XL', 'XXL', '3XL', 'ALL SIZE'];
+baseSizesList.sort((a: any, b: any) => {
+  const idxA = sizeOrder.indexOf(a);
+  const idxB = sizeOrder.indexOf(b);
+  if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+  if (idxA !== -1) return -1;
+  if (idxB !== -1) return 1;
+  return a.localeCompare(b);
+});
+
+const sizeStockMap: Record<string, number> = {};
+parsedVariantsList.forEach((v: any) => {
+  const stock = parseInt(v.stock || 0);
+  sizeStockMap[v.baseSize] = (sizeStockMap[v.baseSize] || 0) + stock;
+});
 
 function renderMarkdown(md: string): string {
   if (!md) return '';
@@ -180,14 +297,14 @@ function renderMarkdown(md: string): string {
 						</div>
 						<h1 class="product-name">{product.name}</h1>
 						<div style="display: flex; align-items: center; gap: 1rem; margin-bottom: var(--spacing-lg);">
-							<p class="product-price" style="margin: 0;">Rp {Number(product.price).toLocaleString('id-ID')}</p>
-							{product.original_price && product.original_price > product.price && (
+							<p class="product-price" style="margin: 0;">Rp {Number(effectiveProductPrice).toLocaleString('id-ID')}</p>
+							{product.original_price && product.original_price > effectiveProductPrice && (
 								<div style="display: flex; flex-direction: column;">
 									<span style="text-decoration: line-through; color: #999; font-size: 0.9rem;">
 										Rp {Number(product.original_price).toLocaleString('id-ID')}
 									</span>
 									<span style="color: #10b981; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
-										Hemat Rp {Number(product.original_price - product.price).toLocaleString("id-ID")}
+										Hemat Rp {Number(product.original_price - effectiveProductPrice).toLocaleString("id-ID")}
 									</span>
 								</div>
 							)}
@@ -218,35 +335,28 @@ function renderMarkdown(md: string): string {
 								{productMotifs.map((m: string) => <span class="motif-tag">{m}</span>)}
 							</div>
 						</div>
-						{detectedColors.length > 0 && (
+						{colorSwatches.length > 0 && (
 							<div class="meta-item" style="margin-top: 1rem; margin-bottom: 0.5rem;">
 								<span class="meta-label" style="font-weight: 700; color: #1e293b; display: block; margin-bottom: 0.5rem;">
-									Pilihan Warna ({detectedColors.length})
+									Pilihan Warna ({colorSwatches.length})
 								</span>
 								<div class="color-swatch-list" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
-									{detectedColors.map((colorName: string, idx: number) => {
-										let matchedImg = imagesList[idx % imagesList.length] || product.image_url;
-										const searchColor = colorName.toLowerCase();
-										const foundImg = imagesList.find((imgUrl: string) => imgUrl.toLowerCase().includes(searchColor));
-										if (foundImg) matchedImg = foundImg;
-
-										return (
-											<button
-												type="button"
-												class={`color-swatch-btn ${idx === 0 ? 'active' : ''}`}
-												data-color={colorName}
-												data-image={matchedImg}
-												style="display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.95rem; border-radius: 8px; border: 2px solid #e2e8f0; background: #fff; cursor: pointer; transition: all 0.2s; font-size: 0.85rem; font-weight: 600; color: #334155;"
-											>
-												<span style="width: 12px; height: 12px; border-radius: 50%; background-color: #8c7851; border: 1px solid rgba(0,0,0,0.15); display: inline-block;"></span>
-												{colorName}
-											</button>
-										);
-									})}
+									{colorSwatches.map((color: any, idx: number) => (
+										<button
+											type="button"
+											class={`color-swatch-btn ${idx === 0 ? 'active' : ''}`}
+											data-color={color.name}
+											data-image={color.image}
+											style="display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.95rem; border-radius: 8px; border: 2px solid #e2e8f0; background: #fff; cursor: pointer; transition: all 0.2s; font-size: 0.85rem; font-weight: 600; color: #334155;"
+										>
+											<span style="width: 12px; height: 12px; border-radius: 50%; background-color: #8c7851; border: 1px solid rgba(0,0,0,0.15); display: inline-block;"></span>
+											{color.name}
+										</button>
+									))}
 								</div>
 							</div>
 						)}
-						{(product.variants || product.product_variants || []).length > 0 ? (
+						{parsedVariantsList.length > 0 ? (
 							<div class="meta-item" style="margin-top: 1rem;">
 								<span class="meta-label" style="font-weight: 700; color: #1e293b;">Pilihan Ukuran & Model</span>
 								<div id="variant-group-selector" style="display: flex; flex-direction: column; gap: 1rem; width: 100%;">
@@ -255,75 +365,22 @@ function renderMarkdown(md: string): string {
 									<div>
 										<span style="font-size: 0.75rem; color: #64748b; font-weight: 500; display: block; margin-bottom: 0.5rem;">1. Pilih Ukuran Utama:</span>
 										<div class="size-chips" id="base-size-options" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
-											{(() => {
-												const variants = product.variants || product.product_variants || [];
-												const parsedVariants = variants.map((v: any) => {
-													let sizeName = v.size_name || '';
-													let baseSize = sizeName;
-													let isSF = false;
-													let sleeve = '';
-
-													if (sizeName.includes(' SF')) {
-														isSF = true;
-														sizeName = sizeName.replace(' SF', '');
-													}
-
-													if (sizeName.includes(' - ')) {
-														const parts = sizeName.split(' - ');
-														baseSize = parts[0].trim();
-														sleeve = parts[1].trim();
-													} else {
-														baseSize = sizeName.trim();
-													}
-
-													baseSize = baseSize.toUpperCase();
-
-													let subName = isSF ? 'Slim Fit' : 'Regular Fit';
-													if (sleeve) {
-														subName += ' - ' + sleeve;
-													}
-
-													return {
-														...v,
-														baseSize,
-														subName
-													};
-												});
-
-												const baseSizes = [...new Set(parsedVariants.map((v: any) => v.baseSize))].filter(Boolean);
-												const sizeOrder = ['S', 'M', 'L', 'XL', 'XXL', '3XL', 'ALL SIZE'];
-												baseSizes.sort((a: any, b: any) => {
-													const idxA = sizeOrder.indexOf(a);
-													const idxB = sizeOrder.indexOf(b);
-													if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-													if (idxA !== -1) return -1;
-													if (idxB !== -1) return 1;
-													return a.localeCompare(b);
-												});
-
-												const sizeStockMap: any = {};
-												parsedVariants.forEach((v: any) => {
-													const stock = parseInt(v.stock || 0);
-													sizeStockMap[v.baseSize] = (sizeStockMap[v.baseSize] || 0) + stock;
-												});
-
-												return baseSizes.map((sz, idx) => {
-													const isOutOfStock = sizeStockMap[sz as string] === 0;
-													return (
-														<button 
-															type="button"
-															class={`size-chip base-sz-btn ${idx === 0 ? 'active' : ''} ${isOutOfStock ? 'is-out' : ''}`}
-															data-size={sz}
-															style="position: relative; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 1px solid #e2e8f0; background: #fff; font-size: 0.85rem;"
-														>
-															{sz}
-															{isOutOfStock && (
-																<span style="position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; font-size: 0.55rem; padding: 1px 4px; border-radius: 4px; font-weight: 700; line-height: 1; border: 1px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">HABIS</span>
-															)}
-														</button>
-													);
-												});
-											})()}
+											{baseSizesList.map((sz, idx) => {
+												const isOutOfStock = sizeStockMap[sz as string] === 0;
+												return (
+													<button 
+														type="button"
+														class={`size-chip base-sz-btn ${idx === 0 ? 'active' : ''} ${isOutOfStock ? 'is-out' : ''}`}
+														data-size={sz}
+														style="position: relative; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 1px solid #e2e8f0; background: #fff; font-size: 0.85rem;"
+													>
+														{sz}
+														{isOutOfStock && (
+															<span style="position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; font-size: 0.55rem; padding: 1px 4px; border-radius: 4px; font-weight: 700; line-height: 1; border: 1px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">HABIS</span>
+														)}
+													</button>
+												);
+											})}
 										</div>
 									</div>
 
@@ -331,69 +388,32 @@ function renderMarkdown(md: string): string {
 									<div>
 										<span style="font-size: 0.75rem; color: #64748b; font-weight: 500; display: block; margin-bottom: 0.5rem;">2. Pilih Model & Detail Harga:</span>
 										<div id="sub-variant-options" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem;">
-											{(() => {
-												const variants = product.variants || product.product_variants || [];
-												const parsedVariants = variants.map((v: any) => {
-													let sizeName = v.size_name || '';
-													let baseSize = sizeName;
-													let isSF = false;
-													let sleeve = '';
-
-													if (sizeName.includes(' SF')) {
-														isSF = true;
-														sizeName = sizeName.replace(' SF', '');
-													}
-
-													if (sizeName.includes(' - ')) {
-														const parts = sizeName.split(' - ');
-														baseSize = parts[0].trim();
-														sleeve = parts[1].trim();
-													} else {
-														baseSize = sizeName.trim();
-													}
-
-													baseSize = baseSize.toUpperCase();
-
-													let subName = isSF ? 'Slim Fit' : 'Regular Fit';
-													if (sleeve) {
-														subName += ' - ' + sleeve;
-													}
-
-													return {
-														...v,
-														baseSize,
-														subName
-													};
-												});
-
-												return parsedVariants.map((v: any) => {
-													const isOutOfStock = parseInt(v.stock || 0) === 0;
-													const isPriceDifferent = parseInt(v.price || 0) !== parseInt(product.price || 0);
-													return (
-														<button 
-															type="button"
-															class={`sub-var-btn ${isOutOfStock ? 'is-out' : ''}`}
-															data-base-size={v.baseSize}
-															data-price={v.price}
-															data-stock={v.stock}
-															data-fullname={v.size_name}
-															data-dalaman={v.dalaman || ""}
-															style="display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1.2rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; transition: all 0.2s; position: relative; gap: 1rem;"
-														>
-															<span class="sub-var-name" style="font-weight: 600; font-size: 0.85rem; color: #1e293b;">
-																{v.subName}
-															</span>
-															{parseInt(v.stock || 0) === 0 ? (
-																<span class="status-badge-compact" style="font-size: 0.65rem; color: #ef4444; font-weight: 700; text-transform: uppercase; background: #fef2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.1);">HABIS</span>
-															) : 5 >= parseInt(v.stock || 0) ? (
-																<span class="status-badge-compact" style="font-size: 0.65rem; color: #f59e0b; font-weight: 700; background: #fffbeb; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.1);">Sisa {v.stock}</span>
-															) : (
-																<span class="status-badge-compact" style="font-size: 0.65rem; color: #10b981; font-weight: 700; background: #f0fdf4; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.1);">Ready</span>
-															)}
-														</button>
-													);
-												});
-											})()}
+											{parsedVariantsList.map((v: any) => {
+												const isOutOfStock = parseInt(v.stock || 0) === 0;
+												return (
+													<button 
+														type="button"
+														class={`sub-var-btn ${isOutOfStock ? 'is-out' : ''}`}
+														data-base-size={v.baseSize}
+														data-price={v.price}
+														data-stock={v.stock}
+														data-fullname={v.size_name}
+														data-dalaman={v.dalaman || ""}
+														style="display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1.2rem; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; transition: all 0.2s; position: relative; gap: 1rem;"
+													>
+														<span class="sub-var-name" style="font-weight: 600; font-size: 0.85rem; color: #1e293b;">
+															{v.subName}
+														</span>
+														{parseInt(v.stock || 0) === 0 ? (
+															<span class="status-badge-compact" style="font-size: 0.65rem; color: #ef4444; font-weight: 700; text-transform: uppercase; background: #fef2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.1);">HABIS</span>
+														) : 5 >= parseInt(v.stock || 0) ? (
+															<span class="status-badge-compact" style="font-size: 0.65rem; color: #f59e0b; font-weight: 700; background: #fffbeb; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.1);">Sisa {v.stock}</span>
+														) : (
+															<span class="status-badge-compact" style="font-size: 0.65rem; color: #10b981; font-weight: 700; background: #f0fdf4; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.1);">Ready</span>
+														)}
+													</button>
+												);
+											})}
 										</div>
 									</div>
 

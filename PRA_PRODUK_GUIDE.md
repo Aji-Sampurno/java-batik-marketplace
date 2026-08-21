@@ -273,11 +273,12 @@ Form menyediakan 2 opsi fit untuk setiap ukuran dasar:
 - Varian Slim Fit (`All Size SF`, `M SF`, dst.) **TIDAK AKAN** tercentang kecuali jika nama/detail item di POS memang secara eksplisit mengandung kata `"SF"`.
 - Mencegah duplikasi imbuhan `SF` ganda (`SF SF`, `SF SF SF`).
 
-### C. Mode Setelan Cerdas (Pair Split Atasan & Bawahan)
+### C. Mode Setelan Cerdas (1 Set Lengkap: Atasan + Bawahan)
 Jika produk terdeteksi sebagai kategori **STELAN** (dari kode SKU posisi ke-2 `S` atau nama kategori `STELAN`/`SETELAN`):
-- Sistem memecah 1 pasang data detail dari POS menjadi 2 baris terpisah (**Atasan** & **Bawahan**).
-- Disediakan tombol **"Tukar Atasan/Bawahan"** (*Swap Engine*) jika urutan dari POS terbalik.
-- **Perhitungan Harga Setelan**: Harga utama produk setelan otomatis dihitung dari **penjumlahan 2 item/detail produk yang memiliki harga tertinggi** (*sum of 2 highest prices*), bukan hanya harga baris pertama atau harga satuan POS.
+- Sistem secara otomatis **menggabungkan data sepasang (Atasan & Bawahan)** menjadi 1 baris varian per ukuran (**1 Set Lengkap**).
+- **Perhitungan Harga Setelan**: Harga utama produk dan harga varian setelan otomatis dihitung dari **penjumlahan Atasan + Bawahan** ($495.000 + 495.000 = \text{Rp } 990.000$).
+- **Stok Setelan**: Dihitung dari batas minimum stok pasangan yang lengkap ($\min(\text{stok atasan}, \text{stok bawahan})$).
+- **Halaman Detail Produk**: Menampilkan opsi ukuran langsung (`M`, `L`, `XL`) dengan harga 1 setel penuh tanpa opsi terpisah Atasan/Bawahan, karena setelan dijual sebagai satu kesatuan.
 
 ### D. Mode Multi-Warna (Color Split Engine)
 Jika dalam 1 item POS memiliki beberapa detail dengan nama warna berbeda (misal `HITAM`, `MERAH`):
