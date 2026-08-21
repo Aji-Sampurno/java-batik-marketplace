@@ -1581,6 +1581,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					}
 					updateStyle();
 					if (isL2) updateL3Selection();
+					updateName();
 				});
 
 				updateStyle();
@@ -1645,6 +1646,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				inpL2.value = "";
 				formL2Row.style.display = "none";
 				updateL3Selection();
+				updateName();
 			};
 			btnL2?.addEventListener("click", handleL2Add);
 			inpL2?.addEventListener("keypress", (e) => {
@@ -1672,11 +1674,89 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				l3Grid.appendChild(el);
 				inpL3.value = "";
 				formL3Row.style.display = "none";
+				updateName();
 			};
 			btnL3?.addEventListener("click", handleL3Add);
 			inpL3?.addEventListener("keypress", (e) => {
 				if (e.key === "Enter") { e.preventDefault(); handleL3Add(); }
 			});
+		}
+
+		// --- Product Naming Automation Logic ---
+		function updateName() {
+			const nameInput = document.getElementById("product_name_input");
+			if (!nameInput) return;
+
+			// 1. Get L1 context
+			const visibleL1 = document.querySelector('[data-ss-type="product-l1"] .ss-input');
+			const l1Text = visibleL1 ? visibleL1.value.trim() : "";
+
+			// 2. Get L2 context
+			const l2Container = document.getElementById("l2-selection-row");
+			let l2Text = "";
+			if (l2Container) {
+				const checkedL2 = l2Container.querySelector("input:checked");
+				if (checkedL2) {
+					l2Text = checkedL2.parentElement.textContent.replace("NEW", "").trim();
+				}
+			}
+
+			// 3. Get L3 context
+			const l3Container = document.getElementById("l3-grid");
+			const l3Strings = [];
+			if (l3Container) {
+				const checkedL3s = Array.from(l3Container.querySelectorAll("input:checked"));
+				checkedL3s.forEach(c => {
+					const txt = c.parentElement.textContent.replace("NEW", "").trim();
+					if (txt) l3Strings.push(txt);
+				});
+			}
+
+			const selectedCategories = [];
+			if (l1Text && l1Text.toLowerCase() !== "root") selectedCategories.push(l1Text);
+			if (l2Text) selectedCategories.push(l2Text);
+			l3Strings.forEach(s => selectedCategories.push(s));
+			const jenis = selectedCategories.join(" ");
+
+			// 4. Get Motifs
+			let motifStr = "";
+			const motifGrid = document.getElementById("motif-grid");
+			if (motifGrid) {
+				const checkedMotifs = Array.from(motifGrid.querySelectorAll("input:checked"));
+				motifStr = checkedMotifs.map(m => m.parentElement.textContent.trim()).join(", ");
+			}
+
+			// 5. Get Colors
+			let colorStr = "";
+			const colorGrid = document.getElementById("color-grid");
+			if (colorGrid) {
+				const checkedColors = Array.from(colorGrid.querySelectorAll("input:checked"));
+				colorStr = checkedColors.map(c => c.value).join(", ");
+			}
+
+			// 6. Get Item Code / SKU
+			const itemCodeInput = document.getElementById("product_item_code_input");
+			const skuInput = document.getElementById("product_sku_input");
+			const itemCode = (itemCodeInput?.value || skuInput?.value || "").trim().replace(/[^a-zA-Z0-9_\-\s]/g, '');
+
+			const parts = [];
+			if (jenis) parts.push(jenis);
+			if (motifStr) parts.push(motifStr);
+			if (colorStr) parts.push(colorStr);
+
+			// Kemeja Tanpa Furing check
+			if (jenis && jenis.toLowerCase().includes("kemeja")) {
+				const dalamanSelects = Array.from(document.querySelectorAll(".v-dalaman-select"));
+				if (dalamanSelects.length > 0 && dalamanSelects.some(s => s.value === "TF")) {
+					parts.push("Tanpa Furing");
+				}
+			}
+
+			if (itemCode) parts.push(itemCode);
+
+			if (parts.length > 0) {
+				nameInput.value = parts.join(" ");
+			}
 		}
 
 		function setupCategoryDropdown() {
@@ -1712,6 +1792,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					input.value = opt.querySelector("span").textContent;
 					dropdown.style.display = "none";
 					renderSubCategoriesFromList([opt.dataset.value]);
+					updateName();
 				});
 			});
 		}
@@ -2008,6 +2089,48 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			}
 		}
 
+		function setupAutoNamingListeners() {
+			// Motif Grid Checkboxes
+			const motifGrid = document.getElementById("motif-grid");
+			if (motifGrid) {
+				motifGrid.addEventListener("change", (e) => {
+					const target = e.target;
+					if (target && target.tagName === "INPUT") {
+						updateName();
+					}
+				});
+			}
+
+			// Color Grid Checkboxes
+			const colorGrid = document.getElementById("color-grid");
+			if (colorGrid) {
+				colorGrid.addEventListener("change", (e) => {
+					const target = e.target;
+					if (target && target.tagName === "INPUT") {
+						updateName();
+					}
+				});
+			}
+
+			// Item Code & SKU Inputs
+			const itemCodeInput = document.getElementById("product_item_code_input");
+			const skuInput = document.getElementById("product_sku_input");
+
+			itemCodeInput?.addEventListener("input", updateName);
+			skuInput?.addEventListener("input", updateName);
+
+			// Table Dalaman / Furing changes
+			const tableContainer = document.getElementById("counterVariantsListContainer");
+			if (tableContainer) {
+				tableContainer.addEventListener("change", (e) => {
+					const target = e.target;
+					if (target && target.classList && target.classList.contains("v-dalaman-select")) {
+						updateName();
+					}
+				});
+			}
+		}
+
 		function setupDescGenerator() {
 			const btn = document.getElementById("btn_generate_desc");
 			const descInput = document.getElementById("description_input");
@@ -2044,5 +2167,13 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				});
 			}
 		}
+
+		// Run all setup on load
+		setupCategoryDropdown();
+		setupPriceMasking();
+		setupBatchControls();
+		setupMotifEngine();
+		setupAutoNamingListeners();
+		setupDescGenerator();
 	</script>
 </Layout>
