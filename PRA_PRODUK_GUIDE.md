@@ -274,7 +274,7 @@ Form menyediakan 2 opsi fit untuk setiap ukuran dasar:
 - Mencegah duplikasi imbuhan `SF` ganda (`SF SF`, `SF SF SF`).
 
 ### C. Mode Setelan Cerdas (Pair Split Atasan & Bawahan)
-Jika produk terdeteksi sebagai kategori **STELAN** atau nama diawali `S `:
+Jika produk terdeteksi sebagai kategori **STELAN** (dari kode SKU posisi ke-2 `S` atau nama kategori `STELAN`/`SETELAN`):
 - Sistem memecah 1 pasang data detail dari POS menjadi 2 baris terpisah (**Atasan** & **Bawahan**).
 - Disediakan tombol **"Tukar Atasan/Bawahan"** (*Swap Engine*) jika urutan dari POS terbalik.
 - **Perhitungan Harga Setelan**: Harga utama produk setelan otomatis dihitung dari **penjumlahan 2 item/detail produk yang memiliki harga tertinggi** (*sum of 2 highest prices*), bukan hanya harga baris pertama atau harga satuan POS.

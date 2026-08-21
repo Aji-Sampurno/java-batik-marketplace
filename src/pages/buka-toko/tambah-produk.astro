@@ -3544,15 +3544,12 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 								window.praprodukPriceDivider = priceDivider;
 
 								// 1. SISTEM DETEKSI TIPE SETELAN DI FRONTEND
-								const itemUpperNameForSetelan = (item.nama || "").toUpperCase();
 								const isSetelan =
 									typeLetter === "S" ||
 									(categoryName && categoryName.toUpperCase().includes("STELAN")) ||
+									(categoryName && categoryName.toUpperCase().includes("SETELAN")) ||
 									(item.kategori && item.kategori.toUpperCase().includes("STELAN")) ||
-									itemUpperNameForSetelan.startsWith("S ") ||
-									itemUpperNameForSetelan.includes("STLAN") ||
-									itemUpperNameForSetelan.includes("SETELAN") ||
-									itemUpperNameForSetelan.includes("STELAN");
+									(item.kategori && item.kategori.toUpperCase().includes("SETELAN"));
 
 								// Parse details data if exists
 								let detailsArray = null;

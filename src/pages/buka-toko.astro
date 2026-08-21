@@ -1381,16 +1381,11 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 							// Deteksi jika kategori STELAN
 							const activeCode = (item.kode || item.kodeitem || "").toString().trim();
 							const typeLetter = activeCode.length >= 2 ? activeCode.charAt(1).toUpperCase() : (activeCode.length === 1 ? activeCode.toUpperCase() : "");
-							const upperNama = (item.nama || "").toUpperCase();
 							const upperKat = (item.kategori || "").toUpperCase();
 							const isSetelan =
 								typeLetter === "S" ||
 								upperKat.includes("STELAN") ||
-								upperKat.includes("SETELAN") ||
-								upperNama.startsWith("S ") ||
-								upperNama.includes("STLAN") ||
-								upperNama.includes("SETELAN") ||
-								upperNama.includes("STELAN");
+								upperKat.includes("SETELAN");
 
 							let calculatedPrice = item.hjual;
 							let calculatedOld = item.old;
