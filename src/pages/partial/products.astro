@@ -123,6 +123,6 @@ try {
 }
 ---
 
-{paginatedProducts.map((p, i) => (
+{paginatedProducts.map((p: any, i: number) => (
     <ProductCard product={p} index={i} settings={settings} activeSize={sizeFilter || undefined} activeFit={fitFilter || undefined} />
 ))}

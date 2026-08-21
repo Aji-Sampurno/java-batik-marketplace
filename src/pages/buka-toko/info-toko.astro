@@ -10,6 +10,7 @@ if (session?.value !== "authenticated") {
 }
 let settings: any = null;
 let message = "";
+let isError = false;
 
 try {
 	const sRes = await apiFetch<any>("settings");

@@ -15,7 +15,7 @@ pParams.set("per_page", String(adminLimit));
 const adminSearchQuery = searchParams.get("q");
 if (adminSearchQuery) pParams.set("search", adminSearchQuery);
 
-let productsData = [];
+let productsData: any[] = [];
 
 try {
     const pRes = await apiFetch<any>(`products?${pParams.toString()}`);
@@ -25,6 +25,6 @@ try {
 }
 ---
 
-{productsData.map((p) => (
+{productsData.map((p: any) => (
     <AdminProductRow product={p} />
 ))}
