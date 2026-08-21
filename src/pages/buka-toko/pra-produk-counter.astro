@@ -252,7 +252,7 @@ if (success === "product") {
 			emptyState.style.display = 'none';
 
 			try {
-				let url = `https://noir.grace.gracianna.web.id/api/v1/beli1?per_page=12&page=${currentPage}`;
+				let url = `https://noir.grace.gracianna.web.id/api/v1/praProduk?per_page=12&page=${currentPage}`;
 				if (searchQuery) url += `&q=${encodeURIComponent(searchQuery)}`;
 
 				const response = await fetch(url);

@@ -117,20 +117,28 @@ if (Astro.request.method === "POST") {
 				const variant_image_files = formData.getAll("variant_image_file") as File[];
 				const variant_image_urls = formData.getAll("variant_image_url") as string[];
 				const variant_sizes = formData.getAll("variant_size") as string[];
+				const variant_counters = formData.getAll("variant_counter") as string[];
+				const variant_outlets = formData.getAll("variant_outlet") as string[];
+				const variant_fits = formData.getAll("variant_fit") as string[];
 				const variant_skus = formData.getAll("variant_sku") as string[];
 				const variant_prices = formData.getAll("variant_price") as string[];
 				const variant_stocks = formData.getAll("variant_stock") as string[];
 				const variant_dalamans = formData.getAll("variant_dalaman") as string[];
 
 				const selectedType = hierarchicalTypes.find((t: any) => t.id === type_id);
-				let folderPath = "products";
-				if (selectedType) {
-					const slug = selectedType.name
+				let jenisProduk = "umum";
+				if (selectedType && selectedType.name) {
+					jenisProduk = selectedType.name
 						.toLowerCase()
 						.replace(/[^a-z0-9]+/g, "-")
 						.replace(/(^-|-$)+/g, "");
-					folderPath = `products/${slug}`;
+				} else if (name) {
+					const firstWord = name.toString().trim().split(/\s+/)[0].toLowerCase();
+					if (firstWord) {
+						jenisProduk = firstWord.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
+					}
 				}
+				if (!jenisProduk) jenisProduk = "umum";
 
 				// Fetch logo buffer once if needed
 				let logoBuffer: Buffer | null = null;
@@ -186,11 +194,12 @@ if (Astro.request.method === "POST") {
 
 					if (imgData.file && imgData.file.size > 0) {
 						const file = imgData.file;
-						const actualCode = (item_code || code || "PRODUK").toString().trim().replace(/[^a-zA-Z0-9]/g, '');
-						const cleanMotifTag = motifKey.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_');
+						const actualCode = (item_code || code || "PRODUK").toString().trim().replace(/[^a-zA-Z0-9_\-]/g, '') || "PRODUK";
+						const cleanMotifTag = motifKey.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') || `motif-${motifIdx}`;
 						const timestamp = Date.now();
 
 						// 1. Process & Compress Raw Image to WebP (No Watermark, No Code) and Upload to Firebase
+						// Path: {jenis_produk}/{kode_item}/{motif}/raw/...
 						let rawWebpBuffer: Buffer;
 						try {
 							rawWebpBuffer = await sharp(Buffer.from(await file.arrayBuffer()))
@@ -205,13 +214,13 @@ if (Astro.request.method === "POST") {
 						const rawFileToUpload = new File([new Uint8Array(rawWebpBuffer)], rawCustomName, { type: "image/webp" });
 
 						let rawPublicUrl = "";
+						const fbPathRaw = `${jenisProduk}/${actualCode}/${cleanMotifTag}/raw/${rawCustomName}`;
 						try {
-							const fbPathRaw = `${folderPath}/${rawCustomName}`;
 							rawPublicUrl = await uploadToFirebase(rawFileToUpload, fbPathRaw);
 							console.log(`[Firebase Raw] Upload success -> ${rawPublicUrl}`);
 						} catch (fbErr) {
 							console.warn("[Firebase Raw] Firebase failed, fallback to Laravel:", fbErr);
-							rawPublicUrl = await uploadToLaravel(rawFileToUpload, folderPath).catch(() => "");
+							rawPublicUrl = await uploadToLaravel(rawFileToUpload, `${jenisProduk}/${actualCode}/${cleanMotifTag}/raw`).catch(() => "");
 						}
 
 						if (rawPublicUrl) {
@@ -219,6 +228,7 @@ if (Astro.request.method === "POST") {
 						}
 
 						// 2. Process Watermarked & WebP Compressed Image (Logo + Code Text) and Upload to Firebase
+						// Path: {jenis_produk}/{kode_item}/{motif}/katalog/...
 						let webpBuffer: Buffer;
 						try {
 							const imgBuffer = Buffer.from(await file.arrayBuffer());
@@ -295,13 +305,13 @@ if (Astro.request.method === "POST") {
 						const webpFileToUpload = new File([new Uint8Array(webpBuffer)], webpCustomName, { type: "image/webp" });
 
 						let publicUrl = "";
+						const fbPathWebp = `${jenisProduk}/${actualCode}/${cleanMotifTag}/katalog/${webpCustomName}`;
 						try {
-							const fbPathWebp = `${folderPath}/${webpCustomName}`;
 							publicUrl = await uploadToFirebase(webpFileToUpload, fbPathWebp);
 							console.log(`[Firebase WebP] Upload success -> ${publicUrl}`);
 						} catch (fbErr) {
 							console.warn("[Firebase WebP] Firebase failed, fallback to Laravel:", fbErr);
-							publicUrl = await uploadToLaravel(webpFileToUpload, folderPath).catch(() => "");
+							publicUrl = await uploadToLaravel(webpFileToUpload, `${jenisProduk}/${actualCode}/${cleanMotifTag}/katalog`).catch(() => "");
 						}
 
 						if (publicUrl) {
@@ -386,13 +396,26 @@ if (Astro.request.method === "POST") {
 				}
 
 				// Build variants array from Counter schema
-				const variants = variant_sizes.map((size, index) => ({
-					size_name: size,
-					sku: variant_skus[index] || null,
-					price: parseFloat(variant_prices[index] || price?.toString() || "0"),
-					stock: parseInt(variant_stocks[index] || "0", 10),
-					dalaman: variant_dalamans[index] || null,
-				}));
+				const variants = variant_sizes.map((size, index) => {
+					const motif = variant_motif_names[index] || "";
+					const counter = variant_counters[index] || variant_skus[index] || "";
+					const outlet = variant_outlets[index] || "Gudang";
+					const motifImageUrl = motifFinalUrlMap.get(motif) || variant_image_urls[index] || "";
+					const fit = variant_fits[index] || (size.includes("SF") ? "SF" : "REG");
+
+					return {
+						size_name: size,
+						sku: variant_skus[index] || counter || null,
+						counter: counter || null,
+						outlet: outlet || null,
+						motif: motif || null,
+						fit: fit || null,
+						image_url: motifImageUrl || null,
+						price: parseFloat(variant_prices[index] || price?.toString() || "0"),
+						stock: parseInt(variant_stocks[index] || "0", 10),
+						dalaman: variant_dalamans[index] || null,
+					};
+				});
 
 				console.log("DEBUG POST Counter variants payload:", JSON.stringify(variants, null, 2));
 				console.log("DEBUG POST Deduplicated images:", JSON.stringify(images, null, 2));
@@ -641,7 +664,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 
 							<!-- Batch Size -->
 							<div style="display: flex; align-items: center; gap: 0.35rem;">
-								<span style="font-size: 0.75rem; font-weight: 700; color: #334155;">📏 Ukuran Serentak:</span>
+								<span style="font-size: 0.75rem; font-weight: 700; color: #334155;">📏 Ukuran:</span>
 								<select id="globalBatchSizeSelect" style="padding: 0.35rem 0.6rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
 									<option value="ALL SIZE">ALL SIZE</option>
 									{sizesData?.map((s: any) => (
@@ -653,37 +676,40 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 								</button>
 							</div>
 
-							<!-- Format Selector -->
-							<div style="margin-left: auto; display: flex; align-items: center; gap: 0.6rem;">
-								<span style="font-size: 0.7rem; color: #64748b; font-weight: 700;">Format:</span>
-								<label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; cursor: pointer;">
-									<input type="radio" name="variant_name_format" value="motif_size" checked />
-									<strong style="color: #0f172a;">[Motif] - [Ukuran]</strong>
-								</label>
-								<label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; cursor: pointer;">
-									<input type="radio" name="variant_name_format" value="size_counter" />
-									<span>[Ukuran] (Counter)</span>
-								</label>
-								<label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; cursor: pointer;">
-									<input type="radio" name="variant_name_format" value="size_only" />
-									<span>[Ukuran]</span>
-								</label>
+							<!-- Batch Fit (Slim Fit vs Regular Fit) -->
+							<div style="display: flex; align-items: center; gap: 0.35rem;">
+								<span style="font-size: 0.75rem; font-weight: 700; color: #334155;">✂️ Model Fit:</span>
+								<select id="globalBatchFitSelect" style="padding: 0.35rem 0.6rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
+									<option value="REG">Regular Fit</option>
+									<option value="SF">Slim Fit (SF)</option>
+								</select>
+								<button type="button" id="btnApplySameFit" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #475569; color: white; border: none; border-radius: 6px; cursor: pointer;">
+									Set Fit
+								</button>
+							</div>
+
+							<!-- Status Info -->
+							<div style="margin-left: auto; display: flex; align-items: center; gap: 0.4rem;">
+								<span style="font-size: 0.7rem; color: #0284c7; background: #e0f2fe; padding: 3px 8px; border-radius: 4px; font-weight: 700; border: 1px solid #bae6fd;">
+									✓ Data Motif, Ukuran & Counter Disimpan Terpisah
+								</span>
 							</div>
 						</div>
 
 						<!-- Compact Responsive Table Container -->
 						<div style="overflow-x: auto; background: white; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
-							<table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.8rem; min-width: 820px;">
+							<table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.8rem; min-width: 900px;">
 								<thead>
 									<tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1; color: #475569; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
 										<th style="padding: 10px 8px; width: 36px; text-align: center;">PILIH</th>
 										<th style="padding: 10px 8px; width: 68px; text-align: center;">FOTO</th>
-										<th style="padding: 10px 8px; width: 140px;">MOTIF</th>
-										<th style="padding: 10px 8px; width: 110px;">UKURAN</th>
-										<th style="padding: 10px 8px; width: 140px;">COUNTER / OUTLET</th>
-										<th style="padding: 10px 8px; width: 130px;">HARGA (RP)</th>
+										<th style="padding: 10px 8px; width: 130px;">MOTIF</th>
+										<th style="padding: 10px 8px; width: 105px;">UKURAN</th>
+										<th style="padding: 10px 8px; width: 120px;">MODEL FIT</th>
+										<th style="padding: 10px 8px; width: 135px;">COUNTER / OUTLET</th>
+										<th style="padding: 10px 8px; width: 125px;">HARGA (RP)</th>
 										<th style="padding: 10px 8px; width: 75px; text-align: center;">STOK</th>
-										<th style="padding: 10px 8px; width: 115px;">FURING</th>
+										<th style="padding: 10px 8px; width: 110px;">FURING</th>
 										<th style="padding: 10px 8px; width: 36px; text-align: center;"></th>
 									</tr>
 								</thead>
@@ -874,7 +900,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			if (!rawItem && (praProdukId || qParam)) {
 				const queryTerm = qParam || praProdukId;
 				try {
-					const res = await fetch(`https://noir.grace.gracianna.web.id/api/v1/beli1?per_page=12&q=${encodeURIComponent(queryTerm)}`);
+					const res = await fetch(`https://noir.grace.gracianna.web.id/api/v1/praProduk?per_page=12&q=${encodeURIComponent(queryTerm)}`);
 					const json = await res.json();
 					const listData = Array.isArray(json) ? json : (json.data?.data || json.data || []);
 					if (listData.length > 0) {
@@ -1457,9 +1483,74 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					}
 				}
 			});
-
-			renderMotifPhotoCards();
 		}
+
+		function cleanSize(rawSize, rawKode) {
+			if (!rawSize) {
+				if (rawKode && rawKode.length >= 3) {
+					const char3 = rawKode.charAt(2).toUpperCase();
+					const sizeCodeMap = {
+						'0': 'ALL SIZE', 'S': 'S', 'M': 'M', 'L': 'L', 'X': 'XL', 'Y': 'XXL',
+						'2': '2L', '3': '3L', '4': '4L', '5': '5L', '6': '6L', '7': '7L'
+					};
+					if (sizeCodeMap[char3]) return sizeCodeMap[char3];
+				}
+				return "ALL SIZE";
+			}
+			let s = String(rawSize).trim().toUpperCase();
+			s = s.replace(/\s*SF\b/i, '').trim();
+			if (s === "00" || s === "0" || s === "ALL" || s === "ALLSIZE" || s === "ALL SIZE" || s === "-") {
+				return "ALL SIZE";
+			}
+			return s;
+		}
+
+		document.addEventListener("DOMContentLoaded", async () => {
+			setupCategoryDropdown();
+			setupPriceMasking();
+			setupBatchControls();
+			setupMotifEngine();
+			setupDescGenerator();
+
+			const urlParams = new URLSearchParams(window.location.search);
+			const praProdukId = urlParams.get("use_praproduk");
+			const qParam = urlParams.get("q");
+
+			// 1. Initial Data Hydration from Pra-Produk
+			let rawItem = null;
+			const stored = localStorage.getItem("selected_praproduk");
+			if (stored) {
+				try {
+					const parsed = JSON.parse(stored);
+					if (praProdukId && String(parsed.id) === String(praProdukId)) {
+						rawItem = parsed;
+					} else if (!praProdukId) {
+						rawItem = parsed;
+					}
+				} catch (e) {
+					console.error("Gagal parse local praproduk", e);
+				}
+			}
+
+			if (!rawItem && praProdukId) {
+				try {
+					const res = await fetch(`/api/pra-produk/${praProdukId}`);
+					if (res.ok) rawItem = await res.json();
+				} catch (e) {
+					console.error("Gagal fetch praproduk", e);
+				}
+			}
+
+			if (rawItem) {
+				hydrateFromPraProduk(rawItem);
+			} else if (qParam) {
+				const skuInp = document.getElementById("adminProductCode");
+				if (skuInp) {
+					skuInp.value = qParam;
+					skuInp.dispatchEvent(new Event("change"));
+				}
+			}
+		});
 
 		function renderCounterRows(details, mainItem) {
 			const container = document.getElementById("counterVariantsListContainer");
@@ -1471,7 +1562,14 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				const counterCode = d.counter || d.kode || `CTR-${idx+1}`;
 				const outletName = d.outlet || "Gudang";
 				const sizeVal = cleanSize(d.size, d.kode || mainItem.kode);
-				const stockVal = parseInt(d.stok || 1);
+				const rawSizeStr = String(d.size || "").toUpperCase();
+				const rawKodeStr = String(d.kode || mainItem.kode || "").toUpperCase();
+				const isSlimFit = rawSizeStr.includes("SF") || rawSizeStr.includes("SLIM") || rawKodeStr.includes("SF");
+				let stockVal = parseInt(d.stok || 1);
+				const mainCode = (mainItem.kode || mainItem.kodeitem || "").toUpperCase();
+				if ((mainCode.startsWith("G") || (mainItem.kategori && mainItem.kategori.toUpperCase() === "GULUNGAN")) && (!d.stok || parseInt(d.stok) <= 1)) {
+					stockVal = 55;
+				}
 				const priceVal = parseInt(d.hjual || mainItem.hjual || 0);
 				const dalamanVal = d.dalaman || "";
 				const skuVal = d.kode || counterCode;
@@ -1542,28 +1640,38 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 						</select>
 					</td>
 
-					<!-- 5. Counter & Outlet Badge -->
+					<!-- 5. Model Fit (Slim Fit vs Regular Fit) -->
 					<td style="padding: 10px 8px; vertical-align: middle;">
-						<div style="font-size: 0.75rem; font-weight: 800; color: #0369a1; background: #e0f2fe; padding: 4px 6px; border-radius: 5px; border: 1px solid #bae6fd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;" title="${counterCode} (${outletName})">
-							${counterCode} <span style="font-weight: 600; font-size: 0.65rem; color: #0284c7;">(${outletName})</span>
-						</div>
-						<input type="hidden" name="variant_sku" value="${skuVal}" class="v-sku-hidden" />
-						<input type="hidden" name="variant_praproduk_id" value="${d.id || ''}" class="v-praproduk-id-hidden" />
-						<input type="hidden" name="variant_size" value="${motifLetter} - ${sizeVal}" class="v-size-hidden" />
+						<select name="variant_fit" class="v-fit-select" style="width: 100%; padding: 6px 8px; font-size: 0.75rem; border: 1.5px solid #cbd5e1; border-radius: 6px; background: #fff; font-weight: 700; color: #0f172a;">
+							<option value="REG" ${!isSlimFit ? 'selected' : ''}>Regular Fit</option>
+							<option value="SF" ${isSlimFit ? 'selected' : ''}>Slim Fit (SF)</option>
+						</select>
 					</td>
 
-					<!-- 6. Harga (Rp) -->
+					<!-- 6. Counter & Outlet Badge -->
+					<td style="padding: 10px 8px; vertical-align: middle;">
+						<div style="font-size: 0.75rem; font-weight: 800; color: #0369a1; background: #e0f2fe; padding: 4px 6px; border-radius: 5px; border: 1px solid #bae6fd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 135px;" title="${counterCode} (${outletName})">
+							${counterCode} <span style="font-weight: 600; font-size: 0.65rem; color: #0284c7;">(${outletName})</span>
+						</div>
+						<input type="hidden" name="variant_counter" value="${counterCode}" class="v-counter-hidden" />
+						<input type="hidden" name="variant_outlet" value="${outletName}" class="v-outlet-hidden" />
+						<input type="hidden" name="variant_sku" value="${skuVal}" class="v-sku-hidden" />
+						<input type="hidden" name="variant_praproduk_id" value="${d.id || ''}" class="v-praproduk-id-hidden" />
+						<input type="hidden" name="variant_size" value="${sizeVal || 'ALL SIZE'}" class="v-size-hidden" />
+					</td>
+
+					<!-- 7. Harga (Rp) -->
 					<td style="padding: 10px 8px; vertical-align: middle;">
 						<input type="text" value="${priceVal.toLocaleString('id-ID')}" class="v-price-display" style="width: 100%; padding: 6px 8px; font-size: 0.75rem; border: 1.5px solid #cbd5e1; border-radius: 6px; font-weight: 700; color: #0f172a;" />
 						<input type="hidden" name="variant_price" value="${priceVal}" class="v-price-hidden" />
 					</td>
 
-					<!-- 7. Stok -->
+					<!-- 8. Stok -->
 					<td style="padding: 10px 8px; vertical-align: middle; text-align: center;">
 						<input type="number" name="variant_stock" value="${stockVal}" min="0" class="v-stock-input" style="width: 100%; padding: 6px 4px; font-size: 0.75rem; border: 1.5px solid #cbd5e1; border-radius: 6px; text-align: center; font-weight: 800; color: #0f172a;" required />
 					</td>
 
-					<!-- 8. Furing -->
+					<!-- 9. Furing -->
 					<td style="padding: 10px 8px; vertical-align: middle;">
 						<select name="variant_dalaman" class="v-dalaman-select" style="width: 100%; padding: 6px 8px; font-size: 0.75rem; border: 1.5px solid #cbd5e1; border-radius: 6px; background: #fff; font-weight: 600; color: #334155;">
 							<option value="" ${!dalamanVal ? 'selected' : ''}>Tanpa</option>
@@ -1572,7 +1680,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 						</select>
 					</td>
 
-					<!-- 9. Delete Button -->
+					<!-- 10. Delete Button -->
 					<td style="padding: 10px 8px; vertical-align: middle; text-align: center;">
 						<button type="button" class="btn-delete-row" style="background: none; border: none; color: #94a3b8; font-size: 0.9rem; font-weight: 800; cursor: pointer; padding: 4px; transition: color 0.15s;" onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='#94a3b8'" title="Hapus Varian Ini">✕</button>
 					</td>
@@ -1582,9 +1690,12 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 
 				// Connect Events
 				const cb = row.querySelector(".v-counter-cb");
+				const counterHidden = row.querySelector(".v-counter-hidden");
+				const outletHidden = row.querySelector(".v-outlet-hidden");
 				const sizeHidden = row.querySelector(".v-size-hidden");
 				const skuHidden = row.querySelector(".v-sku-hidden");
 				const sizeSelect = row.querySelector(".v-size-select");
+				const fitSelect = row.querySelector(".v-fit-select");
 				const priceDisp = row.querySelector(".v-price-display");
 				const priceHidden = row.querySelector(".v-price-hidden");
 				const stockInput = row.querySelector(".v-stock-input");
@@ -1654,9 +1765,12 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				cb.addEventListener("change", () => {
 					const active = cb.checked;
 					row.style.opacity = active ? "1" : "0.35";
+					if (counterHidden) counterHidden.disabled = !active;
+					if (outletHidden) outletHidden.disabled = !active;
 					sizeHidden.disabled = !active;
 					skuHidden.disabled = !active;
 					sizeSelect.disabled = !active;
+					if (fitSelect) fitSelect.disabled = !active;
 					priceDisp.disabled = !active;
 					priceHidden.disabled = !active;
 					stockInput.disabled = !active;
@@ -1673,6 +1787,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				});
 
 				sizeSelect.addEventListener("change", () => updateRowVariantName(row));
+				if (fitSelect) fitSelect.addEventListener("change", () => updateRowVariantName(row));
 
 				priceDisp.addEventListener("input", (e) => {
 					const num = e.target.value.replace(/\D/g, "");
@@ -1692,19 +1807,12 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 
 		function updateRowVariantName(row) {
 			const sizeHidden = row.querySelector(".v-size-hidden");
-			const motifSelect = row.querySelector(".v-motif-select");
 			const sizeSelect = row.querySelector(".v-size-select");
-			const currentSize = sizeSelect?.value || "ALL SIZE";
-			const counter = row.dataset.counter || "";
-			const format = document.querySelector('input[name="variant_name_format"]:checked')?.value || "motif_size";
-
-			const chosenMotif = motifSelect?.value || "Motif";
-			if (format === "motif_size") {
-				sizeHidden.value = `${chosenMotif} - ${currentSize}`;
-			} else if (format === "size_counter") {
-				sizeHidden.value = `${currentSize} (${counter})`;
-			} else {
-				sizeHidden.value = currentSize;
+			const baseSize = sizeSelect?.value || "ALL SIZE";
+			
+			// size_name murni nama ukuran dasar (motif, fit, dan counter tersimpan di kolom database masing-masing)
+			if (sizeHidden) {
+				sizeHidden.value = baseSize;
 			}
 		}
 
@@ -2029,10 +2137,6 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					disp.value = num ? parseInt(num, 10).toLocaleString("id-ID") : "";
 				});
 			}
-
-			document.querySelectorAll('input[name="variant_name_format"]').forEach(radio => {
-				radio.addEventListener("change", updateAllVariantNames);
-			});
 		}
 
 		function setupBatchControls() {
@@ -2060,6 +2164,19 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					const select = row.querySelector(".v-size-select");
 					if (select) {
 						select.value = selectedSize;
+						updateRowVariantName(row);
+					}
+				});
+			});
+
+			// Apply Same Fit to All Rows
+			document.getElementById("btnApplySameFit")?.addEventListener("click", () => {
+				const selectedFit = document.getElementById("globalBatchFitSelect")?.value;
+				if (!selectedFit) return;
+				document.querySelectorAll(".counter-table-row").forEach(row => {
+					const select = row.querySelector(".v-fit-select");
+					if (select) {
+						select.value = selectedFit;
 						updateRowVariantName(row);
 					}
 				});
@@ -2151,11 +2268,20 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					</td>
 
 					<td style="padding: 10px 8px; vertical-align: middle;">
-						<div style="font-size: 0.75rem; font-weight: 800; color: #0369a1; background: #e0f2fe; padding: 4px 6px; border-radius: 5px; border: 1px solid #bae6fd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;">
+						<select name="variant_fit" class="v-fit-select" style="width: 100%; padding: 6px 8px; font-size: 0.75rem; border: 1.5px solid #cbd5e1; border-radius: 6px; background: #fff; font-weight: 700; color: #0f172a;">
+							<option value="REG" selected>Regular Fit</option>
+							<option value="SF">Slim Fit (SF)</option>
+						</select>
+					</td>
+
+					<td style="padding: 10px 8px; vertical-align: middle;">
+						<div style="font-size: 0.75rem; font-weight: 800; color: #0369a1; background: #e0f2fe; padding: 4px 6px; border-radius: 5px; border: 1px solid #bae6fd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 135px;">
 							${newCounter} <span style="font-weight: 600; font-size: 0.65rem; color: #0284c7;">(Manual)</span>
 						</div>
+						<input type="hidden" name="variant_counter" value="${newCounter}" class="v-counter-hidden" />
+						<input type="hidden" name="variant_outlet" value="Manual" class="v-outlet-hidden" />
 						<input type="hidden" name="variant_sku" value="${newCounter}" class="v-sku-hidden" />
-						<input type="hidden" name="variant_size" value="${motifLetter} - ALL SIZE" class="v-size-hidden" />
+						<input type="hidden" name="variant_size" value="ALL SIZE" class="v-size-hidden" />
 					</td>
 
 					<td style="padding: 10px 8px; vertical-align: middle;">
@@ -2183,9 +2309,12 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				container.appendChild(row);
 
 				const cb = row.querySelector(".v-counter-cb");
+				const counterHidden = row.querySelector(".v-counter-hidden");
+				const outletHidden = row.querySelector(".v-outlet-hidden");
 				const sizeHidden = row.querySelector(".v-size-hidden");
 				const skuHidden = row.querySelector(".v-sku-hidden");
 				const sizeSelect = row.querySelector(".v-size-select");
+				const fitSelect = row.querySelector(".v-fit-select");
 				const priceDisp = row.querySelector(".v-price-display");
 				const priceHidden = row.querySelector(".v-price-hidden");
 				const stockInput = row.querySelector(".v-stock-input");
@@ -2210,11 +2339,9 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 						if (fileInp.files && fileInp.files[0]) {
 							const file = fileInp.files[0];
 							const currentMotif = motifSelect?.value || "Motif A";
-							const reader = new FileReader();
-							reader.onload = (e) => {
-								syncPhotosForMotif(currentMotif, e.target.result, file);
-							};
-							reader.readAsDataURL(file);
+							createWatermarkedDataUrl(file, (watermarkedUrl) => {
+								syncPhotosForMotif(currentMotif, watermarkedUrl, file);
+							});
 						}
 					});
 				}
@@ -2222,9 +2349,12 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				cb.addEventListener("change", () => {
 					const active = cb.checked;
 					row.style.opacity = active ? "1" : "0.35";
+					if (counterHidden) counterHidden.disabled = !active;
+					if (outletHidden) outletHidden.disabled = !active;
 					sizeHidden.disabled = !active;
 					skuHidden.disabled = !active;
 					sizeSelect.disabled = !active;
+					if (fitSelect) fitSelect.disabled = !active;
 					priceDisp.disabled = !active;
 					priceHidden.disabled = !active;
 					stockInput.disabled = !active;
@@ -2241,6 +2371,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				});
 
 				sizeSelect.addEventListener("change", () => updateRowVariantName(row));
+				if (fitSelect) fitSelect.addEventListener("change", () => updateRowVariantName(row));
 
 				priceDisp.addEventListener("input", (e) => {
 					const num = e.target.value.replace(/\D/g, "");

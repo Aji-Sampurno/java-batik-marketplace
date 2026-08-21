@@ -42,11 +42,19 @@ const getProductDisplaySizes = (prod: any) => {
 		);
 		const targetVariants = inStockVariants.length > 0 ? inStockVariants : filteredVariants;
 		const mappedSizes = targetVariants.map((v: any) => {
-			let sizeName = v.size_name || "";
-			let baseSize = sizeName.trim();
+			let sizeName = (v.size_name || "").trim();
+			let baseSize = sizeName;
 			if (sizeName.includes(" - ")) {
-				baseSize = sizeName.split(" - ")[0].trim();
+				const parts = sizeName.split(" - ");
+				// If first part starts with Motif, the actual size is the second part
+				if (/^motif\b/i.test(parts[0].trim())) {
+					baseSize = parts[1].trim();
+				} else {
+					baseSize = parts[0].trim();
+				}
 			}
+			// Remove any counter bracket, e.g. "L (C01)" -> "L"
+			baseSize = baseSize.replace(/\s*\([^)]*\)$/, "").trim();
 			if (sfRegex.test(baseSize)) {
 				baseSize = baseSize
 					.replace(sfRegex, "")
@@ -56,7 +64,7 @@ const getProductDisplaySizes = (prod: any) => {
 			return baseSize.toUpperCase();
 		});
 		const uniqueSizes = [...new Set(mappedSizes)].filter(
-			(sz: any) => (isNaN(Number(sz)) || sz.length <= 3) && sz,
+			(sz: any) => (isNaN(Number(sz)) || sz.length <= 10) && sz,
 		);
 		const sizeOrder = ["S", "M", "L", "XL", "XXL", "3XL", "ALL SIZE"];
 		uniqueSizes.sort((a, b) => {
