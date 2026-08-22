@@ -430,29 +430,60 @@ if (Astro.request.method === "POST") {
 				console.log("DEBUG POST Counter variants payload:", JSON.stringify(variants, null, 2));
 				console.log("DEBUG POST Deduplicated images:", JSON.stringify(images, null, 2));
 
-				await apiFetch("products", {
-					method: "POST",
-					body: JSON.stringify({
-						name,
-						price,
-						type_id,
-						category_ids,
-						category_chain,
-						motif_ids,
-						colors,
-						description,
-						code,
-						original_price,
-						item_code,
-						image_url,
-						images,
-						raw_image_url,
-						raw_images,
-						tokopedia_url,
-						variants,
-						is_active: true,
-					}),
-				});
+				const productPayload = {
+					name,
+					price,
+					type_id,
+					category_ids,
+					category_chain,
+					motif_ids,
+					colors,
+					description,
+					code,
+					original_price,
+					item_code,
+					image_url,
+					images,
+					raw_image_url,
+					raw_images,
+					tokopedia_url,
+					variants,
+					is_active: true,
+				};
+
+				// Cek apakah produk dengan kodeitem/kode ini sudah ada di database katalog toko
+				let existingProduct: any = null;
+				const lookupCode = (item_code || code || "").toString().trim();
+				if (lookupCode) {
+					try {
+						const existingRes = await apiFetch<any>(`products?q=${encodeURIComponent(lookupCode)}&per_page=50`);
+						const existingList = existingRes?.data || existingRes || [];
+						if (Array.isArray(existingList)) {
+							existingProduct = existingList.find((p: any) => {
+								const pItemCode = String(p.item_code || "").trim().toUpperCase();
+								const pCode = String(p.code || "").trim().toUpperCase();
+								const target = lookupCode.toUpperCase();
+								return (pItemCode && pItemCode === target) || (pCode && pCode === target);
+							});
+						}
+					} catch (lookupErr) {
+						console.warn("[Deduplication Lookup Warning]:", lookupErr);
+					}
+				}
+
+				if (existingProduct && existingProduct.id) {
+					console.log(`[Product Sync] Produk ${lookupCode} sudah terdaftar (ID #${existingProduct.id}). Memperbarui data (PUT)...`);
+					await apiFetch(`products/${existingProduct.id}`, {
+						method: "PUT",
+						body: JSON.stringify(productPayload),
+					});
+				} else {
+					console.log(`[Product Sync] Menyimpan produk baru (POST)...`);
+					await apiFetch("products", {
+						method: "POST",
+						body: JSON.stringify(productPayload),
+					});
+				}
 
 				return Astro.redirect("/buka-toko?success=product");
 			}
