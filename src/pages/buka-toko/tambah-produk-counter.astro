@@ -1228,64 +1228,104 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 		logoImgPreload.src = "/images/java_batik_gold.png";
 
 		function createWatermarkedDataUrl(file, callback) {
-			const reader = new FileReader();
-			reader.onload = (e) => {
-				const img = new Image();
-				img.onload = () => {
+			if (!file) return;
+
+			// Gunakan Blob URL agar tidak ada batasan ukuran base64 di browser (Safari/Chrome)
+			const srcBlobUrl = URL.createObjectURL(file);
+			const img = new Image();
+
+			img.onerror = () => {
+				console.warn("Gagal membaca file gambar, menggunakan URL langsung");
+				callback(srcBlobUrl, file);
+			};
+
+			img.onload = () => {
+				try {
+					// Batasi resolusi maksimum ke 1200px agar pemrosesan watermark instan & hemat memori
+					const maxDim = 1200;
+					let w = img.naturalWidth || img.width || 800;
+					let h = img.naturalHeight || img.height || 800;
+
+					if (w > maxDim || h > maxDim) {
+						if (w > h) {
+							h = Math.round((h * maxDim) / w);
+							w = maxDim;
+						} else {
+							w = Math.round((w * maxDim) / h);
+							h = maxDim;
+						}
+					}
+
 					const canvas = document.createElement("canvas");
-					const width = img.width || 1000;
-					const height = img.height || 1000;
-					canvas.width = width;
-					canvas.height = height;
+					canvas.width = w;
+					canvas.height = h;
 					const ctx = canvas.getContext("2d");
+
 					if (!ctx) {
-						callback(e.target.result);
+						callback(srcBlobUrl, file);
 						return;
 					}
 
-					// 1. Draw base image
-					ctx.drawImage(img, 0, 0, width, height);
+					// 1. Gambar foto dasar
+					ctx.drawImage(img, 0, 0, w, h);
 
-					// 2. Draw logo (18% width on top right)
+					// 2. Gambar logo watermark (18% lebar canvas di pojok kanan atas)
 					if (logoImgPreload && logoImgPreload.complete && logoImgPreload.naturalWidth > 0) {
-						const logoMargin = Math.round(width * 0.04);
-						const logoW = Math.round(width * 0.18);
-						const logoH = logoImgPreload.naturalHeight * (logoW / logoImgPreload.naturalWidth);
-						ctx.imageSmoothingEnabled = true;
-						ctx.imageSmoothingQuality = "high";
-						ctx.drawImage(logoImgPreload, width - logoW - logoMargin, logoMargin, logoW, logoH);
+						try {
+							const logoMargin = Math.round(w * 0.04);
+							const logoW = Math.round(w * 0.18);
+							const logoH = logoImgPreload.naturalHeight * (logoW / logoImgPreload.naturalWidth);
+							ctx.imageSmoothingEnabled = true;
+							ctx.imageSmoothingQuality = "high";
+							ctx.drawImage(logoImgPreload, w - logoW - logoMargin, logoMargin, logoW, logoH);
+						} catch(errLogo) {
+							console.warn("Logo watermark dilewati:", errLogo);
+						}
 					}
 
-					// 3. Draw text code on bottom right
+					// 3. Gambar teks SKU/Kode di pojok kanan bawah
 					const itemCodeInput = document.getElementById("product_item_code_input");
 					const skuInput = document.getElementById("product_sku_input");
-					let codeTxt = (itemCodeInput?.value || skuInput?.value || "").trim().replace(/[^a-zA-Z0-9_\-\s]/g, '');
+					let codeTxt = (itemCodeInput && "value" in itemCodeInput ? String(itemCodeInput.value) : (skuInput && "value" in skuInput ? String(skuInput.value) : "")).trim().replace(/[^a-zA-Z0-9_\-\s]/g, '');
 
 					if (codeTxt) {
-						const fontSize = Math.max(Math.round(height * 0.022), 12);
-						const textMarginRight = Math.round(width * 0.04);
-						const textY = height - Math.round(height * 0.05);
+						const fontSize = Math.max(Math.round(h * 0.024), 14);
+						const textMarginRight = Math.round(w * 0.04);
+						const textY = h - Math.round(h * 0.05);
 						ctx.font = `bold ${fontSize}px sans-serif`;
 						ctx.textAlign = "right";
 						ctx.textBaseline = "alphabetic";
 
-						// Shadow
+						// Bayangan teks
 						ctx.fillStyle = "black";
-						ctx.fillText(codeTxt, width - textMarginRight + 2, textY + 2);
-						// White text
+						ctx.fillText(codeTxt, w - textMarginRight + 2, textY + 2);
+						// Teks putih
 						ctx.fillStyle = "white";
-						ctx.fillText(codeTxt, width - textMarginRight, textY);
+						ctx.fillText(codeTxt, w - textMarginRight, textY);
 					}
 
-					try {
-						callback(canvas.toDataURL("image/webp", 0.9));
-					} catch(err) {
-						callback(e.target.result);
+					// Konversi canvas ke WebP Blob (jauh lebih cepat dan didukung 100% oleh Safari & Chrome)
+					if (canvas.toBlob) {
+						canvas.toBlob((blob) => {
+							if (blob) {
+								const blobUrl = URL.createObjectURL(blob);
+								const cleanName = (file.name || "motif.jpg").replace(/\.[^/.]+$/, "") + ".webp";
+								const processedFile = new File([blob], cleanName, { type: "image/webp" });
+								callback(blobUrl, processedFile);
+							} else {
+								callback(srcBlobUrl, file);
+							}
+						}, "image/webp", 0.88);
+					} else {
+						callback(srcBlobUrl, file);
 					}
-				};
-				img.src = e.target.result;
+				} catch(err) {
+					console.warn("Kesalahan proses canvas watermark, menggunakan URL langsung:", err);
+					callback(srcBlobUrl, file);
+				}
 			};
-			reader.readAsDataURL(file);
+
+			img.src = srcBlobUrl;
 		}
 
 		function showFullscreenImageModal(src) {
@@ -1454,8 +1494,10 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					fileInp.addEventListener("change", () => {
 						if (fileInp.files && fileInp.files[0]) {
 							const file = fileInp.files[0];
-							createWatermarkedDataUrl(file, (watermarkedUrl) => {
-								syncPhotosForMotif(motifName, watermarkedUrl, file);
+							uploadBtn.innerHTML = "⏳ Memproses...";
+							uploadBtn.disabled = true;
+							createWatermarkedDataUrl(file, (watermarkedUrl, processedFile) => {
+								syncPhotosForMotif(motifName, watermarkedUrl || "", processedFile || file);
 							});
 						}
 					});
@@ -1490,8 +1532,12 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					if (dt && dt.files && dt.files.length > 0) {
 						const file = dt.files[0];
 						if (file.type.startsWith('image/')) {
-							createWatermarkedDataUrl(file, (watermarkedUrl) => {
-								syncPhotosForMotif(motifName, watermarkedUrl, file);
+							if (uploadBtn) {
+								uploadBtn.innerHTML = "⏳ Memproses...";
+								uploadBtn.disabled = true;
+							}
+							createWatermarkedDataUrl(file, (watermarkedUrl, processedFile) => {
+								syncPhotosForMotif(motifName, watermarkedUrl || "", processedFile || file);
 							});
 						}
 					}
@@ -1519,8 +1565,8 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				const targetMotif = activeTargetMotif || (motifPhotoStore.keys().next().value || "Motif A");
 				if (targetMotif) {
 					e.preventDefault();
-					createWatermarkedDataUrl(imageFile, (watermarkedUrl) => {
-						syncPhotosForMotif(targetMotif, watermarkedUrl, imageFile);
+					createWatermarkedDataUrl(imageFile, (watermarkedUrl, processedFile) => {
+						syncPhotosForMotif(targetMotif, watermarkedUrl || "", processedFile || imageFile);
 					});
 				}
 			}
@@ -1533,21 +1579,24 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				isCustom: !!file
 			});
 
-			// Update all rows with this motif
+			// 1. Re-render all motif photo cards so the card preview immediately updates!
+			renderMotifPhotoCards();
+
+			// 2. Update all counter variant rows with this motif
 			document.querySelectorAll(".counter-table-row").forEach(row => {
 				const rowMotif = row.querySelector(".v-motif-select")?.value;
 				if (rowMotif === motifName) {
 					const img = row.querySelector(".v-preview-img");
 					const svg = row.querySelector(".v-placeholder-svg");
-					const badge = row.querySelector(".v-custom-badge");
+					const photoHidden = row.querySelector(".v-photo-url-hidden");
 					const fileInp = row.querySelector(".v-row-file-input");
 
 					if (img) {
 						img.src = dataUrl;
-						img.style.display = "block";
+						img.style.display = dataUrl ? "block" : "none";
 					}
-					if (svg) svg.style.display = "none";
-					if (badge) badge.style.display = "inline-block";
+					if (svg) svg.style.display = dataUrl ? "none" : "block";
+					if (photoHidden && dataUrl) photoHidden.value = dataUrl;
 
 					// If an actual File object was provided, attach it to the row's input
 					if (file && fileInp && window.DataTransfer) {
@@ -1807,8 +1856,26 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				const motifSelect = row.querySelector(".v-motif-select");
 				const motifHidden = row.querySelector(".v-motif-hidden");
 				const deleteBtn = row.querySelector(".btn-delete-row");
+				const thumbBox = row.querySelector(".v-thumb-box");
+				const fileInp = row.querySelector(".v-row-file-input");
 
-
+				if (thumbBox) {
+					thumbBox.addEventListener("click", () => {
+						const currentMotif = motifSelect?.value || "Motif A";
+						const store = motifPhotoStore.get(currentMotif);
+						if (store && store.previewUrl) {
+							showFullscreenImageModal(store.previewUrl);
+						} else {
+							activeTargetMotif = currentMotif;
+							const card = document.querySelector(`.motif-photo-card[data-motif="${currentMotif}"]`);
+							if (card) {
+								card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+								const cardFileInp = card.querySelector(".m-card-file-input");
+								if (cardFileInp) cardFileInp.click();
+							}
+						}
+					});
+				}
 
 				cb.addEventListener("change", () => {
 					const active = cb.checked;
@@ -2485,8 +2552,26 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				const motifSelect = row.querySelector(".v-motif-select");
 				const motifHidden = row.querySelector(".v-motif-hidden");
 				const deleteBtn = row.querySelector(".btn-delete-row");
+				const thumbBox = row.querySelector(".v-thumb-box");
+				const fileInp = row.querySelector(".v-row-file-input");
 
-
+				if (thumbBox) {
+					thumbBox.addEventListener("click", () => {
+						const currentMotif = motifSelect?.value || "Motif A";
+						const store = motifPhotoStore.get(currentMotif);
+						if (store && store.previewUrl) {
+							showFullscreenImageModal(store.previewUrl);
+						} else {
+							activeTargetMotif = currentMotif;
+							const card = document.querySelector(`.motif-photo-card[data-motif="${currentMotif}"]`);
+							if (card) {
+								card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+								const cardFileInp = card.querySelector(".m-card-file-input");
+								if (cardFileInp) cardFileInp.click();
+							}
+						}
+					});
+				}
 
 				cb.addEventListener("change", () => {
 					const active = cb.checked;
