@@ -71,6 +71,7 @@ graph TD
   * `d.counter` $\rightarrow$ `variant.counter` & `variant.sku` (Nomor Counter unik POS).
   * `d.outlet` $\rightarrow$ `variant.outlet` (Nama outlet / lokasi fisik counter).
   * `d.size` $\rightarrow$ `variant.size_name` (Murni nama ukuran dasar: `S`, `M`, `L`, `XL`, `ALL SIZE`).
+  * `sleeve` (deteksi LP/PD) $\rightarrow$ `variant.sleeve` (`Panjang` / `Pendek` / `3/4` / `-`).
   * `d.size` / `d.kode` (deteksi `SF`) $\rightarrow$ `variant.fit` (`REG` = Regular Fit / `SF` = Slim Fit).
   * `d.hjual` $\rightarrow$ `variant.price` (Harga jual per counter).
   * `d.stok` $\rightarrow$ `variant.stock` (Stok fisik per counter).
