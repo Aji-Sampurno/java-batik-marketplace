@@ -2,6 +2,7 @@
 export const prerender = false;
 import Layout from '../../layouts/Layout.astro';
 import { apiFetch } from '../../lib/api';
+import { getOutletAlias } from '../../lib/outlet';
 
 const PUBLIC_API_URL = import.meta.env.PUBLIC_API_URL || "https://java.batik.katalog.gooproper.id/api";
 
@@ -98,16 +99,6 @@ if (detectedColors.length === 0) {
   });
   detectedColors = Array.from(found);
 }
-
-const colorSwatches = detectedColors.map((colorName: string, idx: number) => {
-  const searchColor = colorName.toLowerCase();
-  const foundImg = imagesList.find((imgUrl: string) => imgUrl.toLowerCase().includes(searchColor));
-  const matchedImg = foundImg || imagesList[idx % imagesList.length] || product.image_url;
-  return {
-    name: colorName,
-    image: matchedImg
-  };
-});
 
 // Motif Swatches Mapping for Interactive Selector
 const motifSwatches: { name: string; image: string }[] = [];
@@ -207,6 +198,9 @@ let parsedVariantsList = variants.map((v: any) => {
     displayLabel = `${motifName} - ${baseSize}`;
   }
 
+  let rawOutlet = (v.outlet || v.outlet_location || v.counter_name || v.counter || product.outlet_location || product.counter || '').trim();
+  let outletAlias = rawOutlet ? getOutletAlias(rawOutlet) : '';
+
   return {
     ...v,
     motifName: motifName || (productMotifs[0] || ""),
@@ -215,11 +209,32 @@ let parsedVariantsList = variants.map((v: any) => {
     displayLabel,
     subName,
     isSF,
-    motifImage
+    motifImage,
+    outlet: outletAlias || rawOutlet
   };
 });
 
 const variantMotifsList = [...new Set(parsedVariantsList.map((v: any) => v.motifName).filter(Boolean))];
+
+const rawAllOutlets = [
+  product.outlet_location,
+  product.counter,
+  ...(variants || []).map((v: any) => v.outlet || v.outlet_location || v.counter_name || v.counter)
+].filter(Boolean);
+
+const uniqueOutletsList = [...new Set(rawAllOutlets.map(o => getOutletAlias(o)).filter(Boolean))];
+
+const outletMotifsMap: Record<string, string[]> = {};
+parsedVariantsList.forEach((v: any) => {
+  const out = v.outlet;
+  const motif = v.motifName;
+  if (out && motif) {
+    if (!outletMotifsMap[out]) outletMotifsMap[out] = [];
+    if (!outletMotifsMap[out].includes(motif)) {
+      outletMotifsMap[out].push(motif);
+    }
+  }
+});
 
 if (isSetelanProduct) {
   const consolidatedMap = new Map<string, any>();
@@ -276,6 +291,91 @@ parsedVariantsList.forEach((v: any) => {
   const stock = parseInt(v.stock || 0);
   sizeStockMap[v.baseSize] = (sizeStockMap[v.baseSize] || 0) + stock;
 });
+
+// Group unique (motif, baseSize) for clean size chips display
+interface UniqueMotifSize {
+  motifName: string;
+  baseSize: string;
+  totalStock: number;
+  motifImage: string;
+  isOutOfStock: boolean;
+}
+
+const motifSizeMap = new Map<string, UniqueMotifSize>();
+parsedVariantsList.forEach((v: any) => {
+  const mName = v.motifName || '';
+  const bSize = v.baseSize || 'ALL SIZE';
+  const key = `${mName}___${bSize}`;
+  const stockNum = parseInt(v.stock || 0);
+
+  if (!motifSizeMap.has(key)) {
+    motifSizeMap.set(key, {
+      motifName: mName,
+      baseSize: bSize,
+      totalStock: stockNum,
+      motifImage: v.motifImage || '',
+      isOutOfStock: false
+    });
+  } else {
+    const existing = motifSizeMap.get(key)!;
+    existing.totalStock += stockNum;
+    if (!existing.motifImage && v.motifImage) {
+      existing.motifImage = v.motifImage;
+    }
+  }
+});
+
+const uniqueMotifSizeList = Array.from(motifSizeMap.values()).map(item => ({
+  ...item,
+  isOutOfStock: item.totalStock <= 0
+}));
+
+uniqueMotifSizeList.sort((a, b) => {
+  const idxA = sizeOrder.indexOf(a.baseSize);
+  const idxB = sizeOrder.indexOf(b.baseSize);
+  if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+  if (idxA !== -1) return -1;
+  if (idxB !== -1) return 1;
+  return a.baseSize.localeCompare(b.baseSize);
+});
+
+// Group consolidated sub-variants by (motif, baseSize, subName, price, dalaman)
+const consolidatedSubVariantsMap = new Map<string, any>();
+parsedVariantsList.forEach((v: any) => {
+  const mName = v.motifName || '';
+  const bSize = v.baseSize || 'ALL SIZE';
+  const sName = v.subName || '';
+  const priceVal = Number(v.price || 0);
+  const dalamanVal = v.dalaman || '';
+  const key = `${mName}___${bSize}___${sName}___${priceVal}___${dalamanVal}`;
+  const stockNum = parseInt(v.stock || 0);
+  const outName = v.outlet || '';
+
+  if (!consolidatedSubVariantsMap.has(key)) {
+    consolidatedSubVariantsMap.set(key, {
+      ...v,
+      totalStock: stockNum,
+      counterCodes: [v.counter || v.sku || ''].filter(Boolean),
+      outlets: [outName].filter(Boolean)
+    });
+  } else {
+    const existing = consolidatedSubVariantsMap.get(key);
+    existing.totalStock += stockNum;
+    if (v.counter || v.sku) {
+      existing.counterCodes.push(v.counter || v.sku);
+    }
+    if (outName && !existing.outlets.includes(outName)) {
+      existing.outlets.push(outName);
+    }
+  }
+});
+
+const consolidatedSubVariantsList = Array.from(consolidatedSubVariantsMap.values()).map(item => ({
+  ...item,
+  stock: item.totalStock,
+  counterSummary: item.counterCodes.join(', '),
+  outletSummary: item.outlets.join(', ')
+}));
 
 function renderMarkdown(md: string): string {
   if (!md) return '';
@@ -354,11 +454,21 @@ function renderMarkdown(md: string): string {
 					
 					{product.images && product.images.length > 1 && (
 						<div class="thumbnail-strip">
-							{product.images.map((img: string, i: number) => (
-								<div class={`thumb-item ${i === 0 ? 'active' : ''}`} data-src={img}>
-									<img src={img} alt={`${product.name} view ${i+1}`} />
-								</div>
-							))}
+							{product.images.map((img: string, i: number) => {
+								let matchedMotif = "";
+								const motifMatch = img.match(/_MOTIF_([A-Z0-9]+)_/i);
+								if (motifMatch) {
+									matchedMotif = `Motif ${motifMatch[1].toUpperCase()}`;
+								} else {
+									const foundVar = parsedVariantsList.find((v: any) => v.motifImage === img || (v.image_url && v.image_url === img));
+									matchedMotif = foundVar?.motifName || (variantMotifsList[i] || "");
+								}
+								return (
+									<div class={`thumb-item ${i === 0 ? 'active' : ''}`} data-src={img} data-motif={matchedMotif}>
+										<img src={img} alt={`${product.name} view ${i+1}`} />
+									</div>
+								);
+							})}
 						</div>
 					)}
 				</div>
@@ -392,8 +502,8 @@ function renderMarkdown(md: string): string {
 					</div>
 
 					<div class="meta-section">
-						<!-- Product Spec Info: Jenis, Motif, Warna in a clean modern row -->
-						<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; padding: 1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 1.25rem;">
+						<!-- Product Spec Info: Kategori, Motif, Outlet in a clean modern row -->
+						<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.25rem; padding: 1.1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 1.25rem;">
 							<div>
 								<span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 700; display: block; margin-bottom: 0.25rem;">Kategori</span>
 								<div class="tag-container" style="gap: 6px; font-size: 0.85rem;">
@@ -418,39 +528,29 @@ function renderMarkdown(md: string): string {
 								</div>
 							)}
 
-							{detectedColors.length > 0 && (
-								<div>
-									<span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 700; display: block; margin-bottom: 0.25rem;">Warna Utama</span>
-									<span style="font-weight: 700; color: #0f172a; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px;">
-										<span style="width: 10px; height: 10px; border-radius: 50%; background-color: #8c7851; border: 1px solid rgba(0,0,0,0.15); display: inline-block;"></span>
-										{detectedColors.join(", ")}
+							{uniqueOutletsList.length > 0 && (
+								<div id="product-outlet-section" style="grid-column: 1 / -1; border-top: 1px dashed #e2e8f0; padding-top: 0.75rem;">
+									<span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 700; display: block; margin-bottom: 0.4rem;">
+										<span id="outlet-section-label">Lokasi Outlet Tersedia</span>:
 									</span>
+									<div id="outlet-pills-container" style="display: flex; flex-wrap: wrap; gap: 0.45rem;">
+										{uniqueOutletsList.map(out => {
+											const associatedMotifs = outletMotifsMap[out] || [];
+											return (
+												<span 
+													class="outlet-pill-badge" 
+													data-outlet={out}
+													data-motifs={associatedMotifs.join(",")}
+													style="background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s;"
+												>
+													📍 {out}
+												</span>
+											);
+										})}
+									</div>
 								</div>
 							)}
 						</div>
-
-						{/* Multi-Color Selection (Only if product has 2 or more distinct colors) */}
-						{colorSwatches.length > 1 && (
-							<div class="meta-item" style="margin-bottom: 1.25rem;">
-								<span class="meta-label" style="font-weight: 700; color: #0f172a; display: block; margin-bottom: 0.5rem;">
-									Pilihan Warna ({colorSwatches.length})
-								</span>
-								<div class="color-swatch-list" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
-									{colorSwatches.map((color: any, idx: number) => (
-										<button
-											type="button"
-											class={`color-swatch-btn ${idx === 0 ? 'active' : ''}`}
-											data-color={color.name}
-											data-image={color.image}
-											style="display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.95rem; border-radius: 8px; border: 1.5px solid #e2e8f0; background: #fff; cursor: pointer; transition: all 0.2s; font-size: 0.85rem; font-weight: 600; color: #334155;"
-										>
-											<span style="width: 12px; height: 12px; border-radius: 50%; background-color: #8c7851; border: 1px solid rgba(0,0,0,0.15); display: inline-block;"></span>
-											{color.name}
-										</button>
-									))}
-								</div>
-							</div>
-						)}
 
 						{/* Variant & Size Selection */}
 						{parsedVariantsList.length > 0 ? (
@@ -485,14 +585,14 @@ function renderMarkdown(md: string): string {
 										</div>
 									)}
 
-									<!-- Base Sizes Selection -->
+									<!-- Base Sizes Selection (Grouped & Deduplicated per Motif) -->
 									<div>
 										<span style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
 											{hasVariantMotifs && variantMotifsList.length > 0 ? "2. Pilih Ukuran:" : "Pilih Ukuran Tersedia:"}
 										</span>
 										<div class="size-chips" id="base-size-options" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
-											{parsedVariantsList.map((v: any, idx: number) => {
-												const isOutOfStock = parseInt(v.stock || 0) === 0;
+											{uniqueMotifSizeList.map((v: any, idx: number) => {
+												const isOutOfStock = v.isOutOfStock;
 												return (
 													<button 
 														type="button"
@@ -512,13 +612,13 @@ function renderMarkdown(md: string): string {
 										</div>
 									</div>
 
-									<!-- Sub-variants Selection (Sleeve Type & Price info) -->
+									<!-- Sub-variants Selection (Sleeve Type & Price info - Grouped) -->
 									<div>
 										<span style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
 											{hasVariantMotifs && variantMotifsList.length > 0 ? "3. Model & Harga:" : "Model & Ketersediaan:"}
 										</span>
 										<div id="sub-variant-options" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem;">
-											{parsedVariantsList.map((v: any) => {
+											{consolidatedSubVariantsList.map((v: any) => {
 												const isOutOfStock = parseInt(v.stock || 0) === 0;
 												return (
 													<button 
@@ -530,7 +630,8 @@ function renderMarkdown(md: string): string {
 														data-stock={v.stock}
 														data-fullname={v.size_name}
 														data-subname={v.subName || ""}
-														data-counter={v.counter || v.sku || ""}
+														data-counter={v.counterSummary || v.counter || v.sku || ""}
+														data-outlet={v.outletSummary || v.outlet || ""}
 														data-dalaman={v.dalaman || ""}
 														style="display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1.2rem; border-radius: 8px; border: 1.5px solid #e2e8f0; background: #fff; cursor: pointer; transition: all 0.2s; position: relative; gap: 1rem;"
 													>
@@ -542,7 +643,7 @@ function renderMarkdown(md: string): string {
 														) : 5 >= parseInt(v.stock || 0) ? (
 															<span class="status-badge-compact" style="font-size: 0.65rem; color: #f59e0b; font-weight: 700; background: #fffbeb; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.1);">Sisa {v.stock}</span>
 														) : (
-															<span class="status-badge-compact" style="font-size: 0.65rem; color: #10b981; font-weight: 700; background: #f0fdf4; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.1);">Ready</span>
+															<span class="status-badge-compact" style="font-size: 0.65rem; color: #10b981; font-weight: 700; background: #f0fdf4; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.1);">Ready ({v.stock})</span>
 														)}
 													</button>
 												);
@@ -655,13 +756,24 @@ function renderMarkdown(md: string): string {
 			padding-bottom: var(--spacing-2xl);
 		}
 
+		.image-gallery {
+			position: sticky;
+			top: 120px;
+			display: flex;
+			flex-direction: column;
+			gap: 14px;
+			width: 100%;
+		}
+
 		.main-image-container {
+			position: relative;
 			background: #fdfcfb;
 			border-radius: var(--radius-sm);
 			overflow: hidden;
-			position: sticky;
-			top: 100px;
 			aspect-ratio: 4/5;
+			width: 100%;
+			border: 1px solid #f1f5f9;
+			box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.06);
 		}
 
 		.main-image {
@@ -702,36 +814,41 @@ function renderMarkdown(md: string): string {
 			text-transform: uppercase;
 		}
 
-
-
-
 		.main-image:hover {
 			transform: scale(1.05);
 		}
 
 		.thumbnail-strip {
-			display: grid;
-			grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+			display: flex;
+			flex-wrap: wrap;
 			gap: 10px;
-			margin-top: 15px;
+			margin-top: 0;
+			width: 100%;
 		}
 
 		.thumb-item {
+			width: 68px;
+			height: 68px;
+			flex-shrink: 0;
 			aspect-ratio: 1;
-			border-radius: 4px;
+			border-radius: 8px;
 			overflow: hidden;
 			cursor: pointer;
-			border: 2px solid transparent;
-			transition: all 0.3s;
-			opacity: 0.6;
+			border: 2px solid #e2e8f0;
+			transition: all 0.2s ease;
+			opacity: 0.7;
+			background: #f8fafc;
 		}
 
 		.thumb-item:hover {
 			opacity: 1;
+			border-color: #94a3b8;
+			transform: translateY(-2px);
 		}
 
 		.thumb-item.active {
-			border-color: var(--color-accent);
+			border-color: #0f172a;
+			box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
 			opacity: 1;
 		}
 
@@ -739,6 +856,7 @@ function renderMarkdown(md: string): string {
 			width: 100%;
 			height: 100%;
 			object-fit: cover;
+			display: block;
 		}
 
 		.product-info-panel {
@@ -1073,67 +1191,39 @@ function renderMarkdown(md: string): string {
 		window.waNumber = waNumberData;
 	</script>
 	<script is:inline>
-		// Gallery Switcher Logic
+		// Gallery Switcher Logic with Mutual Motif Triggering
 		const mainImg = document.getElementById('main-product-img');
 		const thumbs = document.querySelectorAll('.thumb-item');
 
-		if (thumbs) {
+		if (thumbs && thumbs.length > 0) {
 			thumbs.forEach(thumb => {
 				thumb.addEventListener('click', () => {
 					const newSrc = thumb.getAttribute('data-src');
+					const thumbMotif = thumb.getAttribute('data-motif');
+
 					if (mainImg && newSrc) {
-						mainImg.src = newSrc;
+						mainImg.style.opacity = '0.3';
+						setTimeout(() => {
+							mainImg.src = newSrc;
+							mainImg.style.opacity = '1';
+						}, 150);
 						thumbs.forEach(t => t.classList.remove('active'));
 						thumb.classList.add('active');
 					}
-				});
-			});
-		}
 
-		// Motif Swatch Click Handler -> Switches main image to selected motif
-		const motifBtns = document.querySelectorAll('.motif-swatch-btn');
-		let currentSelectedMotif = motifBtns.length > 0 ? (motifBtns[0]?.getAttribute('data-motif') || '') : '';
-
-		if (motifBtns.length > 0) {
-			motifBtns.forEach(btn => {
-				btn.addEventListener('click', () => {
-					const motifImg = btn.getAttribute('data-image');
-					currentSelectedMotif = btn.getAttribute('data-motif') || '';
-
-					if (mainImg && motifImg) {
-						mainImg.style.opacity = '0.3';
-						setTimeout(() => {
-							mainImg.src = motifImg;
-							mainImg.style.opacity = '1';
-						}, 150);
-					}
-					motifBtns.forEach(b => {
-						b.classList.remove('active');
-						b.style.borderColor = '#e2e8f0';
-						b.style.background = '#fff';
-						b.style.color = '#334155';
-					});
-					btn.classList.add('active');
-					btn.style.borderColor = '#b45309';
-					btn.style.background = '#fffbeb';
-					btn.style.color = '#92400e';
-
-					if (thumbs) {
-						thumbs.forEach(thumb => {
-							if (thumb.getAttribute('data-src') === motifImg) {
-								thumbs.forEach(t => t.classList.remove('active'));
-								thumb.classList.add('active');
-							}
-						});
-					}
-
-					const activeSub = document.querySelector('.sub-var-btn.active');
-					if (activeSub) {
-						updateWAMessage(activeSub.getAttribute('data-fullname'), activeSub.getAttribute('data-dalaman') || '');
+					// Mutual Trigger: Selecting a thumbnail automatically triggers the corresponding Motif Button!
+					if (thumbMotif) {
+						const motifBtns = document.querySelectorAll('.var-motif-btn');
+						const matchedBtn = Array.from(motifBtns).find(b => b.getAttribute('data-motif') === thumbMotif);
+						if (matchedBtn && !matchedBtn.classList.contains('active')) {
+							matchedBtn.click();
+						}
 					}
 				});
 			});
 		}
+
+		let currentSelectedMotif = '';
 
 		// Color Swatch Click Handler -> Instantly switches main image according to selected color
 		const colorBtns = document.querySelectorAll('.color-swatch-btn');
@@ -1207,7 +1297,7 @@ function renderMarkdown(md: string): string {
 				}
 			};
 
-			const updateWAMessage = (selectedVar, dalaman, subName, counter) => {
+			const updateWAMessage = (selectedVar, dalaman, subName, counter, outlet) => {
 				if (waBtn) {
 					const code = `${product.code || ''}`;
 					const name = `${product.name || ''}`;
@@ -1218,6 +1308,7 @@ function renderMarkdown(md: string): string {
 					if (dalaman === 'F') detailsArr.push(`Dalaman: Furing (F)`);
 					else if (dalaman === 'TF') detailsArr.push(`Dalaman: Non Furing`);
 					if (counter) detailsArr.push(`Counter: ${counter}`);
+					if (outlet) detailsArr.push(`Outlet: ${outlet}`);
 					
 					const specText = detailsArr.length > 0 ? ` [${detailsArr.join(' | ')}]` : '';
 					const msg = encodeURIComponent(`Halo, saya tertarik memesan produk ${name} (${code})${specText}. Apakah masih tersedia?`);
@@ -1267,9 +1358,10 @@ function renderMarkdown(md: string): string {
 					const dalaman = firstVisible.getAttribute('data-dalaman') || "";
 					const subName = firstVisible.getAttribute('data-subname') || "";
 					const counter = firstVisible.getAttribute('data-counter') || "";
+					const outlet = firstVisible.getAttribute('data-outlet') || "";
 					updateAvailability(stock);
 					updateDalaman(dalaman);
-					updateWAMessage(firstVisible.getAttribute('data-fullname'), dalaman, subName, counter);
+					updateWAMessage(firstVisible.getAttribute('data-fullname'), dalaman, subName, counter, outlet);
 				}
 			};
 
@@ -1283,9 +1375,10 @@ function renderMarkdown(md: string): string {
 					const dalaman = btn.getAttribute('data-dalaman') || "";
 					const subName = btn.getAttribute('data-subname') || "";
 					const counter = btn.getAttribute('data-counter') || "";
+					const outlet = btn.getAttribute('data-outlet') || "";
 					updateAvailability(stock);
 					updateDalaman(dalaman);
-					updateWAMessage(btn.getAttribute('data-fullname'), dalaman, subName, counter);
+					updateWAMessage(btn.getAttribute('data-fullname'), dalaman, subName, counter, outlet);
 				});
 			});
 
@@ -1307,12 +1400,41 @@ function renderMarkdown(md: string): string {
 				});
 			});
 
+			// Outlet Badges Filter by Motif
+			const filterOutletBadges = (motifName) => {
+				const outletBadges = document.querySelectorAll('.outlet-pill-badge');
+				const outletLabel = document.getElementById('outlet-section-label');
+				let visibleCount = 0;
+
+				outletBadges.forEach(badge => {
+					const motifsAttr = badge.getAttribute('data-motifs') || '';
+					const motifsList = motifsAttr.split(',').map(m => m.trim()).filter(Boolean);
+					if (!motifName || motifsList.length === 0 || motifsList.includes(motifName)) {
+						badge.style.display = 'inline-flex';
+						visibleCount++;
+					} else {
+						badge.style.display = 'none';
+					}
+				});
+
+				if (outletLabel) {
+					if (motifName) {
+						outletLabel.innerText = `Lokasi Outlet untuk ${motifName} (${visibleCount})`;
+					} else {
+						outletLabel.innerText = `Lokasi Outlet Tersedia (${visibleCount})`;
+					}
+				}
+			};
+
 			// Variant Motif Button Logic
 			const varMotifBtns = document.querySelectorAll('.var-motif-btn');
 			if (varMotifBtns.length > 0) {
 				const selectMotif = (motifName) => {
 					currentSelectedMotif = motifName;
 					let firstMatchBtn = null;
+
+					// Filter outlet badges according to motif
+					filterOutletBadges(motifName);
 
 					// Filter base sizes according to motif
 					baseSzBtns.forEach(btn => {
@@ -1347,6 +1469,8 @@ function renderMarkdown(md: string): string {
 						btn.style.color = '#fff';
 
 						const mImg = btn.getAttribute('data-image');
+						const mName = btn.getAttribute('data-motif');
+
 						if (mainImg && mImg) {
 							mainImg.style.opacity = '0.3';
 							setTimeout(() => {
@@ -1355,7 +1479,19 @@ function renderMarkdown(md: string): string {
 							}, 150);
 						}
 
-						selectMotif(btn.getAttribute('data-motif'));
+						// Mutual Trigger: Synchronize active thumbnail with selected motif
+						if (thumbs && thumbs.length > 0) {
+							thumbs.forEach(t => {
+								const tSrc = t.getAttribute('data-src');
+								const tMotif = t.getAttribute('data-motif');
+								if ((mImg && tSrc === mImg) || (mName && tMotif === mName)) {
+									thumbs.forEach(item => item.classList.remove('active'));
+									t.classList.add('active');
+								}
+							});
+						}
+
+						selectMotif(mName);
 					});
 				});
 
@@ -1364,6 +1500,7 @@ function renderMarkdown(md: string): string {
 					selectMotif(varMotifBtns[0].getAttribute('data-motif'));
 				}
 			} else {
+				filterOutletBadges('');
 				// Initial state without motif filter
 				const initialSize = baseSzBtns[0]?.getAttribute('data-size');
 				if (initialSize) selectBaseSize(initialSize, '');
