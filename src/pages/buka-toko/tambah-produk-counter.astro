@@ -215,13 +215,13 @@ if (Astro.request.method === "POST") {
 						const rawFileToUpload = new File([new Uint8Array(rawWebpBuffer)], rawCustomName, { type: "image/webp" });
 
 						let rawPublicUrl = "";
-						const fbPathRaw = `${jenisProduk}/${actualCode}/${cleanMotifTag}/raw/${rawCustomName}`;
+						const fbPathRaw = `products/${jenisProduk}/${actualCode}/${cleanMotifTag}/raw/${rawCustomName}`;
 						try {
 							rawPublicUrl = await uploadToFirebase(rawFileToUpload, fbPathRaw);
 							console.log(`[Firebase Raw] Upload success -> ${rawPublicUrl}`);
 						} catch (fbErr) {
 							console.warn("[Firebase Raw] Firebase failed, fallback to Laravel:", fbErr);
-							rawPublicUrl = await uploadToLaravel(rawFileToUpload, `${jenisProduk}/${actualCode}/${cleanMotifTag}/raw`).catch(() => "");
+							rawPublicUrl = await uploadToLaravel(rawFileToUpload, `products/${jenisProduk}/${actualCode}/${cleanMotifTag}/raw`).catch(() => "");
 						}
 
 						if (rawPublicUrl) {
@@ -229,7 +229,7 @@ if (Astro.request.method === "POST") {
 						}
 
 						// 2. Process Watermarked & WebP Compressed Image (Logo + Code Text) and Upload to Firebase
-						// Path: {jenis_produk}/{kode_item}/{motif}/katalog/...
+						// Path: products/{jenis_produk}/{kode_item}/{motif}/katalog/...
 						let webpBuffer: Buffer;
 						try {
 							const imgBuffer = Buffer.from(await file.arrayBuffer());
@@ -306,13 +306,13 @@ if (Astro.request.method === "POST") {
 						const webpFileToUpload = new File([new Uint8Array(webpBuffer)], webpCustomName, { type: "image/webp" });
 
 						let publicUrl = "";
-						const fbPathWebp = `${jenisProduk}/${actualCode}/${cleanMotifTag}/katalog/${webpCustomName}`;
+						const fbPathWebp = `products/${jenisProduk}/${actualCode}/${cleanMotifTag}/katalog/${webpCustomName}`;
 						try {
 							publicUrl = await uploadToFirebase(webpFileToUpload, fbPathWebp);
 							console.log(`[Firebase WebP] Upload success -> ${publicUrl}`);
 						} catch (fbErr) {
 							console.warn("[Firebase WebP] Firebase failed, fallback to Laravel:", fbErr);
-							publicUrl = await uploadToLaravel(webpFileToUpload, `${jenisProduk}/${actualCode}/${cleanMotifTag}/katalog`).catch(() => "");
+							publicUrl = await uploadToLaravel(webpFileToUpload, `products/${jenisProduk}/${actualCode}/${cleanMotifTag}/katalog`).catch(() => "");
 						}
 
 						if (publicUrl) {
@@ -1241,7 +1241,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 
 			img.onload = () => {
 				try {
-					// Batasi resolusi maksimum ke 1200px agar pemrosesan watermark instan & hemat memori
+					// Batasi resolusi maksimum ke 1200px agar pemrosesan cepat & hemat bandwidth
 					const maxDim = 1200;
 					let w = img.naturalWidth || img.width || 800;
 					let h = img.naturalHeight || img.height || 800;
@@ -1256,71 +1256,85 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 						}
 					}
 
-					const canvas = document.createElement("canvas");
-					canvas.width = w;
-					canvas.height = h;
-					const ctx = canvas.getContext("2d");
+					// 1. Canvas Bersih untuk File Upload ke Server (100% Mentah / Murni Tanpa Watermark)
+					const cleanCanvas = document.createElement("canvas");
+					cleanCanvas.width = w;
+					cleanCanvas.height = h;
+					const cleanCtx = cleanCanvas.getContext("2d");
 
-					if (!ctx) {
+					if (!cleanCtx) {
 						callback(srcBlobUrl, file);
 						return;
 					}
 
-					// 1. Gambar foto dasar
-					ctx.drawImage(img, 0, 0, w, h);
+					// Gambar foto asli mentah
+					cleanCtx.drawImage(img, 0, 0, w, h);
 
-					// 2. Gambar logo watermark (18% lebar canvas di pojok kanan atas)
-					if (logoImgPreload && logoImgPreload.complete && logoImgPreload.naturalWidth > 0) {
-						try {
-							const logoMargin = Math.round(w * 0.04);
-							const logoW = Math.round(w * 0.18);
-							const logoH = logoImgPreload.naturalHeight * (logoW / logoImgPreload.naturalWidth);
-							ctx.imageSmoothingEnabled = true;
-							ctx.imageSmoothingQuality = "high";
-							ctx.drawImage(logoImgPreload, w - logoW - logoMargin, logoMargin, logoW, logoH);
-						} catch(errLogo) {
-							console.warn("Logo watermark dilewati:", errLogo);
+					// 2. Canvas Pratinjau (Preview) untuk Tampilan UI di Layar Admin
+					const previewCanvas = document.createElement("canvas");
+					previewCanvas.width = w;
+					previewCanvas.height = h;
+					const previewCtx = previewCanvas.getContext("2d");
+					if (previewCtx) {
+						previewCtx.drawImage(cleanCanvas, 0, 0);
+
+						// Gambar logo watermark untuk preview di layar
+						if (logoImgPreload && logoImgPreload.complete && logoImgPreload.naturalWidth > 0) {
+							try {
+								const logoMargin = Math.round(w * 0.04);
+								const logoW = Math.round(w * 0.18);
+								const logoH = logoImgPreload.naturalHeight * (logoW / logoImgPreload.naturalWidth);
+								previewCtx.imageSmoothingEnabled = true;
+								previewCtx.imageSmoothingQuality = "high";
+								previewCtx.drawImage(logoImgPreload, w - logoW - logoMargin, logoMargin, logoW, logoH);
+							} catch(errLogo) {
+								console.warn("Logo watermark preview dilewati:", errLogo);
+							}
+						}
+
+						// Gambar teks kode untuk preview di layar
+						const itemCodeInput = document.getElementById("product_item_code_input");
+						const skuInput = document.getElementById("product_sku_input");
+						let codeTxt = (itemCodeInput && "value" in itemCodeInput ? String(itemCodeInput.value) : (skuInput && "value" in skuInput ? String(skuInput.value) : "")).trim().replace(/[^a-zA-Z0-9_\-\s]/g, '');
+
+						if (codeTxt) {
+							const fontSize = Math.max(Math.round(h * 0.024), 14);
+							const textMarginRight = Math.round(w * 0.04);
+							const textY = h - Math.round(h * 0.05);
+							previewCtx.font = `bold ${fontSize}px sans-serif`;
+							previewCtx.textAlign = "right";
+							previewCtx.textBaseline = "alphabetic";
+
+							// Bayangan teks
+							previewCtx.fillStyle = "black";
+							previewCtx.fillText(codeTxt, w - textMarginRight + 2, textY + 2);
+							// Teks putih
+							previewCtx.fillStyle = "white";
+							previewCtx.fillText(codeTxt, w - textMarginRight, textY);
 						}
 					}
 
-					// 3. Gambar teks SKU/Kode di pojok kanan bawah
-					const itemCodeInput = document.getElementById("product_item_code_input");
-					const skuInput = document.getElementById("product_sku_input");
-					let codeTxt = (itemCodeInput && "value" in itemCodeInput ? String(itemCodeInput.value) : (skuInput && "value" in skuInput ? String(skuInput.value) : "")).trim().replace(/[^a-zA-Z0-9_\-\s]/g, '');
+					// Eksekusi pembuatan file WebP bersih untuk Server dan Blob URL untuk UI
+					if (cleanCanvas.toBlob) {
+						cleanCanvas.toBlob((cleanBlob) => {
+							const cleanName = (file.name || "motif.jpg").replace(/\.[^/.]+$/, "") + ".webp";
+							const cleanRawFile = cleanBlob ? new File([cleanBlob], cleanName, { type: "image/webp" }) : file;
 
-					if (codeTxt) {
-						const fontSize = Math.max(Math.round(h * 0.024), 14);
-						const textMarginRight = Math.round(w * 0.04);
-						const textY = h - Math.round(h * 0.05);
-						ctx.font = `bold ${fontSize}px sans-serif`;
-						ctx.textAlign = "right";
-						ctx.textBaseline = "alphabetic";
-
-						// Bayangan teks
-						ctx.fillStyle = "black";
-						ctx.fillText(codeTxt, w - textMarginRight + 2, textY + 2);
-						// Teks putih
-						ctx.fillStyle = "white";
-						ctx.fillText(codeTxt, w - textMarginRight, textY);
-					}
-
-					// Konversi canvas ke WebP Blob (jauh lebih cepat dan didukung 100% oleh Safari & Chrome)
-					if (canvas.toBlob) {
-						canvas.toBlob((blob) => {
-							if (blob) {
-								const blobUrl = URL.createObjectURL(blob);
-								const cleanName = (file.name || "motif.jpg").replace(/\.[^/.]+$/, "") + ".webp";
-								const processedFile = new File([blob], cleanName, { type: "image/webp" });
-								callback(blobUrl, processedFile);
+							if (previewCanvas.toBlob) {
+								previewCanvas.toBlob((prevBlob) => {
+									const previewUrl = prevBlob ? URL.createObjectURL(prevBlob) : (cleanBlob ? URL.createObjectURL(cleanBlob) : srcBlobUrl);
+									callback(previewUrl, cleanRawFile);
+								}, "image/webp", 0.88);
 							} else {
-								callback(srcBlobUrl, file);
+								const previewUrl = cleanBlob ? URL.createObjectURL(cleanBlob) : srcBlobUrl;
+								callback(previewUrl, cleanRawFile);
 							}
-						}, "image/webp", 0.88);
+						}, "image/webp", 0.90);
 					} else {
 						callback(srcBlobUrl, file);
 					}
 				} catch(err) {
-					console.warn("Kesalahan proses canvas watermark, menggunakan URL langsung:", err);
+					console.warn("Kesalahan proses canvas:", err);
 					callback(srcBlobUrl, file);
 				}
 			};
@@ -2763,6 +2777,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			const btnCancelTop = document.getElementById("btnCancelConfirmModalTop");
 
 			let isConfirmed = false;
+			let isSubmitting = false;
 
 			const closeModal = () => {
 				if (modal) modal.style.display = "none";
@@ -2771,9 +2786,25 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			btnCancel?.addEventListener("click", closeModal);
 			btnCancelTop?.addEventListener("click", closeModal);
 
-			btnProceed?.addEventListener("click", () => {
+			btnProceed?.addEventListener("click", (e) => {
+				e.preventDefault();
+				if (isSubmitting) return;
+				isSubmitting = true;
 				isConfirmed = true;
+
+				if (btnProceed) {
+					btnProceed.disabled = true;
+					btnProceed.innerHTML = "⏳ Menyimpan...";
+					btnProceed.style.opacity = "0.6";
+				}
+
+				const overlay = document.getElementById("loadingOverlay");
+				if (overlay) {
+					overlay.style.display = "flex";
+				}
+
 				closeModal();
+
 				if (form) form.requestSubmit();
 			});
 

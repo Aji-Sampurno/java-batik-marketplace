@@ -61,7 +61,7 @@ if (Astro.request.method === "POST") {
 			const action = formData.get("action");
 
 			if (action === "add_product") {
-				return Astro.redirect("/buka-toko/tambah-produk");
+				return Astro.redirect("/buka-toko/tambah-produk-counter");
 			}
 
 			if (action === "toggle_status") {
