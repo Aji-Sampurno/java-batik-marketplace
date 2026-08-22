@@ -4,49 +4,59 @@ interface Props {
 }
 
 const { title } = Astro.props;
-import { apiFetch } from '../lib/api';
-import '../styles/index.css';
-import Analytics from '@vercel/analytics/astro';
-import SpeedInsights from '@vercel/speed-insights/astro';
+import { apiFetch } from "../lib/api";
+import "../styles/index.css";
+import Analytics from "@vercel/analytics/astro";
+import SpeedInsights from "@vercel/speed-insights/astro";
 
 // Fetch Site Settings
-let settings: any = { site_name: 'Batik Nusantara' };
+let settings: any = { site_name: "Batik Nusantara" };
 try {
-  const res = await apiFetch<any>('settings');
-  const data = res?.data || res;
-  if (data) settings = data;
+	const res = await apiFetch<any>("settings");
+	const data = res?.data || res;
+	if (data) settings = data;
 } catch (e: any) {
-  console.error('Settings fetch error:', e.message);
+	console.error("Settings fetch error:", e.message);
 }
 
 // WhatsApp Number Cleaning Logic (Ensures 08... becomes 628...)
-const whatsappNumber = settings.contact_whatsapp ? 
-	settings.contact_whatsapp.toString().replace(/^0/, '62').replace(/\D/g, '') : 
-	'';
+const whatsappNumber = settings.contact_whatsapp
+	? settings.contact_whatsapp
+			.toString()
+			.replace(/^0/, "62")
+			.replace(/\D/g, "")
+	: "";
 
 // Parsing for "Batik Offline" (Group by City/Region)
-const rawAddress = settings.address || '';
+const rawAddress = settings.address || "";
 // Split by double newlines or similar meaningful gaps
-const addressBlocks = rawAddress.split(/\r?\n\s*\r?\n/).filter((block: any) => block.trim().length > 0);
+const addressBlocks = rawAddress
+	.split(/\r?\n\s*\r?\n/)
+	.filter((block: any) => block.trim().length > 0);
 const formattedAddresses = addressBlocks.map((block: any) => {
-  const lines = block.trim().split(/\r?\n/);
-  const city = lines[0].trim();
-  const branches = lines.slice(1).map((l: any) => {
-    const raw = l.trim().replace(/^[•\-\*]\s?/, '');
-    // Detect potential links (share location) in the text
-    const urlMatch = raw.match(/https?:\/\/[^\s]+/);
-    const url = urlMatch ? urlMatch[0] : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(raw + ' ' + city)}`;
-    const text = raw.replace(/https?:\/\/[^\s]+/, '').trim();
-    return { text, url };
-  }).filter((b: any) => b.text.length > 0);
+	const lines = block.trim().split(/\r?\n/);
+	const city = lines[0].trim();
+	const branches = lines
+		.slice(1)
+		.map((l: any) => {
+			const raw = l.trim().replace(/^[•\-\*]\s?/, "");
+			// Detect potential links (share location) in the text
+			const urlMatch = raw.match(/https?:\/\/[^\s]+/);
+			const url = urlMatch
+				? urlMatch[0]
+				: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(raw + " " + city)}`;
+			const text = raw.replace(/https?:\/\/[^\s]+/, "").trim();
+			return { text, url };
+		})
+		.filter((b: any) => b.text.length > 0);
 
-  return { city, branches };
+	return { city, branches };
 });
 
-console.log("DEBUG: Batik Offline Parsing v4", { 
-  rawLength: rawAddress.length, 
-  blocksFound: addressBlocks.length, 
-  formattedCount: formattedAddresses.length 
+console.log("DEBUG: Batik Offline Parsing v4", {
+	rawLength: rawAddress.length,
+	blocksFound: addressBlocks.length,
+	formattedCount: formattedAddresses.length,
 });
 
 // Logic for Text Logo (Split by space)
@@ -57,18 +67,23 @@ const restWords = nameParts.slice(1).join(" ");
 
 // Admin Visibility Check
 const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
-const isBukaTokoPage = Astro.url.pathname.startsWith('/buka-toko');
+const isBukaTokoPage = Astro.url.pathname.startsWith("/buka-toko");
 
 // Favicon URL formatting (handle existing query string in logo_url)
 const rawFavicon = settings?.logo_url || "/favicon.png";
-const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${rawFavicon}?v=20260819`;
+const faviconUrl = rawFavicon.includes("?")
+	? `${rawFavicon}&v=20260819`
+	: `${rawFavicon}?v=20260819`;
 ---
 
 <!doctype html>
 <html lang="id">
 	<head>
 		<meta charset="UTF-8" />
-		<meta name="description" content="Marketplace Batik Eksklusif - Modern & Minimalist" />
+		<meta
+			name="description"
+			content="Marketplace Batik Eksklusif - Modern & Minimalist"
+		/>
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
 		<link rel="icon" type="image/png" href={faviconUrl} />
@@ -77,125 +92,414 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 		<title>{title} | {settings?.site_name || "Java Batik"}</title>
 	</head>
 	<body style="scroll-behavior: smooth;">
-		<header id="main-header" style="position: absolute; top: 0; left: 0; right: 0; z-index: 100; transition: var(--transition); padding: 1.2rem 0;">
-			<nav class="container" style="display: flex; justify-content: space-between; align-items: center;">
+		<header
+			id="main-header"
+			style="position: absolute; top: 0; left: 0; right: 0; z-index: 100; transition: var(--transition); padding: 1.2rem 0;"
+		>
+			<nav
+				class="container"
+				style="display: flex; justify-content: space-between; align-items: center;"
+			>
 				<div class="logo">
-					<a href={isBukaTokoPage ? "/buka-toko" : "/"} style="display: flex; align-items: center; gap: 0.8rem;">
-						{settings.logo_url ? (
-							<img src={settings.logo_url} alt={settings.site_name} class="nav-logo-img" />
-						) : (
-							<span id="logo-text" style="font-family: 'Playfair Display', serif; font-size: 2.5rem; letter-spacing: 1px; font-weight: 500; color: white;">
-								{firstWord} <span style="font-style: italic; color: var(--color-accent-light);">{restWords}</span>
-							</span>
-						)}
+					<a
+						href={isBukaTokoPage ? "/buka-toko" : "/"}
+						style="display: flex; align-items: center; gap: 0.8rem;"
+					>
+						{
+							settings.logo_url ? (
+								<img
+									src={settings.logo_url}
+									alt={settings.site_name}
+									class="nav-logo-img"
+								/>
+							) : (
+								<span
+									id="logo-text"
+									style="font-family: 'Playfair Display', serif; font-size: 2.5rem; letter-spacing: 1px; font-weight: 500; color: white;"
+								>
+									{firstWord}{" "}
+									<span style="font-style: italic; color: var(--color-accent-light);">
+										{restWords}
+									</span>
+								</span>
+							)
+						}
 					</a>
 				</div>
 
 				<!-- Sleek Professional Global Search Bar -->
 				{
 					!isBukaTokoPage && (
-						<form action="/products" method="GET" class="nav-search-form">
-							<input 
-								type="text" 
-								name="q" 
-								value={Astro.url.searchParams.get('q') || ''} 
-								placeholder="Cari koleksi batik..." 
+						<form
+							action="/products"
+							method="GET"
+							class="nav-search-form"
+						>
+							<input
+								type="text"
+								name="q"
+								value={Astro.url.searchParams.get("q") || ""}
+								placeholder="Cari koleksi batik..."
 								class="nav-search-input"
 							/>
 							<button type="submit" class="nav-search-btn">
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+								<svg
+									width="16"
+									height="16"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<>
+										<circle cx="11" cy="11" r="8" />
+										<line
+											x1="21"
+											y1="21"
+											x2="16.65"
+											y2="16.65"
+										/>
+									</>
+								</svg>
 							</button>
 						</form>
 					)
 				}
 
-
 				<!-- Desktop Navigation -->
-				<ul style="display: flex; gap: var(--spacing-md); list-style: none; align-items: center;" class="text-uppercase nav-links hide-mobile">
+				<ul
+					style="display: flex; gap: var(--spacing-md); list-style: none; align-items: center;"
+					class="text-uppercase nav-links hide-mobile"
+				>
 					{
 						isBukaTokoPage ? (
 							<>
-								<li><a href="/" style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px;">Lihat Toko</a></li>
-								<li><a href="/buka-toko/kategori" class="nav-admin-btn" style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;">Kategori</a></li>
-								<li><a href="/buka-toko/motif" class="nav-admin-btn" style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;">Motif</a></li>
-								<li><a href="/buka-toko/info-toko" class="nav-admin-btn" style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;">Info Toko</a></li>
-								<li><a href="/buka-toko/ukuran" class="nav-admin-btn" style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;">Ukuran</a></li>
-								<li><a href="/buka-toko/warna" class="nav-admin-btn" style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;">Warna</a></li>
-								<li><a href="/buka-toko/pra-produk" style="font-weight: 500; color: var(--color-accent-light); font-size: 0.75rem; letter-spacing: 0.5px;">Pra-Produk</a></li>
-								<li><a href="/buka-toko/pra-produk-counter" style="font-weight: 700; color: #38bdf8; font-size: 0.75rem; letter-spacing: 0.5px; background: rgba(56, 189, 248, 0.1); padding: 0.25rem 0.6rem; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.2);">Pra-Produk (Counter)</a></li>
-								<li><a href="/buka-toko/folder-gambar" style="font-weight: 600; color: #38bdf8; font-size: 0.75rem; letter-spacing: 0.5px;">Folder Gambar</a></li>
-								<li><a href="/buka-toko/promosi" style="font-weight: 500; color: #fbbf24; font-size: 0.75rem; letter-spacing: 0.5px;">Promo</a></li>
-								<li><a href="?logout=true" style="font-weight: 600; color: #ff4d4d; font-size: 0.75rem; letter-spacing: 0.5px; margin-left: var(--spacing-sm);">Logout</a></li>
+								<li>
+									<a
+										href="/"
+										style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px;"
+									>
+										Lihat Toko
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/kategori"
+										class="nav-admin-btn"
+										style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;"
+									>
+										Kategori
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/motif"
+										class="nav-admin-btn"
+										style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;"
+									>
+										Motif
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/info-toko"
+										class="nav-admin-btn"
+										style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;"
+									>
+										Info Toko
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/ukuran"
+										class="nav-admin-btn"
+										style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;"
+									>
+										Ukuran
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/warna"
+										class="nav-admin-btn"
+										style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;"
+									>
+										Warna
+									</a>
+								</li>
+								{/* <li><a href="/buka-toko/pra-produk" style="font-weight: 500; color: var(--color-accent-light); font-size: 0.75rem; letter-spacing: 0.5px;">Pra-Produk</a></li> */}
+								<li>
+									<a
+										href="/buka-toko/pra-produk-counter"
+										style="font-weight: 700; color: #38bdf8; font-size: 0.75rem; letter-spacing: 0.5px; background: rgba(56, 189, 248, 0.1); padding: 0.25rem 0.6rem; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.2);"
+									>
+										Pra-Produk
+									</a>
+								</li>
+								{/* <li>
+									<a
+										href="/buka-toko/folder-gambar"
+										style="font-weight: 600; color: #38bdf8; font-size: 0.75rem; letter-spacing: 0.5px;"
+									>
+										Folder Gambar
+									</a>
+								</li> */}
+								<li>
+									<a
+										href="/buka-toko/promosi"
+										style="font-weight: 500; color: #fbbf24; font-size: 0.75rem; letter-spacing: 0.5px;"
+									>
+										Promo
+									</a>
+								</li>
+								<li>
+									<a
+										href="?logout=true"
+										style="font-weight: 600; color: #ff4d4d; font-size: 0.75rem; letter-spacing: 0.5px; margin-left: var(--spacing-sm);"
+									>
+										Logout
+									</a>
+								</li>
 							</>
 						) : (
 							<>
-								<li><a href="/products" style="font-weight: 500; color: rgba(255,255,255,0.8);">Katalog</a></li>
 								<li>
-									<a href="/about" style="font-weight: 500; color: rgba(255,255,255,0.8);">Tentang</a>
+									<a
+										href="/products"
+										style="font-weight: 500; color: rgba(255,255,255,0.8);"
+									>
+										Katalog
+									</a>
 								</li>
-								{
-									isAdmin && (
-										<li>
-											<a href="/buka-toko" style="opacity: 0.3; font-size: 0.6rem; color: white;">Admin</a>
-										</li>
-									)
-								}
+								<li>
+									<a
+										href="/about"
+										style="font-weight: 500; color: rgba(255,255,255,0.8);"
+									>
+										Tentang
+									</a>
+								</li>
+								{isAdmin && (
+									<li>
+										<a
+											href="/buka-toko"
+											style="opacity: 0.3; font-size: 0.6rem; color: white;"
+										>
+											Admin
+										</a>
+									</li>
+								)}
 							</>
 						)
 					}
 				</ul>
 
 				<!-- Mobile Menu Toggle -->
-				<button id="mobile-menu-toggle" class="show-mobile" style="background: none; border: none; cursor: pointer; padding: var(--spacing-sm); z-index: 1001;">
-					<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-						<path id="menu-icon-top" d="M4 6H20" stroke="white" stroke-width="2" stroke-linecap="round" style="transition: var(--transition);"/>
-						<path id="menu-icon-mid" d="M4 12H20" stroke="white" stroke-width="2" stroke-linecap="round" style="transition: var(--transition);"/>
-						<path id="menu-icon-bot" d="M4 18H20" stroke="white" stroke-width="2" stroke-linecap="round" style="transition: var(--transition);"/>
+				<button
+					id="mobile-menu-toggle"
+					class="show-mobile"
+					style="background: none; border: none; cursor: pointer; padding: var(--spacing-sm); z-index: 1001;"
+				>
+					<svg
+						width="24"
+						height="24"
+						viewBox="0 0 24 24"
+						fill="none"
+						xmlns="http://www.w3.org/2000/svg"
+					>
+						<path
+							id="menu-icon-top"
+							d="M4 6H20"
+							stroke="white"
+							stroke-width="2"
+							stroke-linecap="round"
+							style="transition: var(--transition);"></path>
+						<path
+							id="menu-icon-mid"
+							d="M4 12H20"
+							stroke="white"
+							stroke-width="2"
+							stroke-linecap="round"
+							style="transition: var(--transition);"></path>
+						<path
+							id="menu-icon-bot"
+							d="M4 18H20"
+							stroke="white"
+							stroke-width="2"
+							stroke-linecap="round"
+							style="transition: var(--transition);"></path>
 					</svg>
 				</button>
 			</nav>
 
 			<!-- Mobile Menu Overlay -->
-			<div id="mobile-menu" class="show-mobile" style="position: fixed; top: 0; left: 0; width: 100%; height: 100dvh; background: var(--color-bg); z-index: 1000; transform: translateY(-100%); transition: transform 0.6s cubic-bezier(0.85, 0, 0.15, 1); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: var(--spacing-xl); padding: var(--spacing-2xl);">
-				<ul style="list-style: none; text-align: center; display: flex; flex-direction: column; gap: var(--spacing-lg);" class="text-uppercase">
+			<div
+				id="mobile-menu"
+				class="show-mobile"
+				style="position: fixed; top: 0; left: 0; width: 100%; height: 100dvh; background: var(--color-bg); z-index: 1000; transform: translateY(-100%); transition: transform 0.6s cubic-bezier(0.85, 0, 0.15, 1); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: var(--spacing-xl); padding: var(--spacing-2xl);"
+			>
+				<ul
+					style="list-style: none; text-align: center; display: flex; flex-direction: column; gap: var(--spacing-lg);"
+					class="text-uppercase"
+				>
 					{
 						isBukaTokoPage ? (
 							<>
-								<li><a href="/" style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);">Lihat Toko</a></li>
-								<li><a href="/buka-toko/kategori" style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);">Kategori</a></li>
-								<li><a href="/buka-toko/motif" style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);">Motif</a></li>
-								<li><a href="/buka-toko/info-toko" style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);">Info Toko</a></li>
-								<li><a href="/buka-toko/ukuran" style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);">Ukuran</a></li>
-								<li><a href="/buka-toko/pra-produk" style="font-size: 1.3rem; font-weight: 500; color: var(--color-accent);">Pra-Produk</a></li>
-								<li><a href="/buka-toko/pra-produk-counter" style="font-size: 1.3rem; font-weight: 700; color: #38bdf8;">Pra-Produk (Counter)</a></li>
-								<li><a href="/buka-toko/folder-gambar" style="font-size: 1.3rem; font-weight: 600; color: #38bdf8;">Folder Gambar</a></li>
-								<li><a href="/buka-toko/promosi" style="font-size: 1.3rem; font-weight: 500; color: #fbbf24;">Promo</a></li>
-								<li><a href="?logout=true" style="font-size: 1.3rem; font-weight: 600; color: #ff4d4d; margin-top: 1rem;">Logout</a></li>
+								<li>
+									<a
+										href="/"
+										style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);"
+									>
+										Lihat Toko
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/kategori"
+										style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);"
+									>
+										Kategori
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/motif"
+										style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);"
+									>
+										Motif
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/info-toko"
+										style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);"
+									>
+										Info Toko
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/ukuran"
+										style="font-size: 1.3rem; font-weight: 500; color: var(--color-text);"
+									>
+										Ukuran
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/pra-produk"
+										style="font-size: 1.3rem; font-weight: 500; color: var(--color-accent);"
+									>
+										Pra-Produk
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/pra-produk-counter"
+										style="font-size: 1.3rem; font-weight: 700; color: #38bdf8;"
+									>
+										Pra-Produk (Counter)
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/folder-gambar"
+										style="font-size: 1.3rem; font-weight: 600; color: #38bdf8;"
+									>
+										Folder Gambar
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/promosi"
+										style="font-size: 1.3rem; font-weight: 500; color: #fbbf24;"
+									>
+										Promo
+									</a>
+								</li>
+								<li>
+									<a
+										href="?logout=true"
+										style="font-size: 1.3rem; font-weight: 600; color: #ff4d4d; margin-top: 1rem;"
+									>
+										Logout
+									</a>
+								</li>
 							</>
 						) : (
 							<>
-								<li><a href="/" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Beranda</a></li>
-								<li><a href="/products" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Katalog</a></li>
 								<li>
-									<a href="/about" style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);">Tentang Kami</a>
+									<a
+										href="/"
+										style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);"
+									>
+										Beranda
+									</a>
 								</li>
-								{
-									isAdmin && (
-										<li>
-											<a href="/buka-toko" style="opacity: 0.5; font-size: 0.8rem; color: var(--color-text);">Admin Panel</a>
-										</li>
-									)
-								}
+								<li>
+									<a
+										href="/products"
+										style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);"
+									>
+										Katalog
+									</a>
+								</li>
+								<li>
+									<a
+										href="/about"
+										style="font-size: 1.5rem; font-weight: 500; color: var(--color-text);"
+									>
+										Tentang Kami
+									</a>
+								</li>
+								{isAdmin && (
+									<li>
+										<a
+											href="/buka-toko"
+											style="opacity: 0.5; font-size: 0.8rem; color: var(--color-text);"
+										>
+											Admin Panel
+										</a>
+									</li>
+								)}
 							</>
 						)
 					}
 				</ul>
-				
-				<div style="margin-top: var(--spacing-xl); text-align: center; opacity: 0.6;">
-					<p style="font-size: 0.8rem; margin-bottom: var(--spacing-sm);">{settings.site_name}</p>
-					<div style="display: flex; gap: var(--spacing-md); justify-content: center;">
-						{settings.url_instagram && <a href={settings.url_instagram} style="font-size: 0.7rem;">IG</a>}
-						{settings.url_whatsapp && <a href={`https://wa.me/${settings.url_whatsapp}`} style="font-size: 0.7rem;">WA</a>}
+
+				<div
+					style="margin-top: var(--spacing-xl); text-align: center; opacity: 0.6;"
+				>
+					<p
+						style="font-size: 0.8rem; margin-bottom: var(--spacing-sm);"
+					>
+						{settings.site_name}
+					</p>
+					<div
+						style="display: flex; gap: var(--spacing-md); justify-content: center;"
+					>
+						{
+							settings.url_instagram && (
+								<a
+									href={settings.url_instagram}
+									style="font-size: 0.7rem;"
+								>
+									IG
+								</a>
+							)
+						}
+						{
+							settings.url_whatsapp && (
+								<a
+									href={`https://wa.me/${settings.url_whatsapp}`}
+									style="font-size: 0.7rem;"
+								>
+									WA
+								</a>
+							)
+						}
 					</div>
 				</div>
 			</div>
@@ -203,33 +507,49 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 		<main>
 			<slot />
 		</main>
-			<!-- Floating WhatsApp Button -->
-		<div class="fixed-contact-trigger" style="position: fixed; bottom: 30px; right: 30px; z-index: 999; animation: wa-fade-in 1s ease-out forwards; opacity: 0;">
-			<a 
+		<!-- Floating WhatsApp Button -->
+		<div
+			class="fixed-contact-trigger"
+			style="position: fixed; bottom: 30px; right: 30px; z-index: 999; animation: wa-fade-in 1s ease-out forwards; opacity: 0;"
+		>
+			<a
 				href={`https://wa.me/${whatsappNumber}`}
-				target="_blank" 
-				rel="noopener noreferrer" 
+				target="_blank"
+				rel="noopener noreferrer"
 				class="wa-floating-btn"
 				style="display: flex; align-items: center; justify-content: center; width: 62px; height: 62px; background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 50%; box-shadow: 0 15px 45px rgba(0,0,0,0.12); transition: 0.4s cubic-bezier(0.2, 1, 0.3, 1); text-decoration: none; position: relative;"
 				onmouseover="this.style.transform='translateY(-5px) scale(1.05)'; this.style.boxShadow='0 20px 55px rgba(0,0,0,0.2)'; document.getElementById('wa-tooltip').style.opacity='1'; document.getElementById('wa-tooltip').style.transform='translateX(-20px)';"
 				onmouseout="this.style.transform='translateY(0) scale(1)'; this.style.boxShadow='0 15px 45px rgba(0,0,0,0.12)'; document.getElementById('wa-tooltip').style.opacity='0'; document.getElementById('wa-tooltip').style.transform='translateX(0)';"
 			>
 				<!-- Tooltip Label -->
-				<span 
-					id="wa-tooltip" 
+				<span
+					id="wa-tooltip"
 					style="position: absolute; right: 75px; background: #111; color: white; padding: 12px 22px; border-radius: 30px; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; white-space: nowrap; pointer-events: none; opacity: 0; transform: translateX(0); transition: 0.4s cubic-bezier(0.2, 1, 0.3, 1); box-shadow: 0 10px 20px rgba(0,0,0,0.2);"
 				>
 					Klik untuk Chat
 				</span>
 
 				<!-- WA Icon (Official Brand Logo SVG) -->
-				<svg width="34" height="34" viewBox="0 0 24 24" fill="#25D366" xmlns="http://www.w3.org/2000/svg">
-					<path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.412h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.883-9.885 9.883m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+				<svg
+					width="34"
+					height="34"
+					viewBox="0 0 24 24"
+					fill="#25D366"
+					xmlns="http://www.w3.org/2000/svg"
+				>
+					<path
+						d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.412h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.883-9.885 9.883m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"
+					></path>
 				</svg>
-				
+
 				<!-- Status Pulse -->
-				<div style="position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; background: #25D366; border: 2px solid #fff; border-radius: 50%;">
-					<div style="position: absolute; width: 100%; height: 100%; background: #25D366; border-radius: 50%; animation: wa-pulse 2s infinite; opacity: 0.5;"></div>
+				<div
+					style="position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; background: #25D366; border: 2px solid #fff; border-radius: 50%;"
+				>
+					<div
+						style="position: absolute; width: 100%; height: 100%; background: #25D366; border-radius: 50%; animation: wa-pulse 2s infinite; opacity: 0.5;"
+					>
+					</div>
 				</div>
 			</a>
 		</div>
@@ -250,12 +570,24 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 			}
 
 			@keyframes wa-fade-in {
-				from { opacity: 0; transform: translateY(20px); }
-				to { opacity: 1; transform: translateY(0); }
+				from {
+					opacity: 0;
+					transform: translateY(20px);
+				}
+				to {
+					opacity: 1;
+					transform: translateY(0);
+				}
 			}
 			@keyframes wa-pulse {
-				0% { transform: scale(1); opacity: 0.5; }
-				100% { transform: scale(2.5); opacity: 0; }
+				0% {
+					transform: scale(1);
+					opacity: 0.5;
+				}
+				100% {
+					transform: scale(2.5);
+					opacity: 0;
+				}
 			}
 
 			/* Adaptive Logo Resizing for Premium Looks */
@@ -264,7 +596,7 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 				width: auto;
 				transition: height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 			}
-			
+
 			.glass-header .nav-logo-img {
 				height: 64px; /* Robust and visible even when compacted on scroll */
 			}
@@ -277,7 +609,6 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 					height: 54px;
 				}
 			}
-
 
 			/* Sleek Global Search Bar - Initial state is hidden for docking transition */
 			.nav-search-form {
@@ -295,7 +626,10 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 				visibility: hidden;
 				transform: translateY(-10px);
 				pointer-events: none;
-				transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.3s;
+				transition:
+					opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+					transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+					visibility 0.3s;
 			}
 
 			/* State when scrolled or docked */
@@ -306,7 +640,6 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 				pointer-events: auto;
 			}
 
-
 			.nav-search-form:focus-within {
 				background: rgba(255, 255, 255, 0.25);
 				border-color: rgba(255, 255, 255, 0.5);
@@ -316,13 +649,17 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 			.glass-header .nav-search-form {
 				background: #f8fafc; /* Cleaner premium background tone */
 				border: 1px solid #cbd5e1; /* Defined high-contrast border for maximum readability */
-				box-shadow: inset 0 1px 2px rgba(0,0,0,0.02), 0 1px 3px rgba(0, 0, 0, 0.04); /* Subtle depth */
+				box-shadow:
+					inset 0 1px 2px rgba(0, 0, 0, 0.02),
+					0 1px 3px rgba(0, 0, 0, 0.04); /* Subtle depth */
 			}
 
 			.glass-header .nav-search-form:focus-within {
 				background: #ffffff;
 				border-color: var(--color-accent);
-				box-shadow: 0 4px 15px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.02);
+				box-shadow:
+					0 4px 15px rgba(0, 0, 0, 0.07),
+					0 1px 3px rgba(0, 0, 0, 0.02);
 			}
 
 			.nav-search-input {
@@ -386,86 +723,213 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 					font-size: 0.8rem;
 				}
 			}
-
 		</style>
 
-		<footer style="background: #0a0a0a; color: white; padding: var(--spacing-2xl) 0 var(--spacing-xl) 0; border-top: 1px solid rgba(255,255,255,0.05);">
+		<footer
+			style="background: #0a0a0a; color: white; padding: var(--spacing-2xl) 0 var(--spacing-xl) 0; border-top: 1px solid rgba(255,255,255,0.05);"
+		>
 			<div class="container">
 				<!-- Grand Logo Section -->
-				<div style="text-align: center; margin-bottom: var(--spacing-2xl); border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: var(--spacing-2xl);">
-					<a href="/" style="display: inline-block; transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-						{settings.logo_url ? (
-							<img src={settings.logo_url} alt={settings.site_name} style="height: 160px; width: auto; filter: drop-shadow(0 0 30px rgba(255,255,255,0.1));" />
-						) : (
-							<span style="font-family: 'Playfair Display', serif; font-size: clamp(3rem, 12vw, 6.5rem); letter-spacing: -0.02em; color: white; display: block; line-height: 0.9; margin-bottom: 0.5rem;">
-								{firstWord} <span style="font-style: italic; color: var(--color-accent-light); opacity: 0.9;">{restWords}</span>
-							</span>
-						)}
-						<p class="text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.6em; opacity: 0.3; margin-top: 1rem;">Eksklusivitas Warisan Nusantara</p>
+				<div
+					style="text-align: center; margin-bottom: var(--spacing-2xl); border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: var(--spacing-2xl);"
+				>
+					<a
+						href="/"
+						style="display: inline-block; transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);"
+						onmouseover="this.style.transform='scale(1.05)'"
+						onmouseout="this.style.transform='scale(1)'"
+					>
+						{
+							settings.logo_url ? (
+								<img
+									src={settings.logo_url}
+									alt={settings.site_name}
+									style="height: 160px; width: auto; filter: drop-shadow(0 0 30px rgba(255,255,255,0.1));"
+								/>
+							) : (
+								<span style="font-family: 'Playfair Display', serif; font-size: clamp(3rem, 12vw, 6.5rem); letter-spacing: -0.02em; color: white; display: block; line-height: 0.9; margin-bottom: 0.5rem;">
+									{firstWord}{" "}
+									<span style="font-style: italic; color: var(--color-accent-light); opacity: 0.9;">
+										{restWords}
+									</span>
+								</span>
+							)
+						}
+						<p
+							class="text-uppercase"
+							style="font-size: 0.7rem; letter-spacing: 0.6em; opacity: 0.3; margin-top: 1rem;"
+						>
+							Eksklusivitas Warisan Nusantara
+						</p>
 					</a>
 				</div>
-				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-xl); margin-bottom: var(--spacing-xl);">
+				<div
+					style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-xl); margin-bottom: var(--spacing-xl);"
+				>
 					<!-- Brand Info -->
 					<div>
-						<h4 class="text-uppercase" style="font-size: 0.75rem; margin-bottom: var(--spacing-lg); letter-spacing: 1px; color: var(--color-accent-light);">Visi Kami</h4>
-						<p style="font-size: 0.85rem; opacity: 0.5; line-height: 1.8; max-width: 280px; font-weight: 300;">
-							Menghidupkan kembali filosofi luhur di balik setiap helai kain batik melalui kurasi desain modern yang relevan bagi gaya hidup masa kini.
+						<h4
+							class="text-uppercase"
+							style="font-size: 0.75rem; margin-bottom: var(--spacing-lg); letter-spacing: 1px; color: var(--color-accent-light);"
+						>
+							Visi Kami
+						</h4>
+						<p
+							style="font-size: 0.85rem; opacity: 0.5; line-height: 1.8; max-width: 280px; font-weight: 300;"
+						>
+							Menghidupkan kembali filosofi luhur di balik setiap
+							helai kain batik melalui kurasi desain modern yang
+							relevan bagi gaya hidup masa kini.
 						</p>
 					</div>
 
 					<!-- Location -->
 					<div style="grid-column: span 1;">
-						<h4 class="text-uppercase" style="font-size: 0.75rem; margin-bottom: var(--spacing-lg); letter-spacing: 1px; color: var(--color-accent-light);">Butik Offline</h4>
-						
-						{formattedAddresses.length > 0 ? (
-							<div style="display: flex; flex-direction: column; gap: 1.5rem;">
-								{formattedAddresses.map((group: any) => (
-									<div>
-										<p style="font-size: 0.7rem; font-weight: 700; color: var(--color-accent-light); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.6rem; border-left: 2px solid var(--color-accent); padding-left: 10px;">
-											{group.city}
-										</p>
-										<ul style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.6rem;">
-											{group.branches.map((branch: any) => (
-												<li style="font-size: 0.8rem; opacity: 0.6; line-height: 1.4; font-weight: 300; position: relative; padding-left: 15px; transition: all 0.3s;">
-													<span style="position: absolute; left: 0; top: 8px; width: 4px; height: 1px; background: rgba(255,255,255,0.3);"></span>
-													<a href={branch.url} target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none; transition: all 0.3s;" onmouseover="this.parentElement.style.opacity=1; this.style.color='white'" onmouseout="this.parentElement.style.opacity=0.6; this.style.color='inherit'">
-														{branch.text}
-													</a>
-												</li>
-											))}
-										</ul>
-									</div>
-								))}
-							</div>
-						) : (
-							<p style="font-size: 0.85rem; opacity: 0.7; line-height: 1.8;">
-								{settings.address || 'Alamat belum diatur di dashboard admin.'}
-							</p>
-						)}
+						<h4
+							class="text-uppercase"
+							style="font-size: 0.75rem; margin-bottom: var(--spacing-lg); letter-spacing: 1px; color: var(--color-accent-light);"
+						>
+							Butik Offline
+						</h4>
+
+						{
+							formattedAddresses.length > 0 ? (
+								<div style="display: flex; flex-direction: column; gap: 1.5rem;">
+									{formattedAddresses.map((group: any) => (
+										<div>
+											<p style="font-size: 0.7rem; font-weight: 700; color: var(--color-accent-light); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.6rem; border-left: 2px solid var(--color-accent); padding-left: 10px;">
+												{group.city}
+											</p>
+											<ul style="list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.6rem;">
+												{group.branches.map(
+													(branch: any) => (
+														<li style="font-size: 0.8rem; opacity: 0.6; line-height: 1.4; font-weight: 300; position: relative; padding-left: 15px; transition: all 0.3s;">
+															<span style="position: absolute; left: 0; top: 8px; width: 4px; height: 1px; background: rgba(255,255,255,0.3);" />
+															<a
+																href={
+																	branch.url
+																}
+																target="_blank"
+																rel="noopener noreferrer"
+																style="color: inherit; text-decoration: none; transition: all 0.3s;"
+																onmouseover="this.parentElement.style.opacity=1; this.style.color='white'"
+																onmouseout="this.parentElement.style.opacity=0.6; this.style.color='inherit'"
+															>
+																{branch.text}
+															</a>
+														</li>
+													),
+												)}
+											</ul>
+										</div>
+									))}
+								</div>
+							) : (
+								<p style="font-size: 0.85rem; opacity: 0.7; line-height: 1.8;">
+									{settings.address ||
+										"Alamat belum diatur di dashboard admin."}
+								</p>
+							)
+						}
 					</div>
 
 					<!-- Contact -->
 					<div>
-						<h4 class="text-uppercase" style="font-size: 0.75rem; margin-bottom: var(--spacing-lg); letter-spacing: 1px; color: var(--color-accent-light);">Layanan Admin</h4>
+						<h4
+							class="text-uppercase"
+							style="font-size: 0.75rem; margin-bottom: var(--spacing-lg); letter-spacing: 1px; color: var(--color-accent-light);"
+						>
+							Layanan Admin
+						</h4>
 						<ul style="list-style: none; padding: 0;">
-							{settings.contact_whatsapp && (
-								<li style="margin-bottom: 0.5rem;">
-									<a href={`https://wa.me/${settings.contact_whatsapp}`} target="_blank" style="font-size: 0.85rem; color: white; opacity: 0.7; text-decoration: none; border-bottom: 1px solid transparent; transition: 0.3s;" onmouseover="this.style.opacity=1; this.style.borderBottomColor='white'" onmouseout="this.style.opacity=0.7; this.style.borderBottomColor='transparent'">WhatsApp: +{settings.contact_whatsapp}</a>
-								</li>
-							)}
-							<li><a href="/about" style="font-size: 0.85rem; color: white; opacity: 0.7;">Tentang Kami</a></li>
-							<li><a href="/products" style="font-size: 0.85rem; color: white; opacity: 0.7;">Koleksi Terbaru</a></li>
+							{
+								settings.contact_whatsapp && (
+									<li style="margin-bottom: 0.5rem;">
+										<a
+											href={`https://wa.me/${settings.contact_whatsapp}`}
+											target="_blank"
+											style="font-size: 0.85rem; color: white; opacity: 0.7; text-decoration: none; border-bottom: 1px solid transparent; transition: 0.3s;"
+											onmouseover="this.style.opacity=1; this.style.borderBottomColor='white'"
+											onmouseout="this.style.opacity=0.7; this.style.borderBottomColor='transparent'"
+										>
+											WhatsApp: +
+											{settings.contact_whatsapp}
+										</a>
+									</li>
+								)
+							}
+							<li>
+								<a
+									href="/about"
+									style="font-size: 0.85rem; color: white; opacity: 0.7;"
+									>Tentang Kami</a
+								>
+							</li>
+							<li>
+								<a
+									href="/products"
+									style="font-size: 0.85rem; color: white; opacity: 0.7;"
+									>Koleksi Terbaru</a
+								>
+							</li>
 						</ul>
 					</div>
 
 					<!-- Channels -->
 					<div>
-						<h4 class="text-uppercase" style="font-size: 0.75rem; margin-bottom: var(--spacing-lg); letter-spacing: 1px; color: var(--color-accent-light);">Kunjungi Kami</h4>
-						<div style="display: flex; flex-direction: column; gap: 0.5rem;">
-							{settings.url_tokopedia && <a href={settings.url_tokopedia} target="_blank" style="font-size: 0.85rem; color: white; opacity: 0.7;">Tokopedia</a>}
-							{settings.url_shopee && <a href={settings.url_shopee} target="_blank" style="font-size: 0.85rem; color: white; opacity: 0.7;">Shopee</a>}
-							{settings.url_instagram && <a href={settings.url_instagram} target="_blank" style="font-size: 0.85rem; color: white; opacity: 0.7;">Instagram</a>}
-							{settings.url_tiktok && <a href={settings.url_tiktok} target="_blank" style="font-size: 0.85rem; color: white; opacity: 0.7;">TikTok</a>}
+						<h4
+							class="text-uppercase"
+							style="font-size: 0.75rem; margin-bottom: var(--spacing-lg); letter-spacing: 1px; color: var(--color-accent-light);"
+						>
+							Kunjungi Kami
+						</h4>
+						<div
+							style="display: flex; flex-direction: column; gap: 0.5rem;"
+						>
+							{
+								settings.url_tokopedia && (
+									<a
+										href={settings.url_tokopedia}
+										target="_blank"
+										style="font-size: 0.85rem; color: white; opacity: 0.7;"
+									>
+										Tokopedia
+									</a>
+								)
+							}
+							{
+								settings.url_shopee && (
+									<a
+										href={settings.url_shopee}
+										target="_blank"
+										style="font-size: 0.85rem; color: white; opacity: 0.7;"
+									>
+										Shopee
+									</a>
+								)
+							}
+							{
+								settings.url_instagram && (
+									<a
+										href={settings.url_instagram}
+										target="_blank"
+										style="font-size: 0.85rem; color: white; opacity: 0.7;"
+									>
+										Instagram
+									</a>
+								)
+							}
+							{
+								settings.url_tiktok && (
+									<a
+										href={settings.url_tiktok}
+										target="_blank"
+										style="font-size: 0.85rem; color: white; opacity: 0.7;"
+									>
+										TikTok
+									</a>
+								)
+							}
 						</div>
 					</div>
 				</div>
@@ -485,47 +949,51 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 
 		<script is:inline>
 			// Centralized Scroll & Animation Logic
-			const header = document.getElementById('main-header');
-			const mobileMenu = document.getElementById('mobile-menu');
-			const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
-			const menuIconTop = document.getElementById('menu-icon-top');
-			const menuIconMid = document.getElementById('menu-icon-mid');
-			const menuIconBot = document.getElementById('menu-icon-bot');
-			const logoText = document.getElementById('logo-text');
-			
+			const header = document.getElementById("main-header");
+			const mobileMenu = document.getElementById("mobile-menu");
+			const mobileMenuToggle =
+				document.getElementById("mobile-menu-toggle");
+			const menuIconTop = document.getElementById("menu-icon-top");
+			const menuIconMid = document.getElementById("menu-icon-mid");
+			const menuIconBot = document.getElementById("menu-icon-bot");
+			const logoText = document.getElementById("logo-text");
+
 			let isMenuOpen = false;
 
 			const toggleMenu = () => {
 				isMenuOpen = !isMenuOpen;
-				mobileMenu.style.transform = isMenuOpen ? 'translateY(0)' : 'translateY(-100%)';
-				document.body.classList.toggle('mobile-menu-open', isMenuOpen);
-				
+				mobileMenu.style.transform = isMenuOpen
+					? "translateY(0)"
+					: "translateY(-100%)";
+				document.body.classList.toggle("mobile-menu-open", isMenuOpen);
+
 				// Animate Hamburger to X
 				if (isMenuOpen) {
-					menuIconTop.setAttribute('d', 'M6 18L18 6');
-					menuIconMid.setAttribute('d', 'M6 6L18 18');
-					menuIconBot.setAttribute('d', 'M6 6L18 18');
-					menuIconTop.setAttribute('stroke', 'var(--color-text)');
-					menuIconMid.setAttribute('stroke', 'var(--color-text)');
-					menuIconBot.setAttribute('stroke', 'var(--color-text)');
+					menuIconTop.setAttribute("d", "M6 18L18 6");
+					menuIconMid.setAttribute("d", "M6 6L18 18");
+					menuIconBot.setAttribute("d", "M6 6L18 18");
+					menuIconTop.setAttribute("stroke", "var(--color-text)");
+					menuIconMid.setAttribute("stroke", "var(--color-text)");
+					menuIconBot.setAttribute("stroke", "var(--color-text)");
 				} else {
-					menuIconTop.setAttribute('d', 'M4 6H20');
-					menuIconMid.setAttribute('d', 'M4 12H20');
-					menuIconBot.setAttribute('d', 'M4 18H20');
+					menuIconTop.setAttribute("d", "M4 6H20");
+					menuIconMid.setAttribute("d", "M4 12H20");
+					menuIconBot.setAttribute("d", "M4 18H20");
 					updateHeaderColors();
 				}
 			};
 
-			const isBukaTokoPage = window.location.pathname.startsWith('/buka-toko');
+			const isBukaTokoPage =
+				window.location.pathname.startsWith("/buka-toko");
 
 			const updateHeaderColors = () => {
 				const isGlass = window.scrollY > 50 || isBukaTokoPage;
-				const color = isGlass ? 'var(--color-text)' : 'white';
-				
+				const color = isGlass ? "var(--color-text)" : "white";
+
 				if (!isMenuOpen) {
-					menuIconTop.setAttribute('stroke', color);
-					menuIconMid.setAttribute('stroke', color);
-					menuIconBot.setAttribute('stroke', color);
+					menuIconTop.setAttribute("stroke", color);
+					menuIconMid.setAttribute("stroke", color);
+					menuIconBot.setAttribute("stroke", color);
 				}
 				if (logoText) logoText.style.color = color;
 			};
@@ -533,32 +1001,35 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 			const handleHeader = () => {
 				const isScrolled = window.scrollY > 50 || isBukaTokoPage;
 				if (isScrolled) {
-					header.classList.add('glass-header');
-					header.style.position = 'fixed';
+					header.classList.add("glass-header");
+					header.style.position = "fixed";
 				} else {
-					header.classList.remove('glass-header');
-					header.style.position = 'absolute';
+					header.classList.remove("glass-header");
+					header.style.position = "absolute";
 				}
-				
+
 				// Smart Navbar Search Visibility (Seamless Docking Integration)
-				const navSearch = document.querySelector('.nav-search-form');
+				const navSearch = document.querySelector(".nav-search-form");
 				if (navSearch) {
-					const localSearchTrigger = document.querySelector('.local-search-trigger-marker');
+					const localSearchTrigger = document.querySelector(
+						".local-search-trigger-marker",
+					);
 					if (localSearchTrigger) {
 						// For pages that have a local page search (e.g. Catalog Page)
 						// Switch navbar search only when the page search reaches off-screen
-						const triggerRect = localSearchTrigger.getBoundingClientRect();
+						const triggerRect =
+							localSearchTrigger.getBoundingClientRect();
 						if (triggerRect.bottom <= 0) {
-							navSearch.classList.add('is-active');
+							navSearch.classList.add("is-active");
 						} else {
-							navSearch.classList.remove('is-active');
+							navSearch.classList.remove("is-active");
 						}
 					} else {
 						// On general pages without native body search bars
 						if (isScrolled) {
-							navSearch.classList.add('is-active');
+							navSearch.classList.add("is-active");
 						} else {
-							navSearch.classList.remove('is-active');
+							navSearch.classList.remove("is-active");
 						}
 					}
 				}
@@ -566,22 +1037,20 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 				updateHeaderColors();
 			};
 
-
-
-
-			mobileMenuToggle.addEventListener('click', toggleMenu);
+			mobileMenuToggle.addEventListener("click", toggleMenu);
 
 			const observerOptions = {
 				threshold: 0.1,
-				rootMargin: '0px 0px -50px 0px'
+				rootMargin: "0px 0px -50px 0px",
 			};
 
 			const revealObserver = new IntersectionObserver((entries) => {
-				entries.forEach(entry => {
+				entries.forEach((entry) => {
 					if (entry.isIntersecting) {
-						const delay = entry.target.getAttribute('data-delay') || 0;
+						const delay =
+							entry.target.getAttribute("data-delay") || 0;
 						setTimeout(() => {
-							entry.target.classList.add('active');
+							entry.target.classList.add("active");
 						}, delay);
 						revealObserver.unobserve(entry.target);
 					}
@@ -589,8 +1058,12 @@ const faviconUrl = rawFavicon.includes("?") ? `${rawFavicon}&v=20260819` : `${ra
 			}, observerOptions);
 
 			// Init
-			window.addEventListener('scroll', handleHeader);
-			document.querySelectorAll('.reveal, .reveal-up, .reveal-left, .reveal-right, .reveal-scale').forEach(el => revealObserver.observe(el));
+			window.addEventListener("scroll", handleHeader);
+			document
+				.querySelectorAll(
+					".reveal, .reveal-up, .reveal-left, .reveal-right, .reveal-scale",
+				)
+				.forEach((el) => revealObserver.observe(el));
 			handleHeader(); // Initial check
 		</script>
 		<Analytics />
