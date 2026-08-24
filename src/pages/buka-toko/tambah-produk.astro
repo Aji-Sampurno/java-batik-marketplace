@@ -341,7 +341,7 @@ if (Astro.request.method === "POST") {
 									.replace(/[^a-zA-Z0-9_\-\s]/g, '')
 									.trim();
 								if (textCode) {
-									const fontSize = Math.max(Math.round(height * 0.022), 12);
+									const fontSize = Math.max(Math.round(height * 0.022), 14);
 									const textMarginRight = Math.round(width * 0.04);
 									const textY = height - Math.round(height * 0.05);
 									const svgText = `
@@ -382,7 +382,7 @@ if (Astro.request.method === "POST") {
 
 							// 3. Upload Watermarked WebP Image for Catalog Display
 							const webpCustomName = `${actualCode}${cleanColorTag}_${timestamp}_${imgIndex + 1}.webp`;
-							const webpFileToUpload = new File([webpBuffer], webpCustomName, { type: "image/webp" });
+							const webpFileToUpload = new File([new Uint8Array(webpBuffer)], webpCustomName, { type: "image/webp" });
 
 							const publicUrl = await uploadToLaravel(
 								webpFileToUpload,

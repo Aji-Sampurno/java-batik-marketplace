@@ -65,6 +65,70 @@ try {
 	console.error("API Fetch Error:", e.message);
 }
 
+// Color Palette Swatch Mapping & Formatting Helpers
+const COLOR_PALETTE: Record<string, string> = {
+	"coklat": "#78350f",
+	"soga": "#92400e",
+	"sogan": "#92400e",
+	"abu-abu": "#64748b",
+	"abu": "#64748b",
+	"grey": "#64748b",
+	"gray": "#64748b",
+	"ungu": "#7c3aed",
+	"purple": "#7c3aed",
+	"kuning": "#eab308",
+	"yellow": "#eab308",
+	"biru": "#2563eb",
+	"blue": "#2563eb",
+	"navy": "#1e3a8a",
+	"hitam": "#0f172a",
+	"black": "#0f172a",
+	"kombinasi": "linear-gradient(135deg, #ef4444 0%, #3b82f6 50%, #10b981 100%)",
+	"multicolor": "linear-gradient(135deg, #ef4444 0%, #3b82f6 50%, #10b981 100%)",
+	"hijau": "#16a34a",
+	"green": "#16a34a",
+	"krem": "#fef08a",
+	"cream": "#fef08a",
+	"merah": "#dc2626",
+	"red": "#dc2626",
+	"maroon": "#881337",
+	"maron": "#881337",
+	"putih": "#ffffff",
+	"white": "#ffffff",
+	"oranye": "#ea580c",
+	"orange": "#ea580c",
+	"gold": "#d97706",
+	"emas": "#d97706",
+	"merah muda": "#ec4899",
+	"pink": "#ec4899",
+	"tosca": "#0d9488",
+	"toska": "#0d9488",
+	"turquoise": "#0d9488",
+	"silver": "#94a3b8",
+	"perak": "#94a3b8",
+	"denim": "#3b82f6",
+	"khaki": "#a8a29e",
+	"terrakota": "#c2410c",
+	"terracotta": "#c2410c",
+	"magenta": "#c026d3",
+	"peach": "#fb923c",
+	"salem": "#f472b6"
+};
+
+const getColorHex = (c: any): string => {
+	if (c && c.hex && typeof c.hex === "string" && c.hex.startsWith("#")) return c.hex;
+	const name = ((c && typeof c === "object" ? c.name : c) || "").trim().toLowerCase();
+	return COLOR_PALETTE[name] || "#94a3b8";
+};
+
+const formatColorTitle = (name: string): string => {
+	if (!name) return "";
+	return name
+		.split(" ")
+		.map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+		.join(" ");
+};
+
 // Hierarchical Helper: Sort categories into a flat list with levels
 const buildCategoryTree = (list: any[], parentId = null, depth = 0): any[] => {
 	let result: any[] = [];
@@ -263,7 +327,7 @@ if (Astro.request.method === "POST") {
 								.replace(/[^a-zA-Z0-9_\-\s]/g, '')
 								.trim();
 							if (textCode) {
-								const fontSize = Math.max(Math.round(height * 0.022), 12);
+								const fontSize = Math.max(Math.round(height * 0.022), 14);
 								const textMarginRight = Math.round(width * 0.04);
 								const textY = height - Math.round(height * 0.05);
 								const svgText = `
@@ -574,12 +638,17 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					</div>
 
 					<!-- Categories Section -->
-					<div>
+					<div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.9rem 1.1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
 						<div id="category-chain-container" style="display:none;"></div>
-						<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">Kategori Produk (L1)</label>
+						<div style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem;">
+							<span style="font-size: 1rem;">📁</span>
+							<label class="text-uppercase" style="font-size: 0.72rem; font-weight: 800; color: #1e293b; letter-spacing: 0.5px; margin: 0;">
+								Kategori Produk (L1)
+							</label>
+						</div>
 						<div class="searchable-select" data-ss-type="product-l1">
 							<input type="hidden" name="category_ids" id="l1_category_input" />
-							<input type="text" class="ss-input" placeholder="Cari & Pilih Kategori Utama..." readonly style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px;" />
+							<input type="text" class="ss-input" placeholder="Cari & Pilih Kategori Utama..." readonly style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; color: #0f172a;" />
 							<div class="ss-dropdown">
 								<div class="ss-search-container">
 									<svg class="ss-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg>
@@ -599,57 +668,115 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					</div>
 
 					<!-- Motif Global Section (Multi-Select) -->
-					<div>
-						<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">Motif Global (Multi-select)</label>
-						<div class="motif-style-container" id="motif-grid">
+					<div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.9rem 1.1rem; margin-top: 0.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.5rem;">
+							<div style="display: flex; align-items: center; gap: 0.4rem;">
+								<span style="font-size: 1rem;">🏷️</span>
+								<label class="text-uppercase" style="font-size: 0.72rem; font-weight: 800; color: #1e293b; letter-spacing: 0.5px; margin: 0;">
+									Motif Global (Multi-select)
+								</label>
+								<span style="font-size: 0.65rem; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 600;">
+									Pilih 1 atau lebih
+								</span>
+							</div>
+							<div style="display: flex; align-items: center; gap: 0.4rem;">
+								<input
+									type="text"
+									id="motifFilterInput"
+									placeholder="🔍 Cari motif..."
+									style="padding: 0.25rem 0.6rem; font-size: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; width: 120px;"
+								/>
+								<button
+									type="button"
+									id="btnDeselectAllMotifs"
+									style="font-size: 0.68rem; font-weight: 700; color: #64748b; background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.25rem 0.6rem; cursor: pointer; transition: all 0.15s;"
+									onmouseover="this.style.background='#f1f5f9'"
+									onmouseout="this.style.background='white'"
+									title="Hapus semua pilihan motif"
+								>
+									Reset
+								</button>
+							</div>
+						</div>
+
+						<div class="pill-badge-container" id="motif-grid">
 							{motifs?.map((m: any) => (
-								<label class="motif-style-label">
+								<label class="motif-pill-label" title={m.name}>
 									<input type="checkbox" name="motif_ids" value={m.id} data-name={m.name} />
-									{m.name}
+									<span class="motif-icon">✨</span>
+									<span class="motif-name">{m.name}</span>
+									<span class="check-icon">✓</span>
 								</label>
 							))}
 						</div>
-						<div class="custom-entry-row" style="margin-top: 8px; display: flex; gap: 8px;">
-							<input type="text" id="new-motif-input" placeholder="Motif Baru..." style="flex: 1; font-size: 0.75rem; padding: 6px 10px; border: 1px dashed #cbd5e1; border-radius: 6px;" />
-							<button type="button" id="add-motif-btn" style="font-size: 0.7rem; background: var(--color-dark); color: #fff; border: none; padding: 0 12px; border-radius: 6px; cursor: pointer; font-weight: 600;">+ TAMBAH</button>
+
+						<div class="custom-entry-row" style="margin-top: 0.65rem; display: flex; gap: 0.45rem;">
+							<input
+								type="text"
+								id="new-motif-input"
+								placeholder="Tambah motif baru..."
+								style="flex: 1; font-size: 0.78rem; padding: 0.45rem 0.75rem; border: 1px dashed #94a3b8; border-radius: 6px; background: #f8fafc;"
+							/>
+							<button
+								type="button"
+								id="add-motif-btn"
+								style="font-size: 0.72rem; background: #0f172a; color: #fff; border: none; padding: 0 14px; border-radius: 6px; cursor: pointer; font-weight: 700; transition: background 0.15s; white-space: nowrap;"
+								onmouseover="this.style.background='#334155'"
+								onmouseout="this.style.background='#0f172a'"
+							>
+								+ TAMBAH
+							</button>
 						</div>
 					</div>
 
 					<!-- Warna Section -->
-					<div>
-						<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">Warna Utama (Multi-select)</label>
-						<div class="motif-style-container" id="color-grid">
-							{colorsData?.map((c: any) => (
-								<label class="motif-style-label" style="gap: 0.5rem !important;">
-									<input type="checkbox" name="colors" value={c.name} />
-									<span style={`display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${c.hex || "#cccccc"}; border: 1px solid rgba(0,0,0,0.15); flex-shrink:0;`} />
-									{c.name}
+					<div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.9rem 1.1rem; margin-top: 0.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; flex-wrap: wrap; gap: 0.5rem;">
+							<div style="display: flex; align-items: center; gap: 0.4rem;">
+								<span style="font-size: 1rem;">🎨</span>
+								<label class="text-uppercase" style="font-size: 0.72rem; font-weight: 800; color: #1e293b; letter-spacing: 0.5px; margin: 0;">
+									Warna Utama (Multi-select)
 								</label>
-							))}
-						</div>
-					</div>
-
-					<!-- ========================================================================= -->
-					<!-- PROMINENT MOTIF PHOTO GALLERY / UPLOADER (UNGGAH GAMBAR PER MOTIF)        -->
-					<!-- ========================================================================= -->
-					<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 1.25rem; margin-top: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
-						<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
-							<div>
-								<div style="display: flex; align-items: center; gap: 0.4rem;">
-									<span style="font-size: 1.1rem;">📸</span>
-									<h3 style="font-size: 0.95rem; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">
-										Unggah & Kelola Foto per Motif
-									</h3>
-								</div>
-								<p style="font-size: 0.75rem; color: #64748b; margin: 0.2rem 0 0 0;">
-									Setiap motif (Motif A, Motif B, dst.) memiliki 1 foto utama. Klik tombol unggah pada kartu di bawah untuk memilih gambar.
-								</p>
+								<span style="font-size: 0.65rem; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 600;">
+									Pilih 1 atau lebih
+								</span>
+							</div>
+							<div style="display: flex; align-items: center; gap: 0.4rem;">
+								<input
+									type="text"
+									id="colorFilterInput"
+									placeholder="🔍 Cari warna..."
+									style="padding: 0.25rem 0.6rem; font-size: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; width: 120px;"
+								/>
+								<button
+									type="button"
+									id="btnDeselectAllColors"
+									style="font-size: 0.68rem; font-weight: 700; color: #64748b; background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.25rem 0.6rem; cursor: pointer; transition: all 0.15s;"
+									onmouseover="this.style.background='#f1f5f9'"
+									onmouseout="this.style.background='white'"
+									title="Hapus semua pilihan warna"
+								>
+									Reset
+								</button>
 							</div>
 						</div>
 
-						<!-- Dynamic Motif Cards Container -->
-						<div id="motifPhotoCardsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.85rem;">
-							<!-- Will be dynamically populated per unique motif -->
+						<div class="color-pill-container" id="color-grid">
+							{colorsData?.map((c: any) => {
+								const swatchColor = getColorHex(c);
+								const isWhite = typeof swatchColor === 'string' && swatchColor.toLowerCase() === "#ffffff";
+								return (
+									<label class="color-pill-label" title={c.name}>
+										<input type="checkbox" name="colors" value={c.name} />
+										<span
+											class="color-swatch"
+											style={`background: ${swatchColor}; border: ${isWhite ? "1.5px solid #cbd5e1" : "1px solid rgba(0,0,0,0.15)"};`}
+										/>
+										<span class="color-name">{formatColorTitle(c.name)}</span>
+										<span class="check-icon">✓</span>
+									</label>
+								);
+							})}
 						</div>
 					</div>
 
@@ -684,64 +811,86 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 						</div>
 
 						<!-- Smart Multi-Batch Action Bar -->
-						<div style="background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.6rem 0.85rem; margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-							<!-- Batch Motif -->
-							<div style="display: flex; align-items: center; gap: 0.35rem;">
-								<span style="font-size: 0.75rem; font-weight: 700; color: #334155;">🎯 Motif:</span>
-								<select id="globalBatchMotifSelect" style="padding: 0.35rem 0.6rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
-									{Array.from({ length: 26 }, (_, i) => "Motif " + String.fromCharCode(65 + i)).map((m) => (
-										<option value={m}>{m}</option>
-									))}
-								</select>
-								<button type="button" id="btnApplySameMotif" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #1e293b; color: white; border: none; border-radius: 6px; cursor: pointer;" title="Terapkan motif ini ke varian yang dicentang [✓]">
-									Set Motif (Terpilih)
-								</button>
-							</div>
-
-							<!-- Batch Size -->
-							<div style="display: flex; align-items: center; gap: 0.35rem;">
-								<span style="font-size: 0.75rem; font-weight: 700; color: #334155;">📏 Ukuran:</span>
-								<select id="globalBatchSizeSelect" style="padding: 0.35rem 0.6rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
-									{["ALL SIZE", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL", "2L", "3L", "4L", "5L", "6L", "7L"].map((sz) => (
-										<option value={sz}>{sz}</option>
-									))}
-								</select>
-								<button type="button" id="btnApplySameSize" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer;" title="Terapkan ukuran ini ke varian yang dicentang [✓]">
-									Set Ukuran (Terpilih)
-								</button>
-							</div>
-
-							<!-- Batch Sleeve (Panjang vs Pendek) -->
-							<div style="display: flex; align-items: center; gap: 0.35rem;">
-								<span style="font-size: 0.75rem; font-weight: 700; color: #334155;">👔 Lengan:</span>
-								<select id="globalBatchSleeveSelect" style="padding: 0.35rem 0.6rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
-									<option value="Panjang">Lengan Panjang</option>
-									<option value="Pendek">Lengan Pendek</option>
-									<option value="3/4">Lengan 3/4</option>
-									<option value="-">- (Tanpa Lengan)</option>
-								</select>
-								<button type="button" id="btnApplySameSleeve" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #334155; color: white; border: none; border-radius: 6px; cursor: pointer;" title="Terapkan lengan ini ke varian yang dicentang [✓]">
-									Set Lengan (Terpilih)
-								</button>
-							</div>
-
-							<!-- Batch Fit (Slim Fit vs Regular Fit) -->
-							<div style="display: flex; align-items: center; gap: 0.35rem;">
-								<span style="font-size: 0.75rem; font-weight: 700; color: #334155;">✂️ Model Fit:</span>
-								<select id="globalBatchFitSelect" style="padding: 0.35rem 0.6rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
-									<option value="REG">Regular Fit</option>
-									<option value="SF">Slim Fit (SF)</option>
-								</select>
-								<button type="button" id="btnApplySameFit" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #475569; color: white; border: none; border-radius: 6px; cursor: pointer;" title="Terapkan fit ini ke varian yang dicentang [✓]">
-									Set Fit (Terpilih)
-								</button>
-							</div>
-
-							<!-- Status Info -->
-							<div style="margin-left: auto; display: flex; align-items: center; gap: 0.4rem;">
-								<span style="font-size: 0.7rem; color: #0284c7; background: #e0f2fe; padding: 3px 8px; border-radius: 4px; font-weight: 700; border: 1px solid #bae6fd;">
-									✓ Perubahan serentak hanya diterapkan pada baris yang dicentang [✓]
+						<div style="background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.85rem 1rem; margin-bottom: 0.85rem; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+							<!-- Top Label & Helper -->
+							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.5rem; border-bottom: 1px dashed #e2e8f0; padding-bottom: 0.45rem;">
+								<div style="display: flex; align-items: center; gap: 0.4rem;">
+									<span style="font-size: 0.78rem; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">🛠️ Aksi Cepat / Set Serentak</span>
+								</div>
+								<span style="font-size: 0.7rem; color: #0284c7; background: #e0f2fe; padding: 2px 7px; border-radius: 4px; font-weight: 600; border: 1px solid #bae6fd;">
+									✓ Diterapkan hanya pada baris yang dicentang
 								</span>
+							</div>
+
+							<!-- Grid 4 Kolom Rapi -->
+							<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.65rem;">
+								<!-- Batch Motif -->
+								<div style="display: flex; flex-direction: column; gap: 0.25rem;">
+									<label style="font-size: 0.7rem; font-weight: 700; color: #475569; display: flex; align-items: center; gap: 0.25rem;">
+										<span>🎯</span> Motif
+									</label>
+									<div style="display: flex; gap: 0.3rem;">
+										<select id="globalBatchMotifSelect" style="flex: 1; min-width: 0; padding: 0.35rem 0.5rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
+											{Array.from({ length: 26 }, (_, i) => "Motif " + String.fromCharCode(65 + i)).map((m) => (
+												<option value={m}>{m}</option>
+											))}
+										</select>
+										<button type="button" id="btnApplySameMotif" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #0f172a; color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='#0f172a'" title="Terapkan motif ini ke varian yang dicentang [✓]">
+											Set
+										</button>
+									</div>
+								</div>
+
+								<!-- Batch Size -->
+								<div style="display: flex; flex-direction: column; gap: 0.25rem;">
+									<label style="font-size: 0.7rem; font-weight: 700; color: #475569; display: flex; align-items: center; gap: 0.25rem;">
+										<span>📏</span> Ukuran
+									</label>
+									<div style="display: flex; gap: 0.3rem;">
+										<select id="globalBatchSizeSelect" style="flex: 1; min-width: 0; padding: 0.35rem 0.5rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
+											{["ALL SIZE", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL", "2L", "3L", "4L", "5L", "6L", "7L"].map((sz) => (
+												<option value={sz}>{sz}</option>
+											))}
+										</select>
+										<button type="button" id="btnApplySameSize" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #0f172a; color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='#0f172a'" title="Terapkan ukuran ini ke varian yang dicentang [✓]">
+											Set
+										</button>
+									</div>
+								</div>
+
+								<!-- Batch Sleeve -->
+								<div style="display: flex; flex-direction: column; gap: 0.25rem;">
+									<label style="font-size: 0.7rem; font-weight: 700; color: #475569; display: flex; align-items: center; gap: 0.25rem;">
+										<span>👔</span> Lengan
+									</label>
+									<div style="display: flex; gap: 0.3rem;">
+										<select id="globalBatchSleeveSelect" style="flex: 1; min-width: 0; padding: 0.35rem 0.5rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
+											<option value="Panjang">Lengan Panjang</option>
+											<option value="Pendek">Lengan Pendek</option>
+											<option value="3/4">Lengan 3/4</option>
+											<option value="-">- (Tanpa Lengan)</option>
+										</select>
+										<button type="button" id="btnApplySameSleeve" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #0f172a; color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='#0f172a'" title="Terapkan model lengan ke varian yang dicentang [✓]">
+											Set
+										</button>
+									</div>
+								</div>
+
+								<!-- Batch Fit -->
+								<div style="display: flex; flex-direction: column; gap: 0.25rem;">
+									<label style="font-size: 0.7rem; font-weight: 700; color: #475569; display: flex; align-items: center; gap: 0.25rem;">
+										<span>✂️</span> Model Fit
+									</label>
+									<div style="display: flex; gap: 0.3rem;">
+										<select id="globalBatchFitSelect" style="flex: 1; min-width: 0; padding: 0.35rem 0.5rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
+											<option value="REG">Regular Fit</option>
+											<option value="SF">Slim Fit (SF)</option>
+										</select>
+										<button type="button" id="btnApplySameFit" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #0f172a; color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='#0f172a'" title="Terapkan model fit ke varian yang dicentang [✓]">
+											Set
+										</button>
+									</div>
+								</div>
 							</div>
 						</div>
 
@@ -756,6 +905,30 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 							<button type="button" id="btnAddManualCounterRow" style="font-size: 0.75rem; background: white; color: #334155; border: 1px dashed #94a3b8; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-weight: 700; width: 100%; transition: all 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">
 								+ Tambah Baris Counter Manual
 							</button>
+						</div>
+					</div>
+
+					<!-- ========================================================================= -->
+					<!-- PROMINENT MOTIF PHOTO GALLERY / UPLOADER (UNGGAH GAMBAR PER MOTIF)        -->
+					<!-- ========================================================================= -->
+					<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 1.25rem; margin-top: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+						<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+							<div>
+								<div style="display: flex; align-items: center; gap: 0.4rem;">
+									<span style="font-size: 1.1rem;">📸</span>
+									<h3 style="font-size: 0.95rem; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">
+										Unggah & Kelola Foto per Motif
+									</h3>
+								</div>
+								<p style="font-size: 0.75rem; color: #64748b; margin: 0.2rem 0 0 0;">
+									Setiap motif (Motif A, Motif B, dst.) memiliki 1 foto utama. Klik tombol unggah pada kartu di bawah untuk memilih gambar.
+								</p>
+							</div>
+						</div>
+
+						<!-- Dynamic Motif Cards Container -->
+						<div id="motifPhotoCardsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.85rem;">
+							<!-- Will be dynamically populated per unique motif -->
 						</div>
 					</div>
 
@@ -878,7 +1051,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 		</div>
 	</section>
 
-	<style>
+	<style is:global>
 		@keyframes spinOverlay {
 			0% { transform: rotate(0deg); }
 			100% { transform: rotate(360deg); }
@@ -893,10 +1066,103 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 		.ss-option { padding: 0.5rem 0.8rem; cursor: pointer; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; }
 		.ss-option:hover { background: #f5f5f5; color: var(--color-accent); }
 		.lvl-badge { font-size: 0.6rem; padding: 2px 6px; border-radius: 4px; background: #eee; font-weight: 600; }
-		.motif-style-container { display: flex; flex-wrap: wrap; gap: 0.5rem; max-height: 140px; overflow-y: auto; padding: 0.5rem; background: #fdfdfd; border: 1px solid #e2e8f0; border-radius: 6px; }
-		.motif-style-label { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; padding: 0.25rem 0.5rem; background: white; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; user-select: none; }
-		.motif-style-label:hover { border-color: var(--color-accent); }
-		.motif-style-label input:checked + span, .motif-style-label:has(input:checked) { background: #fdf8eb; border-color: var(--color-accent); font-weight: 600; color: var(--color-accent); }
+		/* Pill Badges Container & Labels (Symmetric CSS Grid - Ukuran Seragam & Rapi Memanjang) */
+		.pill-badge-container,
+		.color-pill-container {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+			gap: 0.5rem;
+			padding: 0.75rem;
+			background: #f8fafc;
+			border: 1px solid #e2e8f0;
+			border-radius: 8px;
+		}
+		.motif-pill-label,
+		.color-pill-label,
+		.cat-pill-label {
+			display: flex;
+			align-items: center;
+			gap: 0.45rem;
+			font-size: 0.78rem;
+			font-weight: 600;
+			color: #334155;
+			padding: 0.45rem 0.7rem;
+			background: #ffffff;
+			border: 1.5px solid #cbd5e1;
+			border-radius: 8px;
+			cursor: pointer;
+			user-select: none;
+			transition: all 0.15s ease-in-out;
+			box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+			position: relative;
+			width: 100%;
+			box-sizing: border-box;
+			min-height: 38px;
+		}
+		.motif-pill-label:hover,
+		.color-pill-label:hover,
+		.cat-pill-label:hover {
+			border-color: #94a3b8;
+			background: #f1f5f9;
+			transform: translateY(-1px);
+			box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+		}
+		.motif-pill-label input[type="checkbox"],
+		.color-pill-label input[type="checkbox"],
+		.cat-pill-label input[type="checkbox"] {
+			position: absolute;
+			opacity: 0;
+			width: 0;
+			height: 0;
+			pointer-events: none;
+		}
+		.motif-pill-label:has(input:checked),
+		.color-pill-label:has(input:checked),
+		.cat-pill-label:has(input:checked) {
+			background: #fefce8;
+			border-color: #d97706;
+			color: #92400e;
+			font-weight: 700;
+			box-shadow: 0 2px 5px rgba(217, 119, 6, 0.15);
+		}
+		.motif-pill-label .motif-icon,
+		.cat-pill-label .cat-icon {
+			font-size: 0.75rem;
+			opacity: 0.75;
+			flex-shrink: 0;
+		}
+		.motif-pill-label .motif-name,
+		.color-pill-label .color-name,
+		.cat-pill-label .cat-name {
+			flex: 1;
+			min-width: 0;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+		.motif-pill-label .check-icon,
+		.color-pill-label .check-icon,
+		.cat-pill-label .check-icon {
+			display: none;
+			font-size: 0.75rem;
+			font-weight: 800;
+			color: #d97706;
+			margin-left: auto;
+			flex-shrink: 0;
+		}
+		.motif-pill-label:has(input:checked) .check-icon,
+		.color-pill-label:has(input:checked) .check-icon,
+		.cat-pill-label:has(input:checked) .check-icon {
+			display: inline-block;
+		}
+		.color-pill-label .color-swatch {
+			display: inline-block;
+			width: 14px;
+			height: 14px;
+			border-radius: 50%;
+			box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+			flex-shrink: 0;
+		}
 		.praproduk-layout-container.has-preview { display: grid !important; grid-template-columns: 240px 1fr !important; gap: var(--spacing-lg) !important; }
 		@media (max-width: 768px) {
 			.praproduk-layout-container.has-preview { grid-template-columns: 1fr !important; }
@@ -1999,37 +2265,51 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			const l2Children = hierarchicalTypes.filter(t => parentIds.includes(t.parent_id));
 
 			container.innerHTML = `
-				<div style="margin-top: 0.85rem; padding: 0.85rem 1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-					<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-						<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; margin: 0;">
-							Jenis / Bahan Produk (Level 2)
-						</label>
-						<button type="button" id="btn-toggle-add-l2" style="background: none; border: none; font-size: 0.65rem; color: #0284c7; cursor: pointer; font-weight: 700; padding: 0;">
+				<!-- Level 2 Box -->
+				<div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.9rem 1.1rem; margin-top: 0.75rem; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
+					<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.4rem;">
+						<div style="display: flex; align-items: center; gap: 0.4rem;">
+							<span style="font-size: 1rem;">👗</span>
+							<label class="text-uppercase" style="font-size: 0.72rem; font-weight: 800; color: #1e293b; letter-spacing: 0.5px; margin: 0;">
+								Jenis / Bahan Produk (Level 2)
+							</label>
+							<span style="font-size: 0.65rem; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 600;">
+								Pilih 1
+							</span>
+						</div>
+						<button type="button" id="btn-toggle-add-l2" style="font-size: 0.68rem; font-weight: 700; color: #0284c7; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 4px; padding: 3px 8px; cursor: pointer; transition: all 0.15s;" onmouseover="this.style.background='#bae6fd'" onmouseout="this.style.background='#e0f2fe'">
 							+ Tambah Baru
 						</button>
 					</div>
 
-					<div class="subcat-pills-container" id="l2-selection-row" style="display: flex; flex-wrap: wrap; gap: 0.4rem;"></div>
+					<div class="pill-badge-container" id="l2-selection-row"></div>
 
-					<div id="new-l2-form-row" style="display: none; margin-top: 0.6rem; gap: 6px; align-items: center;">
-						<input type="text" id="new-l2-input" placeholder="Nama Jenis/Bahan baru..." style="flex: 1; font-size: 0.75rem; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 5px;" />
-						<button type="button" id="add-l2-btn" style="font-size: 0.7rem; background: #0f172a; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer; font-weight: 700;">Simpan</button>
+					<div id="new-l2-form-row" style="display: none; margin-top: 0.65rem; gap: 6px; align-items: center;">
+						<input type="text" id="new-l2-input" placeholder="Nama Jenis/Bahan baru..." style="flex: 1; font-size: 0.78rem; padding: 0.45rem 0.75rem; border: 1px dashed #94a3b8; border-radius: 6px; background: #f8fafc;" />
+						<button type="button" id="add-l2-btn" style="font-size: 0.72rem; background: #0f172a; color: white; border: none; padding: 0 14px; border-radius: 6px; cursor: pointer; font-weight: 700; height: 34px;">Simpan</button>
 					</div>
+				</div>
 
-					<div id="l3-selection-area" style="display: none; margin-top: 0.85rem; padding-top: 0.75rem; border-top: 1px dashed #cbd5e1;">
-						<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-							<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; margin: 0;">
+				<!-- Level 3 Box -->
+				<div id="l3-selection-area" style="display: none; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.9rem 1.1rem; margin-top: 0.75rem; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
+					<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.4rem;">
+						<div style="display: flex; align-items: center; gap: 0.4rem;">
+							<span style="font-size: 1rem;">✨</span>
+							<label class="text-uppercase" style="font-size: 0.72rem; font-weight: 800; color: #1e293b; letter-spacing: 0.5px; margin: 0;">
 								Pilihan Detail (Level 3)
 							</label>
-							<button type="button" id="btn-toggle-add-l3" style="background: none; border: none; font-size: 0.65rem; color: #0284c7; cursor: pointer; font-weight: 700; padding: 0;">
-								+ Tambah Detail
-							</button>
+							<span style="font-size: 0.65rem; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 600;">
+								Opsional
+							</span>
 						</div>
-						<div class="subcat-pills-container" id="l3-grid" style="display: flex; flex-wrap: wrap; gap: 0.4rem;"></div>
-						<div id="new-l3-form-row" style="display: none; margin-top: 0.6rem; gap: 6px; align-items: center;">
-							<input type="text" id="new-l3-input" placeholder="Nama Detail baru..." style="flex: 1; font-size: 0.75rem; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 5px;" />
-							<button type="button" id="add-l3-btn" style="font-size: 0.7rem; background: #0f172a; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer; font-weight: 700;">Simpan</button>
-						</div>
+						<button type="button" id="btn-toggle-add-l3" style="font-size: 0.68rem; font-weight: 700; color: #0284c7; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 4px; padding: 3px 8px; cursor: pointer; transition: all 0.15s;" onmouseover="this.style.background='#bae6fd'" onmouseout="this.style.background='#e0f2fe'">
+							+ Tambah Detail
+						</button>
+					</div>
+					<div class="pill-badge-container" id="l3-grid"></div>
+					<div id="new-l3-form-row" style="display: none; margin-top: 0.65rem; gap: 6px; align-items: center;">
+						<input type="text" id="new-l3-input" placeholder="Nama Detail baru..." style="flex: 1; font-size: 0.78rem; padding: 0.45rem 0.75rem; border: 1px dashed #94a3b8; border-radius: 6px; background: #f8fafc;" />
+						<button type="button" id="add-l3-btn" style="font-size: 0.72rem; background: #0f172a; color: white; border: none; padding: 0 14px; border-radius: 6px; cursor: pointer; font-weight: 700; height: 34px;">Simpan</button>
 					</div>
 				</div>
 			`;
@@ -2042,44 +2322,35 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			function createCatPill(name, id, isL2, parentId, isCustom = false) {
 				const label = document.createElement("label");
 				label.className = "cat-pill-label";
-				label.style.cssText = "display: inline-flex; align-items: center; gap: 5px; font-size: 0.75rem; padding: 4px 10px; background: white; border: 1px solid #cbd5e1; border-radius: 20px; cursor: pointer; font-weight: 600; color: #334155; user-select: none; transition: all 0.15s;";
+				label.title = name;
+
+				// Format Title Case
+				const formattedName = name
+					.split(" ")
+					.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+					.join(" ");
 
 				const cleanVal = isCustom ? name : id;
 				label.innerHTML = `
-					<input type="checkbox" name="category_ids" value="${cleanVal}" data-id="${id}" data-parent="${parentId}" data-name="${name}" style="width: 14px; height: 14px; accent-color: #0f172a; cursor: pointer;" ${isCustom ? 'data-custom="true" checked' : ""} />
-					<span>${name}</span>
+					<input type="checkbox" name="category_ids" value="${cleanVal}" data-id="${id}" data-parent="${parentId}" data-name="${name}" ${isCustom ? 'data-custom="true" checked' : ""} />
+					<span class="cat-icon">${isL2 ? "👗" : "✨"}</span>
+					<span class="cat-name">${formattedName}</span>
+					<span class="check-icon">✓</span>
 				`;
 
 				const cb = label.querySelector("input");
-				const updateStyle = () => {
-					if (cb.checked) {
-						label.style.background = "#0f172a";
-						label.style.color = "#ffffff";
-						label.style.borderColor = "#0f172a";
-					} else {
-						label.style.background = "#ffffff";
-						label.style.color = "#334155";
-						label.style.borderColor = "#cbd5e1";
-					}
-				};
-
 				cb.addEventListener("change", () => {
 					if (isL2 && cb.checked) {
 						l2Row.querySelectorAll("input:checked").forEach(o => {
 							if (o !== cb) {
 								o.checked = false;
-								o.parentElement.style.background = "#ffffff";
-								o.parentElement.style.color = "#334155";
-								o.parentElement.style.borderColor = "#cbd5e1";
 							}
 						});
 					}
-					updateStyle();
 					if (isL2) updateL3Selection();
 					updateName();
 				});
 
-				updateStyle();
 				return label;
 			}
 
@@ -2106,7 +2377,13 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					}
 				});
 
-				// Always show L3 area if L2 is selected so user can see or add L3
+				if (totalL3 === 0) {
+					const emptyNote = document.createElement("div");
+					emptyNote.style.cssText = "grid-column: 1 / -1; font-size: 0.72rem; color: #94a3b8; padding: 0.4rem 0.2rem; font-style: italic;";
+					emptyNote.innerHTML = "Belum ada pilihan detail turunan. Klik <strong>+ Tambah Detail</strong> jika ingin menambahkan spesifikasi baru.";
+					l3Grid.appendChild(emptyNote);
+				}
+
 				l3Area.style.display = "block";
 			}
 
@@ -2131,9 +2408,6 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				if (!text) return;
 				l2Row.querySelectorAll("input:checked").forEach(o => {
 					o.checked = false;
-					o.parentElement.style.background = "#ffffff";
-					o.parentElement.style.color = "#334155";
-					o.parentElement.style.borderColor = "#cbd5e1";
 				});
 				const rndId = "custom-l2-" + Math.random().toString(36).substr(2, 5);
 				const el = createCatPill(text, rndId, true, parentIds[0], true);
@@ -2166,6 +2440,9 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				const parentId = activeL2 ? activeL2.getAttribute("data-id") : null;
 				const rndId = "custom-l3-" + Math.random().toString(36).substr(2, 5);
 				const el = createCatPill(text, rndId, false, parentId, true);
+				// Remove empty note if exists
+				const note = l3Grid.querySelector("div[style*='grid-column']");
+				if (note) note.remove();
 				l3Grid.appendChild(el);
 				inpL3.value = "";
 				formL3Row.style.display = "none";
@@ -2192,7 +2469,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			if (l2Container) {
 				const checkedL2 = l2Container.querySelector("input:checked");
 				if (checkedL2) {
-					l2Text = checkedL2.parentElement.textContent.replace("NEW", "").trim();
+					l2Text = (checkedL2.dataset.name || checkedL2.parentElement.querySelector(".cat-name")?.textContent || checkedL2.parentElement.textContent).replace(/^[^\w]+|[✓✨👗]/g, "").trim();
 				}
 			}
 
@@ -2202,7 +2479,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			if (l3Container) {
 				const checkedL3s = Array.from(l3Container.querySelectorAll("input:checked"));
 				checkedL3s.forEach(c => {
-					const txt = c.parentElement.textContent.replace("NEW", "").trim();
+					const txt = (c.dataset.name || c.parentElement.querySelector(".cat-name")?.textContent || c.parentElement.textContent).replace(/^[^\w]+|[✓✨👗]/g, "").trim();
 					if (txt) l3Strings.push(txt);
 				});
 			}
@@ -2218,7 +2495,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			const motifGrid = document.getElementById("motif-grid");
 			if (motifGrid) {
 				const checkedMotifs = Array.from(motifGrid.querySelectorAll("input:checked"));
-				motifStr = checkedMotifs.map(m => m.parentElement.textContent.trim()).join(", ");
+				motifStr = checkedMotifs.map(m => (m.dataset.name || m.parentElement.querySelector(".motif-name")?.textContent || m.parentElement.textContent).replace(/^[^\w]+|[✓✨]/g, "").trim()).join(", ");
 			}
 
 			// 5. Get Colors
@@ -2687,8 +2964,9 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 
 						if (newMotif && newMotif.id) {
 							const lbl = document.createElement("label");
-							lbl.className = "motif-style-label";
-							lbl.innerHTML = `<input type="checkbox" name="motif_ids" value="${newMotif.id}" data-name="${newMotif.name}" checked /> ${newMotif.name}`;
+							lbl.className = "motif-pill-label";
+							lbl.title = newMotif.name;
+							lbl.innerHTML = `<input type="checkbox" name="motif_ids" value="${newMotif.id}" data-name="${newMotif.name}" checked /><span class="motif-icon">✨</span><span class="motif-name">${newMotif.name}</span><span class="check-icon">✓</span>`;
 							grid.appendChild(lbl);
 							input.value = "";
 
@@ -2722,7 +3000,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 		}
 
 		function setupAutoNamingListeners() {
-			// Motif Grid Checkboxes
+			// Motif Grid Checkboxes & Helpers
 			const motifGrid = document.getElementById("motif-grid");
 			if (motifGrid) {
 				motifGrid.addEventListener("change", (e) => {
@@ -2733,7 +3011,28 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				});
 			}
 
-			// Color Grid Checkboxes
+			// Motif Filter & Reset
+			document.getElementById("motifFilterInput")?.addEventListener("input", (e) => {
+				const q = (e.target.value || "").toLowerCase().trim();
+				document.querySelectorAll("#motif-grid .motif-pill-label").forEach(pill => {
+					const text = (pill.textContent || "").toLowerCase();
+					pill.style.display = text.includes(q) ? "" : "none";
+				});
+			});
+
+			document.getElementById("btnDeselectAllMotifs")?.addEventListener("click", () => {
+				document.querySelectorAll("#motif-grid input[name='motif_ids']").forEach(cb => {
+					cb.checked = false;
+				});
+				const filterInput = document.getElementById("motifFilterInput");
+				if (filterInput) filterInput.value = "";
+				document.querySelectorAll("#motif-grid .motif-pill-label").forEach(pill => {
+					pill.style.display = "";
+				});
+				updateName();
+			});
+
+			// Color Grid Checkboxes & Helpers
 			const colorGrid = document.getElementById("color-grid");
 			if (colorGrid) {
 				colorGrid.addEventListener("change", (e) => {
@@ -2743,6 +3042,27 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					}
 				});
 			}
+
+			// Color Filter & Reset
+			document.getElementById("colorFilterInput")?.addEventListener("input", (e) => {
+				const q = (e.target.value || "").toLowerCase().trim();
+				document.querySelectorAll("#color-grid .color-pill-label").forEach(pill => {
+					const text = (pill.textContent || "").toLowerCase();
+					pill.style.display = text.includes(q) ? "" : "none";
+				});
+			});
+
+			document.getElementById("btnDeselectAllColors")?.addEventListener("click", () => {
+				document.querySelectorAll("#color-grid input[name='colors']").forEach(cb => {
+					cb.checked = false;
+				});
+				const filterInput = document.getElementById("colorFilterInput");
+				if (filterInput) filterInput.value = "";
+				document.querySelectorAll("#color-grid .color-pill-label").forEach(pill => {
+					pill.style.display = "";
+				});
+				updateName();
+			});
 
 			// Item Code & SKU Inputs
 			const itemCodeInput = document.getElementById("product_item_code_input");

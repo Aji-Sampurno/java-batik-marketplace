@@ -1,0 +1,932 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { uploadToFirebase } from "../../lib/firebase";
+import { uploadToLaravel } from "../../lib/api";
+import sharp from "sharp";
+import fs from "fs";
+import path from "path";
+
+// Auth check
+const session = Astro.cookies.get("admin_session");
+if (session?.value !== "authenticated") {
+	return Astro.redirect("/login");
+}
+
+let result: any = null;
+let errorMsg = "";
+
+// Check Firebase Config
+const firebaseConfigStatus = {
+	apiKey: !!import.meta.env.PUBLIC_FIREBASE_API_KEY && import.meta.env.PUBLIC_FIREBASE_API_KEY !== "your_api_key_here",
+	projectId: import.meta.env.PUBLIC_FIREBASE_PROJECT_ID || "Belum diisi",
+	storageBucket: import.meta.env.PUBLIC_FIREBASE_STORAGE_BUCKET || "Belum diisi",
+	isConfigured: false
+};
+firebaseConfigStatus.isConfigured = firebaseConfigStatus.apiKey && firebaseConfigStatus.projectId !== "Belum diisi";
+
+if (Astro.request.method === "POST") {
+	const startTime = Date.now();
+	try {
+		const formData = await Astro.request.formData();
+		const imageFile = formData.get("image_file") as File | null;
+		const itemCode = (formData.get("item_code") as string || "TEST-001").trim();
+		const jenisProduk = (formData.get("jenis_produk") as string || "tes").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+		const motifName = (formData.get("motif_name") as string || "Motif Sample").trim();
+		const rawQuality = Math.min(Math.max(parseInt(formData.get("raw_quality") as string || "85", 10), 50), 100);
+		const watermarkQuality = Math.min(Math.max(parseInt(formData.get("watermark_quality") as string || "80", 10), 50), 100);
+		const logoScalePercent = Math.min(Math.max(parseInt(formData.get("logo_scale") as string || "18", 10), 5), 40);
+		const customText = (formData.get("custom_text") as string || itemCode).trim();
+		const customBucket = (formData.get("custom_bucket") as string || "").trim();
+
+		if (!imageFile || imageFile.size === 0) {
+			throw new Error("Pilih file gambar terlebih dahulu untuk diuji.");
+		}
+
+		const originalBuffer = Buffer.from(await imageFile.arrayBuffer());
+		const originalSizeKb = (imageFile.size / 1024).toFixed(1);
+		const originalSharp = sharp(originalBuffer);
+		const origMeta = await originalSharp.metadata();
+		const width = origMeta.width || 1000;
+		const height = origMeta.height || 1000;
+
+		const cleanMotifTag = motifName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "") || "motif-test";
+		const cleanCode = itemCode.replace(/[^a-zA-Z0-9_\-]/g, "") || "TEST";
+		const timestamp = Date.now();
+
+		// -------------------------------------------------------------
+		// 1. PROCESS RAW WEBP (Master Archive, No Watermark)
+		// -------------------------------------------------------------
+		let rawWebpBuffer: Buffer;
+		try {
+			rawWebpBuffer = await sharp(originalBuffer)
+				.webp({ quality: rawQuality })
+				.toBuffer();
+		} catch (e: any) {
+			console.error("Raw compression error:", e);
+			rawWebpBuffer = originalBuffer;
+		}
+
+		const rawSizeKb = (rawWebpBuffer.length / 1024).toFixed(1);
+		const rawSavingPercent = Math.round((1 - rawWebpBuffer.length / imageFile.size) * 100);
+
+		const rawCustomName = `${cleanCode}_${cleanMotifTag}_raw_${timestamp}.webp`;
+		const rawFileToUpload = new File([new Uint8Array(rawWebpBuffer)], rawCustomName, { type: "image/webp" });
+		const fbPathRaw = `products/${jenisProduk}/${cleanCode}/${cleanMotifTag}/raw/${rawCustomName}`;
+
+		let rawPublicUrl = "";
+		let rawUploadError = "";
+		let rawLaravelUrl = "";
+		try {
+			rawPublicUrl = await uploadToFirebase(rawFileToUpload, fbPathRaw, customBucket);
+		} catch (fbErr: any) {
+			console.error("Firebase Raw Upload Error:", fbErr);
+			rawUploadError = fbErr.message || String(fbErr);
+			// Fallback to Laravel
+			try {
+				rawLaravelUrl = await uploadToLaravel(rawFileToUpload, `products/${jenisProduk}/${cleanCode}/${cleanMotifTag}/raw`);
+			} catch (lvErr: any) {
+				console.warn("Laravel Raw Fallback Error:", lvErr);
+			}
+		}
+
+		// -------------------------------------------------------------
+		// 2. PROCESS WATERMARKED WEBP (Logo + Kode Barang)
+		// -------------------------------------------------------------
+		let logoBuffer: Buffer | null = null;
+		let fontBase64 = "";
+		const logs: string[] = [];
+
+		try {
+			const logoPath = path.join(process.cwd(), "public/images/java_batik_gold.png");
+			const fontPath = path.join(process.cwd(), "public/fonts/Roboto-Bold.ttf");
+			if (fs.existsSync(logoPath)) {
+				logoBuffer = fs.readFileSync(logoPath);
+				logs.push(`Logo loaded (${logoBuffer.length} bytes)`);
+			} else {
+				logs.push(`Logo tidak ditemukan di: ${logoPath}`);
+			}
+			if (fs.existsSync(fontPath)) {
+				const fontBuf = fs.readFileSync(fontPath);
+				fontBase64 = fontBuf.toString("base64");
+				logs.push(`Font loaded (${fontBuf.length} bytes)`);
+			}
+		} catch (e: any) {
+			logs.push(`Asset load error: ${e.message}`);
+		}
+
+		const compositeArr: any[] = [];
+
+		// Watermark Logo (Top-Right)
+		if (logoBuffer) {
+			const logoWidth = Math.round(width * (logoScalePercent / 100));
+			const resizedLogo = await sharp(logoBuffer)
+				.resize({ width: logoWidth, withoutEnlargement: true })
+				.toBuffer();
+			const resizedMeta = await sharp(resizedLogo).metadata();
+			const actualLogoW = resizedMeta.width || logoWidth;
+			const logoMargin = Math.round(width * 0.04);
+
+			compositeArr.push({
+				input: resizedLogo,
+				top: logoMargin,
+				left: width - actualLogoW - logoMargin,
+				blend: "over",
+			});
+			logs.push(`Logo watermark applied (${actualLogoW}px width at top-right)`);
+		}
+
+		// Watermark Text Kode Barang (Bottom-Right)
+		if (customText) {
+			const fontSize = Math.max(Math.round(height * 0.022), 14);
+			const textMarginRight = Math.round(width * 0.04);
+			const textY = height - Math.round(height * 0.05);
+			const svgText = `
+				<svg width="${width}" height="${height}">
+					<style>
+						@font-face {
+							font-family: 'Roboto';
+							src: url('data:font/ttf;base64,${fontBase64}');
+						}
+						.title { fill: white; font-size: ${fontSize}px; font-weight: bold; font-family: 'Roboto', sans-serif; }
+						.shadow { fill: black; font-size: ${fontSize}px; font-weight: bold; font-family: 'Roboto', sans-serif; }
+					</style>
+					<text x="${width - textMarginRight + 2}" y="${textY + 2}" text-anchor="end" class="shadow">${customText}</text>
+					<text x="${width - textMarginRight}" y="${textY}" text-anchor="end" class="title">${customText}</text>
+				</svg>
+			`;
+			compositeArr.push({
+				input: Buffer.from(svgText),
+				top: 0,
+				left: 0,
+			});
+			logs.push(`Text code watermark applied: "${customText}" (Font size ${fontSize}px)`);
+		}
+
+		let watermarkedWebpBuffer: Buffer;
+		try {
+			if (compositeArr.length > 0) {
+				watermarkedWebpBuffer = await originalSharp
+					.composite(compositeArr)
+					.webp({ quality: watermarkQuality })
+					.toBuffer();
+			} else {
+				watermarkedWebpBuffer = await originalSharp
+					.webp({ quality: watermarkQuality })
+					.toBuffer();
+			}
+		} catch (e: any) {
+			console.error("Watermark composite error:", e);
+			watermarkedWebpBuffer = originalBuffer;
+			logs.push(`Composite error: ${e.message}`);
+		}
+
+		const watermarkedSizeKb = (watermarkedWebpBuffer.length / 1024).toFixed(1);
+		const watermarkedSavingPercent = Math.round((1 - watermarkedWebpBuffer.length / imageFile.size) * 100);
+
+		const watermarkedCustomName = `${cleanCode}_${cleanMotifTag}_katalog_${timestamp}.webp`;
+		const watermarkedFileToUpload = new File([new Uint8Array(watermarkedWebpBuffer)], watermarkedCustomName, { type: "image/webp" });
+		const fbPathWatermarked = `products/${jenisProduk}/${cleanCode}/${cleanMotifTag}/katalog/${watermarkedCustomName}`;
+
+		let watermarkedPublicUrl = "";
+		let watermarkedUploadError = "";
+		let watermarkedLaravelUrl = "";
+		try {
+			watermarkedPublicUrl = await uploadToFirebase(watermarkedFileToUpload, fbPathWatermarked, customBucket);
+		} catch (fbErr: any) {
+			console.error("Firebase Watermarked Upload Error:", fbErr);
+			watermarkedUploadError = fbErr.message || String(fbErr);
+			// Fallback to Laravel
+			try {
+				watermarkedLaravelUrl = await uploadToLaravel(watermarkedFileToUpload, `products/${jenisProduk}/${cleanCode}/${cleanMotifTag}/katalog`);
+			} catch (lvErr: any) {
+				console.warn("Laravel Watermark Fallback Error:", lvErr);
+			}
+		}
+
+		const durationMs = Date.now() - startTime;
+
+		// Convert buffers to base64 for direct inline preview in case Firebase upload has an issue
+		const rawBase64 = `data:image/webp;base64,${rawWebpBuffer.toString("base64")}`;
+		const watermarkedBase64 = `data:image/webp;base64,${watermarkedWebpBuffer.toString("base64")}`;
+
+		result = {
+			itemCode: cleanCode,
+			jenisProduk,
+			motifName,
+			dimensions: `${width} x ${height} px`,
+			originalName: imageFile.name,
+			originalSizeKb,
+			raw: {
+				sizeKb: rawSizeKb,
+				savingPercent: rawSavingPercent,
+				storagePath: fbPathRaw,
+				publicUrl: rawPublicUrl,
+				laravelUrl: rawLaravelUrl,
+				error: rawUploadError,
+				base64: rawBase64,
+				filename: rawCustomName
+			},
+			watermarked: {
+				sizeKb: watermarkedSizeKb,
+				savingPercent: watermarkedSavingPercent,
+				storagePath: fbPathWatermarked,
+				publicUrl: watermarkedPublicUrl,
+				laravelUrl: watermarkedLaravelUrl,
+				error: watermarkedUploadError,
+				base64: watermarkedBase64,
+				filename: watermarkedCustomName
+			},
+			durationMs,
+			logs
+		};
+
+	} catch (e: any) {
+		console.error("Test Watermark Error:", e);
+		errorMsg = e.message || "Terjadi kesalahan saat memproses gambar.";
+	}
+}
+---
+
+<Layout title="Uji Coba Watermark & Upload Firebase (Sandbox)">
+	<section style="padding: 120px 0 var(--spacing-2xl) 0; background: #fdfcfb; min-height: 100vh;">
+		<div class="container" style="max-width: 1100px;">
+			
+			<!-- Header & Navigation -->
+			<div style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+				<div style="display: flex; align-items: center; gap: 1rem;">
+					<a href="/buka-toko" class="back-btn" title="Kembali ke Dashboard">
+						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+							<line x1="19" y1="12" x2="5" y2="12"></line>
+							<polyline points="12 19 5 12 12 5"></polyline>
+						</svg>
+					</a>
+					<div>
+						<div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+							<h1 class="page-title">Sandbox <span style="color: var(--color-accent); font-style: italic;">Watermark & Firebase</span></h1>
+							<span style="background: #fef3c7; color: #b45309; font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 20px; border: 1px solid #fde68a;">
+								⚡ Testing Environment (Struktur Firebase Pra-Produk)
+							</span>
+						</div>
+						<p class="page-subtitle">
+							Uji coba kompresi WebP, pembubuhan watermark logo + kode, dan validasi upload Firebase Storage sebelum dipakai di Pra-Produk.
+						</p>
+					</div>
+				</div>
+
+				<div style="display: flex; gap: 0.5rem;">
+					<a href="/buka-toko/pra-produk-counter" class="btn-subtle">
+						Lihat Pra-Produk
+					</a>
+				</div>
+			</div>
+
+			<!-- Firebase Connection Status Bar -->
+			<div class="status-card" style={`border-left: 4px solid ${firebaseConfigStatus.isConfigured ? '#10b981' : '#f59e0b'};`}>
+				<div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+					<div style="display: flex; align-items: center; gap: 0.75rem;">
+						<div style={`width: 12px; height: 12px; border-radius: 50%; background: ${firebaseConfigStatus.isConfigured ? '#10b981' : '#f59e0b'}; box-shadow: 0 0 8px ${firebaseConfigStatus.isConfigured ? '#10b981' : '#f59e0b'};`}></div>
+						<div>
+							<strong style="font-size: 0.9rem; color: #1e293b;">
+								Status Firebase Storage: {firebaseConfigStatus.isConfigured ? 'Terkonfigurasi Aktif' : 'Konfigurasi Belum Lengkap'}
+							</strong>
+							<div style="font-size: 0.78rem; color: #64748b; margin-top: 0.15rem;">
+								Project ID: <code class="badge-code">{firebaseConfigStatus.projectId}</code> | Bucket: <code class="badge-code">{firebaseConfigStatus.storageBucket}</code>
+							</div>
+						</div>
+					</div>
+					<div style="font-size: 0.75rem; color: #64748b; background: #f8fafc; padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid #e2e8f0;">
+						Target Path Firebase: <code>products/&#123;jenis&#125;/&#123;kode&#125;/&#123;motif&#125;/[raw|katalog]/...</code>
+					</div>
+				</div>
+			</div>
+
+			{
+				errorMsg && (
+					<div class="alert-box error animate-fade-in">
+						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+						<span>{errorMsg}</span>
+					</div>
+				)
+			}
+
+			<div class="grid-layout">
+				<!-- Form Upload & Konfigurasi Parameter Test -->
+				<div class="panel-card">
+					<div class="panel-header">
+						<h2 style="font-size: 1.05rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+							Input Gambar & Parameter Watermark
+						</h2>
+					</div>
+
+					<form method="POST" enctype="multipart/form-data" id="testForm" style="display: flex; flex-direction: column; gap: 1.25rem;">
+						
+						<!-- File Upload Dropzone -->
+						<div class="form-group">
+							<label class="form-label">Pilih Foto Uji Coba <span style="color: #ef4444;">*</span></label>
+							<div class="dropzone" id="dropzoneContainer">
+								<input type="file" name="image_file" id="imageInput" accept="image/jpeg,image/png,image/webp,image/jpg" required class="file-input-hidden" />
+								<div id="dropzonePlaceholder" style="text-align: center; pointer-events: none;">
+									<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.7" style="margin-bottom: 0.5rem;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+									<p style="font-size: 0.85rem; font-weight: 600; color: #334155; margin: 0;">Klik atau seret file gambar ke sini</p>
+									<p style="font-size: 0.75rem; color: #94a3b8; margin: 0.25rem 0 0 0;">Format JPG, PNG, atau WebP (Maks 15 MB)</p>
+								</div>
+								<div id="previewSelected" style="display: none; align-items: center; gap: 1rem; width: 100%;">
+									<img id="selectedImgThumbnail" src="" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid #cbd5e1;" />
+									<div style="flex: 1; min-width: 0;">
+										<p id="selectedImgName" style="font-size: 0.85rem; font-weight: 600; color: #0f172a; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">filename.jpg</p>
+										<p id="selectedImgSize" style="font-size: 0.75rem; color: #64748b; margin: 0.2rem 0 0 0;">0 KB</p>
+									</div>
+									<button type="button" id="btnChangeImg" class="btn-subtle-sm">Ganti</button>
+								</div>
+							</div>
+						</div>
+
+						<!-- Grid Info Produk Mockup -->
+						<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+							<div class="form-group">
+								<label class="form-label">Kode Item / SKU</label>
+								<input type="text" name="item_code" id="itemCodeInput" value="BTK-SAMPLE-01" class="form-input" placeholder="contoh: 2000000000000003" required />
+							</div>
+							<div class="form-group">
+								<label class="form-label">Jenis Produk (Kategori)</label>
+								<input type="text" name="jenis_produk" value="kemeja-pria" class="form-input" placeholder="contoh: kemeja, tunik, kain" required />
+							</div>
+						</div>
+
+						<div class="form-group">
+							<label class="form-label">Nama Motif (untuk Penamaan File)</label>
+							<input type="text" name="motif_name" value="Megamendung Coklat" class="form-input" placeholder="contoh: Parang Rusak Gold" required />
+						</div>
+
+						<!-- Watermark Settings Accordion / Box -->
+						<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem;">
+							<div style="font-size: 0.82rem; font-weight: 700; color: #334155; margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between;">
+								<span>⚙️ Kustomisasi Kompresi & Watermark</span>
+								<span style="font-size: 0.72rem; color: #64748b; font-weight: 400;">Sharp Engine</span>
+							</div>
+
+							<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.75rem;">
+								<div>
+									<label class="form-label" style="font-size: 0.75rem;">Kualitas WebP Raw (Master)</label>
+									<div style="display: flex; align-items: center; gap: 0.5rem;">
+										<input type="range" name="raw_quality" min="60" max="100" value="85" class="slider" id="rawQualityRange" oninput="document.getElementById('rawQualityVal').innerText = this.value + '%'" />
+										<span id="rawQualityVal" style="font-size: 0.78rem; font-weight: 700; width: 35px;">85%</span>
+									</div>
+								</div>
+								<div>
+									<label class="form-label" style="font-size: 0.75rem;">Kualitas WebP Watermarked</label>
+									<div style="display: flex; align-items: center; gap: 0.5rem;">
+										<input type="range" name="watermark_quality" min="60" max="100" value="80" class="slider" id="watermarkQualityRange" oninput="document.getElementById('wmQualityVal').innerText = this.value + '%'" />
+										<span id="wmQualityVal" style="font-size: 0.78rem; font-weight: 700; width: 35px;">80%</span>
+									</div>
+								</div>
+							</div>
+
+							<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.75rem;">
+								<div>
+									<label class="form-label" style="font-size: 0.75rem;">Ukuran Logo Watermark (% lebar)</label>
+									<div style="display: flex; align-items: center; gap: 0.5rem;">
+										<input type="range" name="logo_scale" min="10" max="35" value="18" class="slider" id="logoScaleRange" oninput="document.getElementById('logoScaleVal').innerText = this.value + '%'" />
+										<span id="logoScaleVal" style="font-size: 0.78rem; font-weight: 700; width: 35px;">18%</span>
+									</div>
+								</div>
+								<div>
+									<label class="form-label" style="font-size: 0.75rem;">Teks Kode di Watermark</label>
+									<input type="text" name="custom_text" id="customTextInput" value="BTK-SAMPLE-01" class="form-input" style="padding: 0.45rem 0.65rem; font-size: 0.8rem;" placeholder="Kode watermark" />
+								</div>
+							</div>
+
+							<!-- Custom Bucket Testing -->
+							<div style="padding-top: 0.75rem; border-top: 1px dashed #e2e8f0;">
+								<label class="form-label" style="font-size: 0.75rem;">Storage Bucket Domain (Auto-Resolving)</label>
+								<input type="text" name="custom_bucket" id="customBucketInput" value={firebaseConfigStatus.storageBucket} class="form-input" style="padding: 0.45rem 0.65rem; font-size: 0.8rem; width: 100%;" placeholder="contoh: gooproper-e1983.firebasestorage.app" />
+								<div style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem;">
+									<button type="button" class="btn-subtle-sm" style="font-size: 0.68rem; padding: 0.2rem 0.5rem;" onclick="document.getElementById('customBucketInput').value='gooproper-e1983.firebasestorage.app'">
+										+ gooproper-e1983.firebasestorage.app
+									</button>
+									<button type="button" class="btn-subtle-sm" style="font-size: 0.68rem; padding: 0.2rem 0.5rem;" onclick="document.getElementById('customBucketInput').value='gooproper-e1983.appspot.com'">
+										+ gooproper-e1983.appspot.com
+									</button>
+								</div>
+							</div>
+						</div>
+
+						<!-- Submit Button -->
+						<button type="submit" id="btnSubmit" class="btn-primary" style="width: 100%; justify-content: center; padding: 0.85rem; font-size: 0.95rem; margin-top: 0.5rem;">
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+							<span>Mulai Proses Kompresi & Upload ke Firebase</span>
+						</button>
+						
+						<div id="processingIndicator" style="display: none; text-align: center; padding: 0.5rem; color: #64748b; font-size: 0.85rem;">
+							<div class="spinner-small" style="display: inline-block; vertical-align: middle; margin-right: 0.5rem;"></div>
+							Sedang mengompresi gambar, menempelkan watermark, dan mengunggah ke Firebase Storage...
+						</div>
+					</form>
+				</div>
+
+				<!-- Quick Guide / Preset Sandbox Info -->
+				<div style="display: flex; flex-direction: column; gap: 1.5rem;">
+					<div class="panel-card" style="background: linear-gradient(145deg, #ffffff, #faf9f6); border-color: rgba(212, 175, 55, 0.3);">
+						<h3 style="font-size: 0.95rem; font-weight: 700; color: #78350f; margin: 0 0 0.75rem 0; display: flex; align-items: center; gap: 0.5rem;">
+							🛡️ Mengapa Menggunakan Halaman Uji Coba Ini?
+						</h3>
+						<ul style="font-size: 0.82rem; color: #475569; margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; line-height: 1.5;">
+							<li><strong>Sandbox Terisolasi:</strong> File diunggah ke path <code>test-sandbox/</code> di Firebase Storage, sehingga tidak mengotori folder <code>products/</code> produksi.</li>
+							<li><strong>Tanpa Menyentuh Database:</strong> Tidak ada API Laravel / database produk yang diubah atau ditambahkan.</li>
+							<li><strong>Verifikasi Dua File (Dual-Storage):</strong> Anda bisa langsung mengecek apakah file <em>Raw Master</em> (tanpa watermark) dan <em>Katalog</em> (dengan logo & kode) berhasil ter-upload dengan link aktif.</li>
+							<li><strong>Live Komparasi Kualitas & Ukuran:</strong> Periksa langsung persentase penghematan ukuran WebP dan ketajaman teks/logo watermark.</li>
+						</ul>
+					</div>
+
+					<!-- Preset Cepat -->
+					<div class="panel-card">
+						<h3 style="font-size: 0.85rem; font-weight: 600; color: #334155; margin: 0 0 0.75rem 0;">
+							⚡ Isi Cepat Data Mockup
+						</h3>
+						<div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+							<button type="button" class="btn-chip" onclick="fillMockup('2000000000000003', 'kemeja-pria', 'Batik Megamendung')">
+								👕 Mockup Kemeja Barcode
+							</button>
+							<button type="button" class="btn-chip" onclick="fillMockup('BTK-TUNIK-042', 'tunik', 'Parang Kusumo Gold')">
+								👗 Mockup Tunik Wanita
+							</button>
+							<button type="button" class="btn-chip" onclick="fillMockup('KAIN-SOGAN-99', 'kain-batik', 'Sogan Tradisional Solo')">
+								🧣 Mockup Kain Panjang
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- HASIL PROSES & HASIL UPLOAD FIREBASE -->
+			{
+				result && (
+					<div class="result-container animate-fade-in" id="resultSection">
+						<div class="result-header">
+							<div style="display: flex; align-items: center; gap: 0.75rem;">
+								<div style="background: #10b981; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+									<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+								</div>
+								<div>
+									<h2 style="font-size: 1.25rem; font-weight: 700; margin: 0; color: #0f172a;">
+										Hasil Pengujian Berhasil Diproses!
+									</h2>
+									<p style="font-size: 0.82rem; color: #64748b; margin: 0.2rem 0 0 0;">
+										Waktu pemrosesan Sharp & Firebase: <strong>{result.durationMs} ms</strong> | Resolusi Sumber: <strong>{result.dimensions}</strong>
+									</p>
+								</div>
+							</div>
+
+							<div style="display: flex; gap: 0.5rem;">
+								<a href="#testForm" class="btn-subtle-sm" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
+									Uji File Lain ⭡
+								</a>
+							</div>
+						</div>
+
+						<!-- Ringkasan Perbandingan Ukuran (Cards) -->
+						<div class="stats-grid">
+							<div class="stat-box">
+								<div class="stat-label">File Asli (Original)</div>
+								<div class="stat-value">{result.originalSizeKb} KB</div>
+								<div class="stat-sub">{result.originalName}</div>
+							</div>
+							<div class="stat-box" style="border-top-color: #3b82f6;">
+								<div class="stat-label">WebP Raw (Master Archive)</div>
+								<div class="stat-value" style="color: #2563eb;">{result.raw.sizeKb} KB</div>
+								<div class="stat-sub">
+									Hemat <span style="color: #16a34a; font-weight: 700;">{result.raw.savingPercent}%</span> (Tanpa Watermark)
+								</div>
+							</div>
+							<div class="stat-box" style="border-top-color: var(--color-accent);">
+								<div class="stat-label">WebP Katalog (Watermarked)</div>
+								<div class="stat-value" style="color: #b45309;">{result.watermarked.sizeKb} KB</div>
+								<div class="stat-sub">
+									Hemat <span style="color: #16a34a; font-weight: 700;">{result.watermarked.savingPercent}%</span> (Logo + Kode)
+								</div>
+							</div>
+						</div>
+
+						<!-- Dual Preview: Raw Master vs Watermarked Catalog -->
+						<div class="comparison-grid">
+							
+							<!-- Kolom 1: Raw WebP (Tanpa Watermark) -->
+							<div class="preview-card">
+								<div class="preview-badge" style="background: #e0f2fe; color: #0369a1;">
+									📁 1. Master Raw WebP (Arsip Toko)
+								</div>
+								
+								<div class="img-preview-frame">
+									<img src={result.raw.publicUrl || result.raw.base64} alt="Raw Preview" loading="lazy" />
+								</div>
+
+								<div class="preview-details">
+									<div class="detail-row">
+										<span>Status Firebase:</span>
+										{result.raw.publicUrl ? (
+											<span class="status-tag success">✓ Berhasil Upload</span>
+										) : (
+											<span class="status-tag fail">✗ Gagal ({result.raw.error})</span>
+										)}
+									</div>
+									<div class="detail-row">
+										<span>Storage Path:</span>
+										<code class="code-path">{result.raw.storagePath}</code>
+									</div>
+									<div class="detail-row">
+										<span>Ukuran WebP:</span>
+										<strong>{result.raw.sizeKb} KB</strong>
+									</div>
+
+									{result.raw.publicUrl ? (
+										<div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+											<div class="url-copy-box">
+												<input type="text" readonly value={result.raw.publicUrl} class="url-input" id="rawUrlInput" />
+												<button type="button" class="btn-copy" onclick="copyToClipboard('rawUrlInput', this)">Copy URL</button>
+											</div>
+											<a href={result.raw.publicUrl} target="_blank" rel="noopener noreferrer" class="btn-open-link">
+												Buka URL Firebase di Tab Baru ↗
+											</a>
+										</div>
+									) : (
+										<div class="warning-callout">
+											<div><strong>Firebase Upload Gagal:</strong> {result.raw.error}</div>
+											{result.raw.laravelUrl && (
+												<div style="margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed rgba(180, 83, 9, 0.3);">
+													<span>✓ Fallback Laravel API Berhasil: </span>
+													<a href={result.raw.laravelUrl} target="_blank" style="color: #0369a1; text-decoration: underline; word-break: break-all;">{result.raw.laravelUrl}</a>
+												</div>
+											)}
+										</div>
+									)}
+								</div>
+							</div>
+
+							<!-- Kolom 2: Watermarked WebP (Dengan Logo & Kode) -->
+							<div class="preview-card" style="border-color: rgba(212, 175, 55, 0.5); box-shadow: 0 4px 15px rgba(212, 175, 55, 0.08);">
+								<div class="preview-badge" style="background: #fef3c7; color: #92400e;">
+									🏷️ 2. Katalog Publik WebP (Watermarked)
+								</div>
+
+								<div class="img-preview-frame">
+									<img src={result.watermarked.publicUrl || result.watermarked.base64} alt="Watermarked Preview" loading="lazy" />
+								</div>
+
+								<div class="preview-details">
+									<div class="detail-row">
+										<span>Status Firebase:</span>
+										{result.watermarked.publicUrl ? (
+											<span class="status-tag success">✓ Berhasil Upload</span>
+										) : (
+											<span class="status-tag fail">✗ Gagal ({result.watermarked.error})</span>
+										)}
+									</div>
+									<div class="detail-row">
+										<span>Storage Path:</span>
+										<code class="code-path">{result.watermarked.storagePath}</code>
+									</div>
+									<div class="detail-row">
+										<span>Ukuran WebP:</span>
+										<strong>{result.watermarked.sizeKb} KB</strong>
+									</div>
+
+									{result.watermarked.publicUrl ? (
+										<div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+											<div class="url-copy-box">
+												<input type="text" readonly value={result.watermarked.publicUrl} class="url-input" id="wmUrlInput" />
+												<button type="button" class="btn-copy" onclick="copyToClipboard('wmUrlInput', this)">Copy URL</button>
+											</div>
+											<a href={result.watermarked.publicUrl} target="_blank" rel="noopener noreferrer" class="btn-open-link" style="background: #1e293b; color: white;">
+												Buka URL Firebase di Tab Baru ↗
+											</a>
+										</div>
+									) : (
+										<div class="warning-callout">
+											<div><strong>Firebase Upload Gagal:</strong> {result.watermarked.error}</div>
+											{result.watermarked.laravelUrl && (
+												<div style="margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed rgba(180, 83, 9, 0.3);">
+													<span>✓ Fallback Laravel API Berhasil: </span>
+													<a href={result.watermarked.laravelUrl} target="_blank" style="color: #0369a1; text-decoration: underline; word-break: break-all;">{result.watermarked.laravelUrl}</a>
+												</div>
+											)}
+										</div>
+									)}
+								</div>
+							</div>
+
+						</div>
+
+						{/* Alert Solusi Firebase Storage Unauthorized */}
+						{(result.raw.error?.includes("unauthorized") || result.watermarked.error?.includes("unauthorized")) && (
+							<div style="margin-top: 1.5rem; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 10px; padding: 1.25rem;">
+								<div style="display: flex; align-items: center; gap: 0.5rem; color: #be123c; font-weight: 700; font-size: 0.92rem; margin-bottom: 0.5rem;">
+									<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+									<span>Solusi Error (storage/unauthorized): Update Firebase Storage Rules</span>
+								</div>
+								<p style="font-size: 0.82rem; color: #881337; margin: 0 0 0.75rem 0; line-height: 1.5;">
+									Error ini terjadi karena <strong>Security Rules</strong> di Firebase Console masih mensyaratkan login (<code>request.auth != null</code>) atau belum mengizinkan public write.
+								</p>
+								<div style="background: #1e1e2e; color: #a6accd; padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.78rem; position: relative;">
+									<pre style="margin: 0; white-space: pre-wrap;"><code>rules_version = '2';
+service firebase.storage &#123;
+  match /b/&#123;bucket&#125;/o &#123;
+    match /products/&#123;allPaths=**&#125; &#123;
+      allow read, write: if true;
+    &#125;
+  &#125;
+&#125;</code></pre>
+								</div>
+								<div style="margin-top: 0.75rem; font-size: 0.8rem; color: #9f1239;">
+									👉 Buka <strong><a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" style="color: #be123c; font-weight: 700; text-decoration: underline;">Firebase Console</a></strong> ➜ Project: <strong>gooproper-e1983</strong> ➜ Menu <strong>Storage</strong> ➜ Tab <strong>Rules</strong> ➜ Paste aturan di atas ➜ Klik <strong>Publish</strong>.
+								</div>
+							</div>
+						)}
+
+						<!-- Engine Logs -->
+						{result.logs && result.logs.length > 0 && (
+							<div style="margin-top: 1.5rem; background: #0f172a; color: #94a3b8; padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.78rem;">
+								<div style="color: #38bdf8; font-weight: bold; margin-bottom: 0.4rem;">[Sharp & Asset Execution Logs]</div>
+								{result.logs.map((log: string) => (
+									<div>• {log}</div>
+								))}
+							</div>
+						)}
+
+					</div>
+				)
+			}
+
+		</div>
+	</section>
+
+	<style>
+		.back-btn {
+			display: flex; align-items: center; justify-content: center; width: 42px; height: 42px;
+			background: white; color: #334155; border: 1px solid #e2e8f0; border-radius: 50%;
+			box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+			text-decoration: none; flex-shrink: 0; outline: none;
+		}
+		.back-btn:hover { background: #f8fafc; border-color: #cbd5e1; color: #0f172a; transform: translateX(-2px); }
+		.page-title { font-family: var(--font-serif); font-size: 1.85rem; font-weight: 400; margin: 0; color: #0f172a; }
+		.page-subtitle { font-size: 0.85rem; opacity: 0.65; margin-top: 0.25rem; }
+
+		.status-card {
+			background: white; padding: 1rem 1.25rem; border-radius: 10px;
+			border: 1px solid #e2e8f0; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+		}
+		.badge-code { background: #f1f5f9; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.78rem; color: #0f172a; }
+
+		.grid-layout {
+			display: grid; grid-template-columns: 1.35fr 1fr; gap: 1.5rem; align-items: start;
+		}
+		@media (max-width: 900px) {
+			.grid-layout { grid-template-columns: 1fr; }
+		}
+
+		.panel-card {
+			background: white; border: 1px solid #e2e8f0; border-radius: 12px;
+			padding: 1.5rem; box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+		}
+		.panel-header { margin-bottom: 1.25rem; padding-bottom: 0.75rem; border-bottom: 1px solid #f1f5f9; }
+
+		.form-group { display: flex; flex-direction: column; gap: 0.35rem; }
+		.form-label { font-size: 0.8rem; font-weight: 600; color: #334155; }
+		.form-input {
+			padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 8px;
+			font-size: 0.88rem; outline: none; transition: border-color 0.2s;
+			background: #fafafa;
+		}
+		.form-input:focus { border-color: var(--color-accent); background: white; box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1); }
+
+		.dropzone {
+			position: relative; border: 2px dashed #cbd5e1; border-radius: 10px;
+			padding: 1.5rem 1rem; background: #fafbfc; transition: all 0.2s; cursor: pointer;
+			display: flex; align-items: center; justify-content: center; min-height: 120px;
+		}
+		.dropzone:hover, .dropzone.dragover { border-color: var(--color-accent); background: #fffdfa; }
+		.file-input-hidden { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
+
+		.slider { width: 100%; height: 6px; border-radius: 3px; background: #cbd5e1; outline: none; accent-color: var(--color-accent); }
+
+		.btn-primary {
+			background: #0f172a; color: white; border: none; border-radius: 8px;
+			font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem;
+			transition: all 0.2s;
+		}
+		.btn-primary:hover { background: #1e293b; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+		
+		.btn-subtle {
+			display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55rem 0.95rem;
+			background: white; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.82rem;
+			font-weight: 600; color: #334155; text-decoration: none; transition: all 0.2s;
+		}
+		.btn-subtle:hover { background: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
+
+		.btn-subtle-sm {
+			padding: 0.35rem 0.75rem; background: white; border: 1px solid #cbd5e1;
+			border-radius: 6px; font-size: 0.75rem; font-weight: 600; color: #334155;
+			cursor: pointer; text-decoration: none; display: inline-flex; align-items: center;
+		}
+		.btn-subtle-sm:hover { background: #f1f5f9; color: #0f172a; }
+
+		.btn-chip {
+			background: white; border: 1px solid #e2e8f0; padding: 0.4rem 0.75rem;
+			border-radius: 20px; font-size: 0.75rem; font-weight: 500; color: #475569;
+			cursor: pointer; transition: all 0.15s;
+		}
+		.btn-chip:hover { border-color: var(--color-accent); background: #fffdfa; color: #78350f; }
+
+		/* Results Styles */
+		.result-container {
+			margin-top: 2.5rem; background: white; border: 1px solid #e2e8f0;
+			border-radius: 14px; padding: 2rem; box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+		}
+		.result-header {
+			display: flex; justify-content: space-between; align-items: center;
+			flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; padding-bottom: 1rem;
+			border-bottom: 1px solid #f1f5f9;
+		}
+
+		.stats-grid {
+			display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+			gap: 1rem; margin-bottom: 2rem;
+		}
+		.stat-box {
+			background: #f8fafc; padding: 1.25rem; border-radius: 10px;
+			border: 1px solid #e2e8f0; border-top: 3px solid #94a3b8;
+		}
+		.stat-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: #64748b; }
+		.stat-value { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin: 0.25rem 0; }
+		.stat-sub { font-size: 0.78rem; color: #64748b; }
+
+		.comparison-grid {
+			display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
+		}
+		@media (max-width: 800px) {
+			.comparison-grid { grid-template-columns: 1fr; }
+		}
+
+		.preview-card {
+			background: #fcfcfc; border: 1px solid #e2e8f0; border-radius: 12px;
+			padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;
+		}
+		.preview-badge {
+			font-size: 0.8rem; font-weight: 700; padding: 0.35rem 0.75rem;
+			border-radius: 6px; text-align: center;
+		}
+
+		.img-preview-frame {
+			background: #1e293b; border-radius: 8px; overflow: hidden;
+			display: flex; align-items: center; justify-content: center;
+			min-height: 280px; max-height: 380px; border: 1px solid #cbd5e1;
+		}
+		.img-preview-frame img {
+			width: 100%; height: 100%; object-fit: contain; max-height: 380px;
+		}
+
+		.preview-details { display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.82rem; }
+		.detail-row { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+		.detail-row span:first-child { color: #64748b; }
+		.code-path { font-size: 0.72rem; background: #f1f5f9; padding: 0.15rem 0.35rem; border-radius: 4px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+		.status-tag { font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 4px; }
+		.status-tag.success { background: #dcfce7; color: #15803d; }
+		.status-tag.fail { background: #fee2e2; color: #b91c1c; }
+
+		.url-copy-box { display: flex; gap: 0.35rem; }
+		.url-input {
+			flex: 1; padding: 0.45rem 0.65rem; border: 1px solid #cbd5e1; border-radius: 6px;
+			font-size: 0.75rem; background: white; color: #334155; outline: none;
+		}
+		.btn-copy {
+			padding: 0.45rem 0.75rem; background: white; border: 1px solid #cbd5e1;
+			border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer;
+		}
+		.btn-copy:hover { background: #f1f5f9; }
+
+		.btn-open-link {
+			display: block; text-align: center; padding: 0.55rem; background: #0284c7;
+			color: white; border-radius: 6px; text-decoration: none; font-size: 0.78rem; font-weight: 600;
+			transition: opacity 0.2s;
+		}
+		.btn-open-link:hover { opacity: 0.9; }
+
+		.warning-callout {
+			background: #fffbeb; border: 1px solid #fef3c7; color: #b45309;
+			padding: 0.65rem; border-radius: 6px; font-size: 0.75rem; line-height: 1.4;
+		}
+
+		.spinner-small {
+			width: 16px; height: 16px; border: 2px solid #cbd5e1; border-top-color: #0f172a;
+			border-radius: 50%; animation: spin 0.8s linear infinite;
+		}
+		@keyframes spin { 100% { transform: rotate(360deg); } }
+
+		.alert-box {
+			padding: 0.85rem 1.25rem; border-radius: 8px; margin-bottom: 1.5rem;
+			display: flex; align-items: center; gap: 0.75rem; font-size: 0.88rem; font-weight: 500;
+		}
+		.alert-box.error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+	</style>
+
+	<script is:inline>
+		const imageInput = document.getElementById('imageInput');
+		const dropzoneContainer = document.getElementById('dropzoneContainer');
+		const dropzonePlaceholder = document.getElementById('dropzonePlaceholder');
+		const previewSelected = document.getElementById('previewSelected');
+		const selectedImgThumbnail = document.getElementById('selectedImgThumbnail');
+		const selectedImgName = document.getElementById('selectedImgName');
+		const selectedImgSize = document.getElementById('selectedImgSize');
+		const btnChangeImg = document.getElementById('btnChangeImg');
+		const testForm = document.getElementById('testForm');
+		const btnSubmit = document.getElementById('btnSubmit');
+		const processingIndicator = document.getElementById('processingIndicator');
+		const itemCodeInput = document.getElementById('itemCodeInput');
+		const customTextInput = document.getElementById('customTextInput');
+
+		if (itemCodeInput && customTextInput) {
+			itemCodeInput.addEventListener('input', (e) => {
+				if (!customTextInput.dataset.userEdited) {
+					customTextInput.value = e.target.value;
+				}
+			});
+			customTextInput.addEventListener('input', () => {
+				customTextInput.dataset.userEdited = "true";
+			});
+		}
+
+		if (imageInput) {
+			imageInput.addEventListener('change', function(e) {
+				const file = this.files[0];
+				if (file) {
+					const reader = new FileReader();
+					reader.onload = function(evt) {
+						selectedImgThumbnail.src = evt.target.result;
+						selectedImgName.innerText = file.name;
+						selectedImgSize.innerText = (file.size / 1024).toFixed(1) + " KB (" + file.type + ")";
+						dropzonePlaceholder.style.display = "none";
+						previewSelected.style.display = "flex";
+					};
+					reader.readAsDataURL(file);
+				}
+			});
+		}
+
+		if (btnChangeImg) {
+			btnChangeImg.addEventListener('click', (e) => {
+				e.stopPropagation();
+				imageInput.value = "";
+				dropzonePlaceholder.style.display = "block";
+				previewSelected.style.display = "none";
+			});
+		}
+
+		if (testForm) {
+			testForm.addEventListener('submit', () => {
+				if (btnSubmit && processingIndicator) {
+					btnSubmit.disabled = true;
+					btnSubmit.style.opacity = "0.5";
+					processingIndicator.style.display = "block";
+				}
+			});
+		}
+
+		window.fillMockup = function(code, jenis, motif) {
+			if (itemCodeInput) itemCodeInput.value = code;
+			if (customTextInput) customTextInput.value = code;
+			const jInput = document.querySelector('input[name="jenis_produk"]');
+			if (jInput) jInput.value = jenis;
+			const mInput = document.querySelector('input[name="motif_name"]');
+			if (mInput) mInput.value = motif;
+		};
+
+		window.copyToClipboard = function(inputId, btn) {
+			const input = document.getElementById(inputId);
+			if (input) {
+				input.select();
+				navigator.clipboard.writeText(input.value).then(() => {
+					const orig = btn.innerText;
+					btn.innerText = "✓ Disalin!";
+					btn.style.background = "#10b981";
+					btn.style.color = "white";
+					setTimeout(() => {
+						btn.innerText = orig;
+						btn.style.background = "white";
+						btn.style.color = "#334155";
+					}, 2000);
+				});
+			}
+		};
+
+		// Auto scroll to results if present
+		window.addEventListener('DOMContentLoaded', () => {
+			const resultSection = document.getElementById('resultSection');
+			if (resultSection) {
+				setTimeout(() => {
+					resultSection.scrollIntoView({ behavior: 'smooth' });
+				}, 100);
+			}
+		});
+	</script>
+</Layout>
