@@ -2,9 +2,9 @@
 export const prerender = false;
 import Layout from "../../layouts/Layout.astro";
 import { apiFetch, uploadToLaravel } from "../../lib/api";
+import { getWatermarkLogoBuffer, getWatermarkFontBase64 } from "../../lib/watermarkAssets";
 import DeleteConfirmModal from "../../components/DeleteConfirmModal.astro";
 import sharp from "sharp";
-import fs from "node:fs";
 
 // Check for session (Authentication Gate)
 const session = Astro.cookies.get("admin_session");
@@ -264,20 +264,12 @@ if (Astro.request.method === "POST") {
 				let raw_images: string[] = [];
 				const fromPraproduk = formData.get("from_praproduk") === "true";
 
-				// Fetch logo buffer once if needed
+				// Fetch logo buffer & font base64
 				let logoBuffer: Buffer | null = null;
 				let fontBase64 = "";
 				try {
-					// Selalu pakai logo lokal java_batik_gold.png
-					logoBuffer = fs.readFileSync(
-						process.cwd() +
-							"/public/images/java_batik_gold.png",
-					);
-					const fontBuffer = fs.readFileSync(
-						process.cwd() +
-							"/public/fonts/Roboto-Bold.ttf",
-					);
-					fontBase64 = fontBuffer.toString("base64");
+					logoBuffer = getWatermarkLogoBuffer();
+					fontBase64 = getWatermarkFontBase64();
 				} catch (e) {
 					console.error("Failed to load assets for watermark", e);
 				}

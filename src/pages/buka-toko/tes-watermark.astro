@@ -2,9 +2,8 @@
 import Layout from "../../layouts/Layout.astro";
 import { uploadToFirebase } from "../../lib/firebase";
 import { uploadToLaravel } from "../../lib/api";
+import { getWatermarkLogoBuffer, getWatermarkFontBase64 } from "../../lib/watermarkAssets";
 import sharp from "sharp";
-import fs from "fs";
-import path from "path";
 
 // Auth check
 const session = Astro.cookies.get("admin_session");
@@ -97,19 +96,10 @@ if (Astro.request.method === "POST") {
 		const logs: string[] = [];
 
 		try {
-			const logoPath = path.join(process.cwd(), "public/images/java_batik_gold.png");
-			const fontPath = path.join(process.cwd(), "public/fonts/Roboto-Bold.ttf");
-			if (fs.existsSync(logoPath)) {
-				logoBuffer = fs.readFileSync(logoPath);
-				logs.push(`Logo loaded (${logoBuffer.length} bytes)`);
-			} else {
-				logs.push(`Logo tidak ditemukan di: ${logoPath}`);
-			}
-			if (fs.existsSync(fontPath)) {
-				const fontBuf = fs.readFileSync(fontPath);
-				fontBase64 = fontBuf.toString("base64");
-				logs.push(`Font loaded (${fontBuf.length} bytes)`);
-			}
+			logoBuffer = getWatermarkLogoBuffer();
+			fontBase64 = getWatermarkFontBase64();
+			logs.push(`Logo loaded successfully (${logoBuffer.length} bytes)`);
+			logs.push(`Font loaded successfully (${fontBase64.length} chars base64)`);
 		} catch (e: any) {
 			logs.push(`Asset load error: ${e.message}`);
 		}

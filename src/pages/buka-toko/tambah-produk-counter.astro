@@ -3,9 +3,8 @@ export const prerender = false;
 import Layout from "../../layouts/Layout.astro";
 import { apiFetch, uploadToLaravel } from "../../lib/api";
 import { uploadToFirebase } from "../../lib/firebase";
+import { getWatermarkLogoBuffer, getWatermarkFontBase64 } from "../../lib/watermarkAssets";
 import sharp from "sharp";
-import fs from "node:fs";
-import path from "node:path";
 
 // Check for session (Authentication Gate)
 const session = Astro.cookies.get("admin_session");
@@ -205,22 +204,13 @@ if (Astro.request.method === "POST") {
 				}
 				if (!jenisProduk) jenisProduk = "umum";
 
-				// Fetch logo buffer once if needed
+				// Fetch logo buffer & font base64
 				let logoBuffer: Buffer | null = null;
 				let fontBase64 = "";
 				try {
-					const logoPath = path.join(process.cwd(), "public/images/java_batik_gold.png");
-					const fontPath = path.join(process.cwd(), "public/fonts/Roboto-Bold.ttf");
-					if (fs.existsSync(logoPath)) {
-						logoBuffer = fs.readFileSync(logoPath);
-						console.log(`[Watermark] Gold Logo loaded (${logoBuffer.length} bytes)`);
-					} else {
-						console.warn(`[Watermark] Logo file not found at: ${logoPath}`);
-					}
-					if (fs.existsSync(fontPath)) {
-						const fontBuffer = fs.readFileSync(fontPath);
-						fontBase64 = fontBuffer.toString("base64");
-					}
+					logoBuffer = getWatermarkLogoBuffer();
+					fontBase64 = getWatermarkFontBase64();
+					console.log(`[Watermark] Logo loaded (${logoBuffer.length} bytes), font loaded (${fontBase64.length} chars base64)`);
 				} catch (e) {
 					console.error("Failed to load assets for watermark", e);
 				}
