@@ -1058,31 +1058,23 @@ const faviconUrl = rawFavicon.includes("?")
 				.forEach((el) => revealObserver.observe(el));
 			handleHeader(); // Initial check
 
-			// Global Product Card Slider (Zara/ASOS Hover Split)
+			// Global Product Card Slider (Zara/ASOS Hover Split + Native Mobile Scroll Snap)
 			window.hoverCardSlide = function(el, targetIdx) {
 				if (!el) return;
 				const slider = el.closest('.product-image-slider');
 				if (!slider) return;
+				const track = slider.querySelector('.slider-track');
+				if (!track) return;
 				const cur = parseInt(slider.getAttribute('data-current-slide') || '0', 10);
 				if (cur === targetIdx) return;
 
-				const slides = slider.querySelectorAll('.slide-img');
 				const bars = slider.querySelectorAll('.segment-bar');
-				const count = slides.length;
+				const count = parseInt(slider.getAttribute('data-images-count') || '1', 10);
 				if (count <= 1) return;
 
-				slides.forEach((s, i) => {
-					if (i === targetIdx) {
-						s.classList.add('active');
-						s.style.display = 'block';
-						s.style.opacity = '1';
-						s.style.zIndex = '2';
-					} else {
-						s.classList.remove('active');
-						s.style.display = 'none';
-						s.style.opacity = '0';
-						s.style.zIndex = '1';
-					}
+				track.scrollTo({
+					left: targetIdx * track.clientWidth,
+					behavior: 'smooth'
 				});
 
 				bars.forEach((b, i) => {

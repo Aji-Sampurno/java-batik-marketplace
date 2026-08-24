@@ -527,7 +527,7 @@ if (cardImages.length === 0) {
 		font-size: 1.1rem;
 	}
 
-	/* Slider Styles (Zara/ASOS Hover Split) */
+	/* Slider Styles (Zara/ASOS Hover Split + Native Mobile Scroll Snap) */
 	.product-image-slider {
 		position: relative;
 		aspect-ratio: 4/5;
@@ -548,34 +548,39 @@ if (cardImages.length === 0) {
 		position: relative;
 		width: 100%;
 		height: 100%;
-		overflow: hidden;
+		display: flex;
+		overflow-x: auto;
+		overflow-y: hidden;
+		scroll-snap-type: x mandatory;
+		scroll-behavior: smooth;
+		-webkit-overflow-scrolling: touch;
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+	}
+
+	.slider-track::-webkit-scrollbar {
+		display: none;
 	}
 
 	.slide-img {
-		position: absolute;
-		inset: 0;
+		flex: 0 0 100%;
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-		opacity: 0;
-		display: none;
-		transition: opacity 0.25s ease-in-out, transform 0.35s ease;
-		pointer-events: none;
-	}
-
-	.slide-img.active {
+		scroll-snap-align: start;
+		scroll-snap-stop: always;
+		pointer-events: auto;
 		display: block !important;
 		opacity: 1 !important;
 		position: relative;
-		pointer-events: auto;
-		z-index: 2;
+		transition: transform 0.35s ease;
 	}
 
-	.product-card:hover .slide-img.active {
+	.product-card:hover .slide-img {
 		transform: scale(1.03);
 	}
 
-	/* Hover Split Overlay (Invisible clickable/hover zones) */
+	/* Hover Split Overlay (Desktop Only) */
 	.hover-segments-overlay {
 		position: absolute;
 		inset: 0;
@@ -584,13 +589,20 @@ if (cardImages.length === 0) {
 		pointer-events: auto;
 	}
 
+	@media (max-width: 768px) or (hover: none) {
+		.hover-segments-overlay {
+			display: none !important;
+			pointer-events: none !important;
+		}
+	}
+
 	.hover-segment {
 		flex: 1;
 		height: 100%;
 		cursor: pointer;
 	}
 
-	/* Segment Progress Bars (Zara/ASOS Style) */
+	/* Segment Progress Bars */
 	.segment-bars-container {
 		position: absolute;
 		bottom: 8px;
@@ -612,8 +624,8 @@ if (cardImages.length === 0) {
 
 	@media (max-width: 768px) or (hover: none) {
 		.segment-bars-container {
-			opacity: 1;
-			transform: translateY(0);
+			opacity: 1 !important;
+			transform: translateY(0) !important;
 		}
 	}
 
@@ -653,26 +665,18 @@ window.hoverCardSlide = function(el, targetIdx) {
 	if (!el) return;
 	const slider = el.closest('.product-image-slider');
 	if (!slider) return;
+	const track = slider.querySelector('.slider-track');
+	if (!track) return;
 	const cur = parseInt(slider.getAttribute('data-current-slide') || '0', 10);
 	if (cur === targetIdx) return;
 
-	const slides = slider.querySelectorAll('.slide-img');
 	const bars = slider.querySelectorAll('.segment-bar');
-	const count = slides.length;
+	const count = parseInt(slider.getAttribute('data-images-count') || '1', 10);
 	if (count <= 1) return;
 
-	slides.forEach((s, i) => {
-		if (i === targetIdx) {
-			s.classList.add('active');
-			s.style.display = 'block';
-			s.style.opacity = '1';
-			s.style.zIndex = '2';
-		} else {
-			s.classList.remove('active');
-			s.style.display = 'none';
-			s.style.opacity = '0';
-			s.style.zIndex = '1';
-		}
+	track.scrollTo({
+		left: targetIdx * track.clientWidth,
+		behavior: 'smooth'
 	});
 
 	bars.forEach((b, i) => {
@@ -682,38 +686,25 @@ window.hoverCardSlide = function(el, targetIdx) {
 	slider.setAttribute('data-current-slide', targetIdx);
 };
 
+// Global Listener for Mobile Scroll & Drag Sync
 if (!window.__productSliderTouchInitialized) {
 	window.__productSliderTouchInitialized = true;
-	let touchStartX = 0;
-	let touchStartY = 0;
 
-	document.addEventListener('touchstart', (e) => {
-		const slider = e.target.closest('.product-image-slider');
-		if (slider) {
-			touchStartX = e.touches[0].clientX;
-			touchStartY = e.touches[0].clientY;
-		}
-	}, { passive: true });
-
-	document.addEventListener('touchend', (e) => {
-		const slider = e.target.closest('.product-image-slider');
-		if (slider) {
-			const diffX = e.changedTouches[0].clientX - touchStartX;
-			const diffY = e.changedTouches[0].clientY - touchStartY;
-			if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {
-				const cur = parseInt(slider.getAttribute('data-current-slide') || '0', 10);
-				const count = parseInt(slider.getAttribute('data-images-count') || '1', 10);
-				let nextIdx = cur;
-				if (diffX < 0) {
-					nextIdx = (cur + 1) % count;
-				} else if (diffX > 0) {
-					nextIdx = (cur - 1 + count) % count;
-				}
-				if (window.hoverCardSlide) {
-					window.hoverCardSlide(slider.querySelector('.hover-segment'), nextIdx);
-				}
+	// Real-time progress bar update on horizontal swipe scroll
+	document.addEventListener('scroll', (e) => {
+		const track = e.target;
+		if (track && track.classList && track.classList.contains('slider-track')) {
+			const slider = track.closest('.product-image-slider');
+			if (!slider) return;
+			const width = track.clientWidth || 1;
+			const idx = Math.round(track.scrollLeft / width);
+			const cur = parseInt(slider.getAttribute('data-current-slide') || '0', 10);
+			if (idx !== cur) {
+				slider.setAttribute('data-current-slide', idx);
+				const bars = slider.querySelectorAll('.segment-bar');
+				bars.forEach((b, i) => b.classList.toggle('active', i === idx));
 			}
 		}
-	}, { passive: true });
+	}, { capture: true, passive: true });
 }
 </script>
