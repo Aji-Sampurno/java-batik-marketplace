@@ -22,6 +22,7 @@ export const OUTLET_ALIAS_MAP: Record<string, string> = {
   'ijen': 'Online',
   'mog 2': 'Malang, MOG lt 2',
   'gudang': 'Online',
+  'gudang i': 'Online',
 };
 
 // Daftar unik nama outlet resmi untuk filter katalog

@@ -217,24 +217,27 @@ if (Astro.request.method === "POST") {
 				}
 
 				// -------------------------------------------------------------
-				// DEDUPLICATE IMAGES BY MOTIF (Jika motif sama -> 1 gambar saja)
+				// DEDUPLICATE IMAGES BY MOTIF & SLEEVE (Jika motif & lengan sama -> 1 gambar saja)
 				// -------------------------------------------------------------
 				const motifImagesMap = new Map<string, { file: File | null, existingUrl: string }>();
 
 				variant_motif_names.forEach((motif, idx) => {
 					const file = variant_image_files[idx];
-					const existingUrl = variant_image_urls[idx] || "";
+					const rawExistingUrl = (variant_image_urls[idx] || "").trim();
+					const existingUrl = (rawExistingUrl && !rawExistingUrl.startsWith("blob:") && (rawExistingUrl.startsWith("http://") || rawExistingUrl.startsWith("https://"))) ? rawExistingUrl : "";
+					const sleeve = variant_sleeves[idx];
 					const cleanMotif = (motif || `Motif-${idx}`).trim();
+					const cleanKey = (sleeve && sleeve !== "-") ? `${cleanMotif}___${sleeve}` : cleanMotif;
 
-					if (!motifImagesMap.has(cleanMotif)) {
-						motifImagesMap.set(cleanMotif, {
+					if (!motifImagesMap.has(cleanKey)) {
+						motifImagesMap.set(cleanKey, {
 							file: (file && file.size > 0) ? file : null,
 							existingUrl
 						});
 					} else {
-						const current = motifImagesMap.get(cleanMotif)!;
+						const current = motifImagesMap.get(cleanKey)!;
 						if (!current.file && file && file.size > 0) {
-							motifImagesMap.set(cleanMotif, { file, existingUrl: current.existingUrl || existingUrl });
+							motifImagesMap.set(cleanKey, { file, existingUrl: current.existingUrl || existingUrl });
 						}
 					}
 				});
@@ -463,9 +466,11 @@ if (Astro.request.method === "POST") {
 					const motif = variant_motif_names[index] || "";
 					const counter = variant_counters[index] || variant_skus[index] || "";
 					const outlet = variant_outlets[index] || "Gudang";
-					const motifImageUrl = motifFinalUrlMap.get(motif) || variant_image_urls[index] || "";
 					const fit = variant_fits[index] || (size.includes("SF") ? "SF" : "REG");
 					const sleeve = variant_sleeves[index] && variant_sleeves[index] !== "-" ? variant_sleeves[index] : null;
+					const cleanKey = (sleeve && sleeve !== "-") ? `${motif}___${sleeve}` : motif;
+					const rawMotifImg = motifFinalUrlMap.get(cleanKey) || motifFinalUrlMap.get(motif) || variant_image_urls[index] || "";
+					const motifImageUrl = (rawMotifImg && !rawMotifImg.startsWith("blob:")) ? rawMotifImg : "";
 
 					return {
 						size_name: size,
@@ -1974,7 +1979,13 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 						img.style.display = dataUrl ? "block" : "none";
 					}
 					if (svg) svg.style.display = dataUrl ? "none" : "block";
-					if (photoHidden && dataUrl) photoHidden.value = dataUrl;
+					if (photoHidden) {
+						if (dataUrl && dataUrl.startsWith("http") && !dataUrl.startsWith("blob:")) {
+							photoHidden.value = dataUrl;
+						} else {
+							photoHidden.value = "";
+						}
+					}
 
 					// If an actual File object was provided, attach it to the row's input
 					if (file && fileInp && window.DataTransfer) {
