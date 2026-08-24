@@ -1,0 +1,851 @@
+---
+// ImageCropModal.astro
+// Universal Clean White Theme Image Cropper for Java Batik Marketplace
+// Locked 4:5 Aspect Ratio for Standard Catalog
+---
+
+<div id="image-crop-modal-overlay" class="crop-modal-overlay" style="display: none;">
+	<div class="crop-modal-container">
+		<!-- Header -->
+		<div class="crop-modal-header">
+			<div class="crop-header-left">
+				<div class="crop-icon-badge">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M6 2v14a2 2 0 0 0 2 2h14"></path>
+						<path d="M18 22V8a2 2 0 0 0-2-2H2"></path>
+					</svg>
+				</div>
+				<div>
+					<h3 class="crop-modal-title">Sesuaikan Foto Katalog (4:5)</h3>
+					<p class="crop-modal-subtitle" id="crop-queue-indicator">Rasio 4:5 • Geser foto untuk menentukan posisi & gunakan zoom jika diperlukan</p>
+				</div>
+			</div>
+			
+			<div class="crop-header-right">
+				<button type="button" class="crop-btn-close" id="crop-modal-close" title="Tutup / Batalkan">&times;</button>
+			</div>
+		</div>
+
+		<!-- Main Workspace Area (Clean, No Floating Hints Covering Image) -->
+		<div class="crop-workspace-container" id="crop-workspace-wrapper">
+			<canvas id="crop-canvas"></canvas>
+		</div>
+
+		<!-- Toolbar / Control Bar -->
+		<div class="crop-toolbar">
+			<!-- Zoom Control -->
+			<div class="crop-control-group">
+				<span class="control-label">Zoom</span>
+				<div class="zoom-slider-wrapper">
+					<button type="button" class="tool-icon-btn" id="crop-zoom-out" title="Perkecil Zoom">
+						<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+					</button>
+					<input type="range" id="crop-zoom-slider" min="1.0" max="3.0" step="0.02" value="1.0" class="crop-slider" />
+					<button type="button" class="tool-icon-btn" id="crop-zoom-in" title="Perbesar Zoom">
+						<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+					</button>
+				</div>
+			</div>
+
+			<!-- Transform Tools -->
+			<div class="crop-control-group">
+				<button type="button" class="tool-text-btn" id="crop-rotate-left" title="Putar 90° ke kiri">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+					<span>Putar Kiri</span>
+				</button>
+				<button type="button" class="tool-text-btn" id="crop-rotate-right" title="Putar 90° ke kanan">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></svg>
+					<span>Putar Kanan</span>
+				</button>
+				<button type="button" class="tool-text-btn" id="crop-reset-btn" title="Kembalikan ke Ukuran & Posisi Semula">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M3 21v-5h5"></path></svg>
+					<span>Reset</span>
+				</button>
+			</div>
+		</div>
+
+		<!-- Footer Actions -->
+		<div class="crop-modal-footer">
+			<button type="button" class="btn-crop-skip" id="crop-btn-skip">Lewati (Gunakan Foto Asli)</button>
+			<div class="footer-actions-right">
+				<button type="button" class="btn-crop-cancel" id="crop-btn-cancel">Batal</button>
+				<button type="button" class="btn-crop-apply" id="crop-btn-apply">
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+					<span id="crop-apply-text">Gunakan Hasil Crop (4:5)</span>
+				</button>
+			</div>
+		</div>
+	</div>
+</div>
+
+<style>
+	.crop-modal-overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(15, 23, 42, 0.65);
+		backdrop-filter: blur(4px);
+		-webkit-backdrop-filter: blur(4px);
+		z-index: 99999;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1rem;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 0.2s ease-in-out;
+	}
+	.crop-modal-overlay.active {
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	.crop-modal-container {
+		background: #ffffff;
+		border: 1px solid #e2e8f0;
+		border-radius: 12px;
+		width: 100%;
+		max-width: 740px;
+		max-height: 92vh;
+		display: flex;
+		flex-direction: column;
+		box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.05);
+		overflow: hidden;
+		transform: scale(0.97);
+		transition: transform 0.2s ease-in-out;
+		color: #0f172a;
+	}
+	.crop-modal-overlay.active .crop-modal-container {
+		transform: scale(1);
+	}
+
+	/* Header */
+	.crop-modal-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 1rem 1.25rem;
+		border-bottom: 1px solid #e2e8f0;
+		background: #ffffff;
+	}
+	.crop-header-left {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+	.crop-icon-badge {
+		width: 36px;
+		height: 36px;
+		border-radius: 8px;
+		background: #8c7851;
+		color: #ffffff;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
+	.crop-modal-title {
+		font-size: 0.95rem;
+		font-weight: 700;
+		color: #0f172a;
+		margin: 0;
+	}
+	.crop-modal-subtitle {
+		font-size: 0.75rem;
+		color: #64748b;
+		margin: 2px 0 0 0;
+	}
+
+	.crop-header-right {
+		display: flex;
+		align-items: center;
+	}
+	.crop-btn-close {
+		background: transparent;
+		border: none;
+		color: #64748b;
+		font-size: 1.5rem;
+		cursor: pointer;
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 6px;
+		transition: all 0.15s;
+		line-height: 1;
+	}
+	.crop-btn-close:hover {
+		background: #f1f5f9;
+		color: #0f172a;
+	}
+
+	/* Workspace */
+	.crop-workspace-container {
+		position: relative;
+		width: 100%;
+		height: 440px;
+		background: #f8fafc;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		overflow: hidden;
+		user-select: none;
+		touch-action: none;
+	}
+	#crop-canvas {
+		display: block;
+		cursor: grab;
+	}
+	#crop-canvas:active {
+		cursor: grabbing;
+	}
+
+	/* Toolbar */
+	.crop-toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.75rem 1.25rem;
+		background: #f8fafc;
+		border-top: 1px solid #e2e8f0;
+		border-bottom: 1px solid #e2e8f0;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+	}
+	.crop-control-group {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.control-label {
+		font-size: 0.75rem;
+		color: #475569;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+	.zoom-slider-wrapper {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		background: #ffffff;
+		padding: 4px 8px;
+		border-radius: 6px;
+		border: 1px solid #cbd5e1;
+	}
+	.crop-slider {
+		-webkit-appearance: none;
+		width: 120px;
+		height: 4px;
+		border-radius: 2px;
+		background: #cbd5e1;
+		outline: none;
+		cursor: pointer;
+	}
+	.crop-slider::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: #8c7851;
+		cursor: pointer;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+	}
+	.tool-icon-btn {
+		background: transparent;
+		border: none;
+		color: #64748b;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 2px;
+		border-radius: 4px;
+		transition: color 0.15s;
+	}
+	.tool-icon-btn:hover {
+		color: #0f172a;
+	}
+	.tool-text-btn {
+		background: #ffffff;
+		border: 1px solid #cbd5e1;
+		color: #334155;
+		font-size: 0.75rem;
+		font-weight: 600;
+		padding: 6px 12px;
+		border-radius: 6px;
+		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		transition: all 0.15s ease;
+	}
+	.tool-text-btn:hover {
+		background: #f1f5f9;
+		color: #0f172a;
+		border-color: #94a3b8;
+	}
+
+	/* Footer */
+	.crop-modal-footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.85rem 1.25rem;
+		background: #ffffff;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+	}
+	.btn-crop-skip {
+		background: transparent;
+		border: none;
+		color: #64748b;
+		font-size: 0.78rem;
+		font-weight: 600;
+		cursor: pointer;
+		text-decoration: underline;
+		padding: 6px 0;
+		transition: color 0.15s;
+	}
+	.btn-crop-skip:hover {
+		color: #0f172a;
+	}
+	.footer-actions-right {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+	}
+	.btn-crop-cancel {
+		background: #f1f5f9;
+		border: 1px solid #e2e8f0;
+		color: #475569;
+		font-size: 0.82rem;
+		font-weight: 600;
+		padding: 8px 16px;
+		border-radius: 6px;
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+	.btn-crop-cancel:hover {
+		background: #e2e8f0;
+		color: #0f172a;
+	}
+	.btn-crop-apply {
+		background: #8c7851;
+		border: none;
+		color: #ffffff;
+		font-size: 0.85rem;
+		font-weight: 700;
+		padding: 8px 20px;
+		border-radius: 6px;
+		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		box-shadow: 0 2px 8px rgba(140, 120, 81, 0.25);
+		transition: all 0.15s ease;
+	}
+	.btn-crop-apply:hover {
+		background: #7a6844;
+	}
+
+	@media (max-width: 640px) {
+		.crop-modal-container {
+			max-height: 98vh;
+			border-radius: 8px;
+		}
+		.crop-workspace-container {
+			height: 320px;
+		}
+		.crop-toolbar {
+			flex-direction: column;
+			align-items: stretch;
+		}
+		.crop-control-group {
+			justify-content: space-between;
+		}
+		.footer-actions-right {
+			width: 100%;
+			justify-content: flex-end;
+		}
+	}
+</style>
+
+<script is:inline>
+(function() {
+	// Universal Clean White Theme Image Cropper (Locked 4:5 Aspect Ratio)
+	let activeOverlay = null;
+	let canvas = null;
+	let ctx = null;
+	let workspace = null;
+
+	// State
+	let queue = [];
+	let currentIndex = 0;
+	let currentFile = null;
+	let currentImg = null;
+	let onDoneCallback = null;
+	let croppedResults = [];
+
+	const LOCKED_RATIO = 0.8; // Exact 4:5
+	let currentRotation = 0; // 0, 90, 180, 270
+	let baseScale = 1;       // Scale that exactly fits image to 4:5 box
+	let zoomFactor = 1.0;    // 1.0x (minimum/default) to 3.0x (max zoom)
+	let panX = 0;
+	let panY = 0;
+
+	// Dragging state
+	let isDragging = false;
+	let dragStartX = 0;
+	let dragStartY = 0;
+	let initialPanX = 0;
+	let initialPanY = 0;
+
+	// Crop box coordinates in Canvas display coordinates
+	let cropBox = { x: 0, y: 0, width: 0, height: 0 };
+
+	function initCropperElements() {
+		activeOverlay = document.getElementById('image-crop-modal-overlay');
+		canvas = document.getElementById('crop-canvas');
+		if (canvas) ctx = canvas.getContext('2d');
+		workspace = document.getElementById('crop-workspace-wrapper');
+
+		const btnClose = document.getElementById('crop-modal-close');
+		const btnCancel = document.getElementById('crop-btn-cancel');
+		const btnSkip = document.getElementById('crop-btn-skip');
+		const btnApply = document.getElementById('crop-btn-apply');
+		const btnZoomIn = document.getElementById('crop-zoom-in');
+		const btnZoomOut = document.getElementById('crop-zoom-out');
+		const zoomSlider = document.getElementById('crop-zoom-slider');
+		const btnRotateLeft = document.getElementById('crop-rotate-left');
+		const btnRotateRight = document.getElementById('crop-rotate-right');
+		const btnReset = document.getElementById('crop-reset-btn');
+
+		if (btnClose) btnClose.addEventListener('click', cancelCropping);
+		if (btnCancel) btnCancel.addEventListener('click', cancelCropping);
+		if (btnSkip) btnSkip.addEventListener('click', skipCurrentImage);
+		if (btnApply) btnApply.addEventListener('click', applyCurrentCrop);
+
+		if (btnZoomIn) {
+			btnZoomIn.addEventListener('click', () => {
+				setZoomFactor(zoomFactor + 0.1);
+			});
+		}
+		if (btnZoomOut) {
+			btnZoomOut.addEventListener('click', () => {
+				setZoomFactor(zoomFactor - 0.1);
+			});
+		}
+		if (zoomSlider) {
+			zoomSlider.addEventListener('input', (e) => {
+				setZoomFactor(parseFloat(e.target.value));
+			});
+		}
+
+		if (btnRotateLeft) {
+			btnRotateLeft.addEventListener('click', () => {
+				currentRotation = (currentRotation - 90 + 360) % 360;
+				fitImageInCropBox();
+				render();
+			});
+		}
+		if (btnRotateRight) {
+			btnRotateRight.addEventListener('click', () => {
+				currentRotation = (currentRotation + 90) % 360;
+				fitImageInCropBox();
+				render();
+			});
+		}
+		if (btnReset) {
+			btnReset.addEventListener('click', () => {
+				currentRotation = 0;
+				fitImageInCropBox();
+				render();
+			});
+		}
+
+		// Mouse & Touch Pan events
+		if (canvas) {
+			canvas.addEventListener('mousedown', onPointerDown);
+			window.addEventListener('mousemove', onPointerMove);
+			window.addEventListener('mouseup', onPointerUp);
+
+			canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+			window.addEventListener('touchmove', onPointerMove, { passive: false });
+			window.addEventListener('touchend', onPointerUp);
+
+			canvas.addEventListener('wheel', onWheel, { passive: false });
+		}
+
+		window.addEventListener('resize', () => {
+			if (activeOverlay && activeOverlay.classList.contains('active')) {
+				resizeCanvas();
+				calculateCropBox();
+				clampPanAndRender();
+			}
+		});
+	}
+
+	function setZoomFactor(val) {
+		const min = 1.0;
+		const max = 3.0;
+		zoomFactor = Math.max(min, Math.min(max, val));
+		const zoomSlider = document.getElementById('crop-zoom-slider');
+		if (zoomSlider) zoomSlider.value = zoomFactor.toFixed(2);
+		clampPanAndRender();
+	}
+
+	function onWheel(e) {
+		e.preventDefault();
+		const delta = e.deltaY < 0 ? 0.08 : -0.08;
+		setZoomFactor(zoomFactor + delta);
+	}
+
+	function onPointerDown(e) {
+		isDragging = true;
+		const pos = getEventPos(e);
+		dragStartX = pos.x;
+		dragStartY = pos.y;
+		initialPanX = panX;
+		initialPanY = panY;
+	}
+
+	function onPointerMove(e) {
+		if (!isDragging) return;
+		const pos = getEventPos(e);
+		const dx = pos.x - dragStartX;
+		const dy = pos.y - dragStartY;
+		panX = initialPanX + dx;
+		panY = initialPanY + dy;
+		clampPanAndRender();
+	}
+
+	function onPointerUp() {
+		isDragging = false;
+	}
+
+	function getEventPos(e) {
+		const rect = canvas.getBoundingClientRect();
+		const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+		const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+		return {
+			x: clientX - rect.left,
+			y: clientY - rect.top
+		};
+	}
+
+	function resizeCanvas() {
+		if (!workspace || !canvas) return;
+		const width = workspace.clientWidth;
+		const height = workspace.clientHeight;
+		canvas.width = width;
+		canvas.height = height;
+		canvas.style.width = width + 'px';
+		canvas.style.height = height + 'px';
+	}
+
+	function calculateCropBox() {
+		if (!canvas) return;
+		const padding = 20;
+		const availW = canvas.width - padding * 2;
+		const availH = canvas.height - padding * 2;
+
+		let boxW = availW;
+		let boxH = boxW / LOCKED_RATIO;
+
+		if (boxH > availH) {
+			boxH = availH;
+			boxW = boxH * LOCKED_RATIO;
+		}
+
+		cropBox = {
+			x: Math.round((canvas.width - boxW) / 2),
+			y: Math.round((canvas.height - boxH) / 2),
+			width: Math.round(boxW),
+			height: Math.round(boxH)
+		};
+	}
+
+	function getImageDimensions() {
+		if (!currentImg) return { w: 1, h: 1 };
+		const isRotated = currentRotation === 90 || currentRotation === 270;
+		return {
+			w: isRotated ? currentImg.height : currentImg.width,
+			h: isRotated ? currentImg.width : currentImg.height
+		};
+	}
+
+	function fitImageInCropBox() {
+		if (!currentImg || !cropBox.width) return;
+		const dims = getImageDimensions();
+
+		// baseScale covers the entire crop box completely
+		const scaleX = cropBox.width / dims.w;
+		const scaleY = cropBox.height / dims.h;
+		baseScale = Math.max(scaleX, scaleY);
+
+		zoomFactor = 1.0; // Reset zoom to 1.0x (original fit)
+		const zoomSlider = document.getElementById('crop-zoom-slider');
+		if (zoomSlider) {
+			zoomSlider.value = 1.0;
+		}
+
+		// Center image inside cropBox
+		panX = cropBox.x + cropBox.width / 2;
+		panY = cropBox.y + cropBox.height / 2;
+
+		clampPanAndRender();
+	}
+
+	function clampPanAndRender() {
+		if (!currentImg || !cropBox.width) return;
+		const dims = getImageDimensions();
+		const curScale = baseScale * zoomFactor;
+		const curW = dims.w * curScale;
+		const curH = dims.h * curScale;
+
+		// Strict Boundary Clamping: Image can NEVER be dragged outside crop box
+		const minPanX = cropBox.x + cropBox.width - curW / 2;
+		const maxPanX = cropBox.x + curW / 2;
+		const minPanY = cropBox.y + cropBox.height - curH / 2;
+		const maxPanY = cropBox.y + curH / 2;
+
+		panX = Math.min(maxPanX, Math.max(minPanX, panX));
+		panY = Math.min(maxPanY, Math.max(minPanY, panY));
+
+		render();
+	}
+
+	function render() {
+		if (!ctx || !canvas || !currentImg) return;
+
+		// 1. Clear background (Soft clean slate)
+		ctx.fillStyle = '#f1f5f9';
+		ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+		// 2. Draw Transformed Image
+		const curScale = baseScale * zoomFactor;
+		ctx.save();
+		ctx.translate(panX, panY);
+		ctx.rotate((currentRotation * Math.PI) / 180);
+		ctx.scale(curScale, curScale);
+		ctx.drawImage(
+			currentImg,
+			-currentImg.width / 2,
+			-currentImg.height / 2,
+			currentImg.width,
+			currentImg.height
+		);
+		ctx.restore();
+
+		// 3. Clean Dimming Mask around 4:5 Crop Box
+		ctx.save();
+		ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
+		// Top
+		ctx.fillRect(0, 0, canvas.width, cropBox.y);
+		// Bottom
+		ctx.fillRect(0, cropBox.y + cropBox.height, canvas.width, canvas.height - (cropBox.y + cropBox.height));
+		// Left
+		ctx.fillRect(0, cropBox.y, cropBox.x, cropBox.height);
+		// Right
+		ctx.fillRect(cropBox.x + cropBox.width, cropBox.y, canvas.width - (cropBox.x + cropBox.width), cropBox.height);
+		ctx.restore();
+
+		// 4. Crop Box Border & Rule of Thirds Guides
+		ctx.save();
+		ctx.strokeStyle = '#8c7851';
+		ctx.lineWidth = 2;
+		ctx.strokeRect(cropBox.x, cropBox.y, cropBox.width, cropBox.height);
+
+		// Rule of thirds grid lines
+		ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+		ctx.lineWidth = 1;
+		ctx.setLineDash([4, 4]);
+
+		const thirdW = cropBox.width / 3;
+		const thirdH = cropBox.height / 3;
+
+		// Vertical lines
+		ctx.beginPath();
+		ctx.moveTo(cropBox.x + thirdW, cropBox.y);
+		ctx.lineTo(cropBox.x + thirdW, cropBox.y + cropBox.height);
+		ctx.moveTo(cropBox.x + thirdW * 2, cropBox.y);
+		ctx.lineTo(cropBox.x + thirdW * 2, cropBox.y + cropBox.height);
+
+		// Horizontal lines
+		ctx.moveTo(cropBox.x, cropBox.y + thirdH);
+		ctx.lineTo(cropBox.x + cropBox.width, cropBox.y + thirdH);
+		ctx.moveTo(cropBox.x, cropBox.y + thirdH * 2);
+		ctx.lineTo(cropBox.x + cropBox.width, cropBox.y + thirdH * 2);
+		ctx.stroke();
+		ctx.restore();
+
+		// Corner Accents
+		drawCornerAccents(cropBox.x, cropBox.y, cropBox.width, cropBox.height);
+	}
+
+	function drawCornerAccents(x, y, w, h) {
+		const len = 16;
+		ctx.save();
+		ctx.strokeStyle = '#ffffff';
+		ctx.lineWidth = 3;
+		ctx.lineCap = 'square';
+		ctx.beginPath();
+
+		// Top-Left
+		ctx.moveTo(x, y + len); ctx.lineTo(x, y); ctx.lineTo(x + len, y);
+		// Top-Right
+		ctx.moveTo(x + w - len, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + len);
+		// Bottom-Left
+		ctx.moveTo(x, y + h - len); ctx.lineTo(x, y + h); ctx.lineTo(x + len, y + h);
+		// Bottom-Right
+		ctx.moveTo(x + w - len, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - len);
+
+		ctx.stroke();
+		ctx.restore();
+	}
+
+	function loadNextImage() {
+		if (currentIndex >= queue.length) {
+			// All images processed!
+			closeCropper();
+			if (typeof onDoneCallback === 'function') {
+				onDoneCallback(croppedResults);
+			}
+			return;
+		}
+
+		currentFile = queue[currentIndex];
+		currentRotation = 0;
+
+		const indicator = document.getElementById('crop-queue-indicator');
+		if (indicator) {
+			indicator.innerText = `Gambar ${currentIndex + 1} dari ${queue.length}: ${currentFile.name}`;
+		}
+
+		const applyBtnText = document.getElementById('crop-apply-text');
+		if (applyBtnText) {
+			if (currentIndex === queue.length - 1) {
+				applyBtnText.innerText = queue.length > 1 ? 'Selesai & Gunakan Semua' : 'Gunakan Hasil Crop (4:5)';
+			} else {
+				applyBtnText.innerText = `Gunakan & Lanjut (${currentIndex + 1}/${queue.length})`;
+			}
+		}
+
+		const reader = new FileReader();
+		reader.onload = (e) => {
+			currentImg = new Image();
+			currentImg.onload = () => {
+				resizeCanvas();
+				calculateCropBox();
+				fitImageInCropBox();
+			};
+			currentImg.src = e.target.result;
+		};
+		reader.readAsDataURL(currentFile);
+	}
+
+	function applyCurrentCrop() {
+		if (!canvas || !currentImg) return;
+
+		// Standard high resolution 4:5 export (1200 x 1500 px)
+		const outWidth = 1200;
+		const outHeight = 1500;
+
+		const outCanvas = document.createElement('canvas');
+		outCanvas.width = outWidth;
+		outCanvas.height = outHeight;
+		const outCtx = outCanvas.getContext('2d');
+
+		// Scale factors between screen cropBox and output canvas
+		const scale = outWidth / cropBox.width;
+		const curScale = baseScale * zoomFactor;
+
+		outCtx.save();
+		outCtx.translate((panX - cropBox.x) * scale, (panY - cropBox.y) * scale);
+		outCtx.rotate((currentRotation * Math.PI) / 180);
+		outCtx.scale(curScale * scale, curScale * scale);
+
+		outCtx.drawImage(
+			currentImg,
+			-currentImg.width / 2,
+			-currentImg.height / 2,
+			currentImg.width,
+			currentImg.height
+		);
+		outCtx.restore();
+
+		const mimeType = currentFile.type === 'image/png' ? 'image/png' : 'image/jpeg';
+		const quality = 0.92;
+
+		outCanvas.toBlob((blob) => {
+			if (blob) {
+				const croppedFile = new File([blob], currentFile.name, {
+					type: mimeType,
+					lastModified: Date.now()
+				});
+				croppedResults.push(croppedFile);
+			} else {
+				croppedResults.push(currentFile);
+			}
+
+			currentIndex++;
+			loadNextImage();
+		}, mimeType, quality);
+	}
+
+	function skipCurrentImage() {
+		if (currentFile) {
+			currentFile._skipCrop = true;
+			croppedResults.push(currentFile);
+		}
+		currentIndex++;
+		loadNextImage();
+	}
+
+	function cancelCropping() {
+		closeCropper();
+		if (typeof onDoneCallback === 'function') {
+			onDoneCallback(null);
+		}
+	}
+
+	function openCropper(files, callback) {
+		if (!files || files.length === 0) return;
+		if (!activeOverlay) initCropperElements();
+
+		queue = Array.from(files).filter(f => f.type.startsWith('image/'));
+		if (queue.length === 0) return;
+
+		currentIndex = 0;
+		croppedResults = [];
+		onDoneCallback = callback;
+
+		activeOverlay.style.display = 'flex';
+		void activeOverlay.offsetWidth;
+		activeOverlay.classList.add('active');
+		document.body.style.overflow = 'hidden';
+
+		loadNextImage();
+	}
+
+	function closeCropper() {
+		if (!activeOverlay) return;
+		activeOverlay.classList.remove('active');
+		setTimeout(() => {
+			activeOverlay.style.display = 'none';
+			document.body.style.overflow = '';
+			currentImg = null;
+			currentFile = null;
+			queue = [];
+		}, 200);
+	}
+
+	// Expose globally
+	window.openImageCropper = openCropper;
+
+	document.addEventListener('DOMContentLoaded', initCropperElements);
+	document.addEventListener('astro:page-load', initCropperElements);
+})();
+</script>

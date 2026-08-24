@@ -3,6 +3,7 @@ import Layout from "../../layouts/Layout.astro";
 import { uploadToFirebase } from "../../lib/firebase";
 import { uploadToLaravel } from "../../lib/api";
 import { getWatermarkLogoBuffer, getWatermarkFontBase64 } from "../../lib/watermarkAssets";
+import ImageCropModal from "../../components/ImageCropModal.astro";
 import sharp from "sharp";
 
 // Auth check
@@ -849,16 +850,43 @@ service firebase.storage &#123;
 		if (imageInput) {
 			imageInput.addEventListener('change', function(e) {
 				const file = this.files[0];
-				if (file) {
-					const reader = new FileReader();
-					reader.onload = function(evt) {
-						selectedImgThumbnail.src = evt.target.result;
-						selectedImgName.innerText = file.name;
-						selectedImgSize.innerText = (file.size / 1024).toFixed(1) + " KB (" + file.type + ")";
-						dropzonePlaceholder.style.display = "none";
-						previewSelected.style.display = "flex";
-					};
-					reader.readAsDataURL(file);
+				if (file && !file._isCropped) {
+					if (typeof window.openImageCropper === 'function') {
+						window.openImageCropper([file], (croppedFiles) => {
+							if (croppedFiles && croppedFiles.length > 0) {
+								const croppedFile = croppedFiles[0];
+								croppedFile._isCropped = true;
+
+								const dt = new DataTransfer();
+								dt.items.add(croppedFile);
+								imageInput.files = dt.files;
+
+								const reader = new FileReader();
+								reader.onload = function(evt) {
+									selectedImgThumbnail.src = evt.target.result;
+									selectedImgName.innerText = croppedFile.name + (croppedFile._skipCrop ? "" : " (Tercrop 4:5)");
+									selectedImgSize.innerText = (croppedFile.size / 1024).toFixed(1) + " KB (" + croppedFile.type + ")";
+									dropzonePlaceholder.style.display = "none";
+									previewSelected.style.display = "flex";
+								};
+								reader.readAsDataURL(croppedFile);
+							} else {
+								imageInput.value = "";
+								dropzonePlaceholder.style.display = "block";
+								previewSelected.style.display = "none";
+							}
+						});
+					} else {
+						const reader = new FileReader();
+						reader.onload = function(evt) {
+							selectedImgThumbnail.src = evt.target.result;
+							selectedImgName.innerText = file.name;
+							selectedImgSize.innerText = (file.size / 1024).toFixed(1) + " KB (" + file.type + ")";
+							dropzonePlaceholder.style.display = "none";
+							previewSelected.style.display = "flex";
+						};
+						reader.readAsDataURL(file);
+					}
 				}
 			});
 		}
@@ -919,4 +947,5 @@ service firebase.storage &#123;
 			}
 		});
 	</script>
+	<ImageCropModal />
 </Layout>

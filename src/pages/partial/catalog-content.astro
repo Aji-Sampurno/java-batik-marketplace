@@ -2,6 +2,7 @@
 export const prerender = false;
 import { apiFetch } from "../../lib/api";
 import ProductCard from "../../components/ProductCard.astro";
+import { KNOWN_OUTLET_LIST, matchOutlet } from "../../lib/outlet";
 
 const { searchParams } = Astro.url;
 const typeFilter = searchParams.get("type");
@@ -9,6 +10,7 @@ const motifFilter = searchParams.get("motif");
 const sizeFilter = searchParams.get("size"); 
 const fitFilter = searchParams.get("fit");
 const colorFilter = searchParams.get("color");
+const outletFilter = searchParams.get("outlet");
 const searchQuery = searchParams.get("q");
 const minPrice = searchParams.get("minP")
 	? Number(searchParams.get("minP"))
@@ -26,7 +28,7 @@ const getSortUrl = (newSort: string) => {
 };
 
 const hasActiveFilters = Boolean(
-	typeFilter || motifFilter || sizeFilter || fitFilter || colorFilter || searchQuery || minPrice || maxPrice
+	typeFilter || motifFilter || sizeFilter || fitFilter || colorFilter || outletFilter || searchQuery || minPrice || maxPrice
 );
 
 const getClearFilterUrl = (paramToRemove: string) => {
@@ -154,6 +156,19 @@ try {
 		const realSizeFilter = (sizeFilter && !sizeFilter.includes("%")) ? sizeFilter.trim().toUpperCase() : null;
 
 		const filterProduct = (p: any) => {
+			if (outletFilter) {
+				const pOutlet = (p.outlet || p.outlet_location || "").trim();
+				const variants = p.variants || p.product_variants || [];
+				const matchesOutlet = (
+					(pOutlet && matchOutlet(pOutlet, outletFilter)) ||
+					variants.some((v: any) => {
+						const vOutlet = (v.outlet || v.outlet_location || v.counter_name || "").trim();
+						return vOutlet && matchOutlet(vOutlet, outletFilter);
+					})
+				);
+				if (!matchesOutlet) return false;
+			}
+
 			if (!fitFilter && !realSizeFilter) return true;
 			const variants = p.variants || p.product_variants || [];
 			if (variants.length === 0) {
@@ -420,6 +435,58 @@ try {
 								</span>
 							</a>
 						))
+				}
+			</div>
+		</details>
+
+		<!-- Lokasi Outlet Filter -->
+		<details open class="filter-group">
+			<summary
+				style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; list-style: none; outline: none;"
+			>
+				<span
+					class="text-uppercase"
+					style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;"
+					>Lokasi Outlet</span
+				>
+				<svg
+					class="chevron"
+					width="12"
+					height="12"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					style="opacity: 0.5; transition: transform 0.3s ease;"
+					><polyline points="6 9 12 15 18 9"
+					></polyline></svg
+				>
+			</summary>
+			<div
+				style="display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0.6rem 0 1rem 0;"
+			>
+				<a
+					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), outlet: "", page: "1" })}`}
+					class={!outletFilter ? "active-chip" : "chip"}
+					style="font-size: 0.7rem;"
+				>
+					Semua Outlet
+				</a>
+				{
+					KNOWN_OUTLET_LIST.map((outName) => {
+						const isActive = outletFilter && outletFilter.toLowerCase() === outName.toLowerCase();
+						return (
+							<a
+								href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), outlet: outName, page: "1" })}`}
+								class={isActive ? "active-chip" : "chip"}
+								style="font-size: 0.7rem; display: inline-flex; align-items: center; gap: 0.25rem;"
+							>
+								<span>📍</span> {outName}
+							</a>
+						);
+					})
 				}
 			</div>
 		</details>
@@ -739,6 +806,12 @@ try {
 				{colorFilter && (
 					<a href={getClearFilterUrl("color")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
 						Warna: <strong>{colorFilter}</strong>
+						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
+					</a>
+				)}
+				{outletFilter && (
+					<a href={getClearFilterUrl("outlet")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #0369a1; text-decoration: none; font-weight: 600;">
+						Outlet: <strong>📍 {outletFilter}</strong>
 						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
 					</a>
 				)}

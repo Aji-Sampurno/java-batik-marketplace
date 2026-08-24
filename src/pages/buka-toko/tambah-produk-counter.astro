@@ -4,6 +4,7 @@ import Layout from "../../layouts/Layout.astro";
 import { apiFetch, uploadToLaravel } from "../../lib/api";
 import { uploadToFirebase } from "../../lib/firebase";
 import { getWatermarkLogoBuffer, getWatermarkFontBase64 } from "../../lib/watermarkAssets";
+import ImageCropModal from "../../components/ImageCropModal.astro";
 import sharp from "sharp";
 
 // Check for session (Authentication Gate)
@@ -1643,6 +1644,18 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			document.body.appendChild(modal);
 		}
 
+		function getRowPhotoGroupKey(row) {
+			if (!row) return "Motif A";
+			const motifSelect = row.querySelector(".v-motif-select");
+			const motifName = motifSelect?.value || "Motif A";
+			const sleeveSelect = row.querySelector(".v-sleeve-select");
+			const sleeveVal = sleeveSelect?.value || "";
+			if (sleeveVal && sleeveVal !== "-") {
+				return `${motifName}___${sleeveVal}`;
+			}
+			return motifName;
+		}
+
 		let activeTargetMotif = null;
 
 		function renderMotifPhotoCards() {
@@ -1650,38 +1663,60 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			if (!cardsContainer) return;
 			cardsContainer.innerHTML = "";
 
-			const motifsMap = new Map();
+			const groupsMap = new Map();
 			document.querySelectorAll(".counter-table-row").forEach(row => {
 				const isChecked = row.querySelector(".v-counter-cb")?.checked;
 				if (!isChecked) return;
 				const motifSelect = row.querySelector(".v-motif-select");
 				const motifName = motifSelect?.value || "Motif A";
+				const sleeveSelect = row.querySelector(".v-sleeve-select");
+				const sleeveVal = sleeveSelect?.value || "";
+				const sizeSelect = row.querySelector(".v-size-select");
+				const sizeVal = sizeSelect?.value || "";
 				const counterCode = row.getAttribute("data-counter") || "CTR";
 				const outletName = row.getAttribute("data-outlet") || "";
 
-				if (!motifsMap.has(motifName)) {
-					motifsMap.set(motifName, []);
+				const key = getRowPhotoGroupKey(row);
+				let sleeveLabel = "";
+				if (sleeveVal && sleeveVal !== "-") {
+					sleeveLabel = sleeveVal.toLowerCase().includes("lengan") ? sleeveVal : `Lengan ${sleeveVal}`;
 				}
-				motifsMap.get(motifName).push(`${counterCode} (${outletName})`);
+
+				if (!groupsMap.has(key)) {
+					groupsMap.set(key, {
+						key: key,
+						motifName: motifName,
+						sleeve: sleeveVal,
+						sleeveLabel: sleeveLabel,
+						counters: []
+					});
+				}
+				const sizeText = sizeVal ? ` (${sizeVal})` : '';
+				groupsMap.get(key).counters.push(`${counterCode}${sizeText} [${outletName}]`);
 			});
 
-			if (motifsMap.size === 0) {
+			if (groupsMap.size === 0) {
 				cardsContainer.innerHTML = `<div style="font-size: 0.75rem; color: #94a3b8; font-style: italic; padding: 0.5rem 0;">Belum ada counter yang dipilih.</div>`;
 				return;
 			}
 
-			// Set default active target motif if not set
-			if (!activeTargetMotif || !motifsMap.has(activeTargetMotif)) {
-				activeTargetMotif = motifsMap.keys().next().value || null;
+			// Set default active target motif/key if not set
+			if (!activeTargetMotif || !groupsMap.has(activeTargetMotif)) {
+				activeTargetMotif = groupsMap.keys().next().value || null;
 			}
 
-			motifsMap.forEach((counters, motifName) => {
-				const currentStore = motifPhotoStore.get(motifName) || { file: null, previewUrl: "", isCustom: false };
-				const isCurrentlyActive = activeTargetMotif === motifName;
+			groupsMap.forEach((groupData, key) => {
+				const motifName = groupData.motifName;
+				const sleeveLabel = groupData.sleeveLabel;
+				const counters = groupData.counters;
+
+				const currentStore = motifPhotoStore.get(key) || motifPhotoStore.get(motifName) || { file: null, previewUrl: "", isCustom: false };
+				const isCurrentlyActive = activeTargetMotif === key;
 
 				const card = document.createElement("div");
 				card.className = "motif-photo-card";
 				card.tabIndex = 0;
+				card.dataset.key = key;
 				card.dataset.motif = motifName;
 				card.style.cssText = `
 					display: flex;
@@ -1697,6 +1732,8 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					cursor: default;
 					outline: none;
 				`;
+
+				const titleDisplay = sleeveLabel ? `${motifName} — ${sleeveLabel}` : motifName;
 
 				card.innerHTML = `
 					<!-- Preview Thumbnail / Drop Area -->
@@ -1718,7 +1755,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					<!-- Details & Upload Button -->
 					<div style="flex: 1; display: flex; flex-direction: column; gap: 4px; overflow: hidden;">
 						<div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
-							<strong style="font-size: 0.85rem; color: #0f172a;">${motifName}</strong>
+							<strong style="font-size: 0.85rem; color: #0f172a;">${titleDisplay}</strong>
 							<span style="font-size: 0.65rem; font-weight: 700; color: ${currentStore.isCustom ? '#16a34a' : '#0284c7'}; background: ${currentStore.isCustom ? '#dcfce7' : '#e0f2fe'}; padding: 1px 6px; border-radius: 4px;">
 								${currentStore.isCustom ? '✓ Watermark Siap' : 'Foto POS'}
 							</span>
@@ -1747,16 +1784,16 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 
 				// Connect Focus / Active Target
 				const setCardActive = () => {
-					activeTargetMotif = motifName;
+					activeTargetMotif = key;
 					document.querySelectorAll(".motif-photo-card").forEach(c => {
-						const isTarget = c.getAttribute("data-motif") === motifName;
+						const isTarget = c.getAttribute("data-key") === key;
 						c.style.background = isTarget ? '#f0f9ff' : '#ffffff';
 						c.style.borderColor = isTarget ? '#0284c7' : '#cbd5e1';
 					});
 				};
 
 				card.addEventListener("focus", setCardActive);
-				card.addEventListener("mouseenter", () => { activeTargetMotif = motifName; });
+				card.addEventListener("mouseenter", () => { activeTargetMotif = key; });
 				card.addEventListener("click", (e) => {
 					const target = e.target;
 					if (target && !target.closest(".m-card-thumb") && !target.closest("button")) {
@@ -1795,11 +1832,26 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					fileInp.addEventListener("change", () => {
 						if (fileInp.files && fileInp.files[0]) {
 							const file = fileInp.files[0];
-							uploadBtn.innerHTML = "⏳ Memproses...";
-							uploadBtn.disabled = true;
-							createWatermarkedDataUrl(file, (watermarkedUrl, processedFile) => {
-								syncPhotosForMotif(motifName, watermarkedUrl || "", processedFile || file);
-							});
+							if (typeof window.openImageCropper === 'function') {
+								window.openImageCropper([file], (croppedFiles) => {
+									if (!croppedFiles || croppedFiles.length === 0) {
+										fileInp.value = "";
+										return;
+									}
+									const targetFile = croppedFiles[0];
+									uploadBtn.innerHTML = "⏳ Memproses...";
+									uploadBtn.disabled = true;
+									createWatermarkedDataUrl(targetFile, (watermarkedUrl, processedFile) => {
+										syncPhotosForGroup(key, watermarkedUrl || "", processedFile || targetFile);
+									});
+								});
+							} else {
+								uploadBtn.innerHTML = "⏳ Memproses...";
+								uploadBtn.disabled = true;
+								createWatermarkedDataUrl(file, (watermarkedUrl, processedFile) => {
+									syncPhotosForGroup(key, watermarkedUrl || "", processedFile || file);
+								});
+							}
 						}
 					});
 				}
@@ -1833,13 +1885,27 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					if (dt && dt.files && dt.files.length > 0) {
 						const file = dt.files[0];
 						if (file.type.startsWith('image/')) {
-							if (uploadBtn) {
-								uploadBtn.innerHTML = "⏳ Memproses...";
-								uploadBtn.disabled = true;
+							if (typeof window.openImageCropper === 'function') {
+								window.openImageCropper([file], (croppedFiles) => {
+									if (!croppedFiles || croppedFiles.length === 0) return;
+									const targetFile = croppedFiles[0];
+									if (uploadBtn) {
+										uploadBtn.innerHTML = "⏳ Memproses...";
+										uploadBtn.disabled = true;
+									}
+									createWatermarkedDataUrl(targetFile, (watermarkedUrl, processedFile) => {
+										syncPhotosForGroup(key, watermarkedUrl || "", processedFile || targetFile);
+									});
+								});
+							} else {
+								if (uploadBtn) {
+									uploadBtn.innerHTML = "⏳ Memproses...";
+									uploadBtn.disabled = true;
+								}
+								createWatermarkedDataUrl(file, (watermarkedUrl, processedFile) => {
+									syncPhotosForGroup(key, watermarkedUrl || "", processedFile || file);
+								});
 							}
-							createWatermarkedDataUrl(file, (watermarkedUrl, processedFile) => {
-								syncPhotosForMotif(motifName, watermarkedUrl || "", processedFile || file);
-							});
 						}
 					}
 				}, false);
@@ -1850,6 +1916,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 		window.addEventListener("paste", (e) => {
 			const activeEl = document.activeElement;
 			const isTextInput = activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA") && activeEl.type === "text";
+			if (isTextInput) return;
 
 			const items = e.clipboardData?.items;
 			if (!items) return;
@@ -1863,30 +1930,40 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			}
 
 			if (imageFile) {
-				const targetMotif = activeTargetMotif || (motifPhotoStore.keys().next().value || "Motif A");
-				if (targetMotif) {
+				const targetGroup = activeTargetMotif || (motifPhotoStore.keys().next().value || "Motif A");
+				if (targetGroup) {
 					e.preventDefault();
-					createWatermarkedDataUrl(imageFile, (watermarkedUrl, processedFile) => {
-						syncPhotosForMotif(targetMotif, watermarkedUrl || "", processedFile || imageFile);
-					});
+					if (typeof window.openImageCropper === 'function') {
+						window.openImageCropper([imageFile], (croppedFiles) => {
+							if (!croppedFiles || croppedFiles.length === 0) return;
+							const targetFile = croppedFiles[0];
+							createWatermarkedDataUrl(targetFile, (watermarkedUrl, processedFile) => {
+								syncPhotosForGroup(targetGroup, watermarkedUrl || "", processedFile || targetFile);
+							});
+						});
+					} else {
+						createWatermarkedDataUrl(imageFile, (watermarkedUrl, processedFile) => {
+							syncPhotosForGroup(targetGroup, watermarkedUrl || "", processedFile || imageFile);
+						});
+					}
 				}
 			}
 		});
 
-		function syncPhotosForMotif(motifName, dataUrl, file) {
-			motifPhotoStore.set(motifName, {
+		function syncPhotosForGroup(groupKey, dataUrl, file) {
+			motifPhotoStore.set(groupKey, {
 				file: file || null,
 				previewUrl: dataUrl,
 				isCustom: !!file
 			});
 
-			// 1. Re-render all motif photo cards so the card preview immediately updates!
+			// 1. Re-render all photo cards
 			renderMotifPhotoCards();
 
-			// 2. Update all counter variant rows with this motif
+			// 2. Update all counter variant rows matching this groupKey
 			document.querySelectorAll(".counter-table-row").forEach(row => {
-				const rowMotif = row.querySelector(".v-motif-select")?.value;
-				if (rowMotif === motifName) {
+				const rowKey = getRowPhotoGroupKey(row);
+				if (rowKey === groupKey) {
 					const img = row.querySelector(".v-preview-img");
 					const svg = row.querySelector(".v-placeholder-svg");
 					const photoHidden = row.querySelector(".v-photo-url-hidden");
@@ -2005,7 +2082,16 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				const photoUrl = photoFile ? (BASE_PHOTO_URL + photoFile) : "";
 				const photoFallback = photoFile ? (BASE_PHOTO_URL_FALLBACK + photoFile) : "";
 
+				const photoGroupKey = (initialSleeve && initialSleeve !== "-") ? `${motifLetter}___${initialSleeve}` : motifLetter;
+
 				// Save initial POS photo to store if empty
+				if (!motifPhotoStore.has(photoGroupKey)) {
+					motifPhotoStore.set(photoGroupKey, {
+						file: null,
+						previewUrl: photoUrl || photoFallback,
+						isCustom: false
+					});
+				}
 				if (!motifPhotoStore.has(motifLetter)) {
 					motifPhotoStore.set(motifLetter, {
 						file: null,
@@ -2014,7 +2100,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					});
 				}
 
-				const currentPhoto = motifPhotoStore.get(motifLetter)?.previewUrl || photoUrl;
+				const currentPhoto = motifPhotoStore.get(photoGroupKey)?.previewUrl || motifPhotoStore.get(motifLetter)?.previewUrl || photoUrl;
 
 				const row = document.createElement("div");
 				row.className = "counter-table-row";
@@ -2162,13 +2248,13 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 
 				if (thumbBox) {
 					thumbBox.addEventListener("click", () => {
-						const currentMotif = motifSelect?.value || "Motif A";
-						const store = motifPhotoStore.get(currentMotif);
+						const groupKey = getRowPhotoGroupKey(row);
+						const store = motifPhotoStore.get(groupKey) || motifPhotoStore.get(motifSelect?.value);
 						if (store && store.previewUrl) {
 							showFullscreenImageModal(store.previewUrl);
 						} else {
-							activeTargetMotif = currentMotif;
-							const card = document.querySelector(`.motif-photo-card[data-motif="${currentMotif}"]`);
+							activeTargetMotif = groupKey;
+							const card = document.querySelector(`.motif-photo-card[data-key="${groupKey}"]`) || document.querySelector(`.motif-photo-card[data-motif="${motifSelect?.value}"]`);
 							if (card) {
 								card.scrollIntoView({ behavior: 'smooth', block: 'center' });
 								const cardFileInp = card.querySelector(".m-card-file-input");
@@ -2204,6 +2290,13 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					updateRowVariantName(row);
 					renderMotifPhotoCards();
 				});
+
+				if (sleeveSelect) {
+					sleeveSelect.addEventListener("change", () => {
+						updateRowVariantName(row);
+						renderMotifPhotoCards();
+					});
+				}
 
 				sizeSelect.addEventListener("change", () => updateRowVariantName(row));
 				if (fitSelect) fitSelect.addEventListener("change", () => updateRowVariantName(row));
@@ -2640,11 +2733,6 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			document.getElementById("btnApplySameSleeve")?.addEventListener("click", () => {
 				const selectedSleeve = document.getElementById("globalBatchSleeveSelect")?.value;
 				if (!selectedSleeve) return;
-				const checkedRows = getCheckedCounterRows();
-				if (checkedRows.length === 0) {
-					alert("Silakan centang [✓] varian counter yang ingin diubah terlebih dahulu.");
-					return;
-				}
 				checkedRows.forEach(row => {
 					const select = row.querySelector(".v-sleeve-select");
 					if (select) {
@@ -2870,13 +2958,13 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 
 				if (thumbBox) {
 					thumbBox.addEventListener("click", () => {
-						const currentMotif = motifSelect?.value || "Motif A";
-						const store = motifPhotoStore.get(currentMotif);
+						const groupKey = getRowPhotoGroupKey(row);
+						const store = motifPhotoStore.get(groupKey) || motifPhotoStore.get(motifSelect?.value);
 						if (store && store.previewUrl) {
 							showFullscreenImageModal(store.previewUrl);
 						} else {
-							activeTargetMotif = currentMotif;
-							const card = document.querySelector(`.motif-photo-card[data-motif="${currentMotif}"]`);
+							activeTargetMotif = groupKey;
+							const card = document.querySelector(`.motif-photo-card[data-key="${groupKey}"]`) || document.querySelector(`.motif-photo-card[data-motif="${motifSelect?.value}"]`);
 							if (card) {
 								card.scrollIntoView({ behavior: 'smooth', block: 'center' });
 								const cardFileInp = card.querySelector(".m-card-file-input");
@@ -2912,6 +3000,13 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					updateRowVariantName(row);
 					renderMotifPhotoCards();
 				});
+
+				if (sleeveSelect) {
+					sleeveSelect.addEventListener("change", () => {
+						updateRowVariantName(row);
+						renderMotifPhotoCards();
+					});
+				}
 
 				sizeSelect.addEventListener("change", () => updateRowVariantName(row));
 				if (fitSelect) fitSelect.addEventListener("change", () => updateRowVariantName(row));
@@ -3230,12 +3325,13 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					document.querySelectorAll(".counter-table-row").forEach(row => {
 						const isChecked = row.querySelector(".v-counter-cb")?.checked;
 						if (!isChecked) return;
+						const key = getRowPhotoGroupKey(row);
 						const motif = row.querySelector(".v-motif-select")?.value;
 						const fileInp = row.querySelector(".v-row-file-input");
 						const photoHidden = row.querySelector(".v-photo-url-hidden");
 
-						if (motif && motifPhotoStore.has(motif)) {
-							const data = motifPhotoStore.get(motif);
+						const data = (key && motifPhotoStore.has(key)) ? motifPhotoStore.get(key) : (motif && motifPhotoStore.has(motif) ? motifPhotoStore.get(motif) : null);
+						if (data) {
 							if (data.file && fileInp && window.DataTransfer) {
 								try {
 									const dt = new DataTransfer();
@@ -3273,4 +3369,5 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 		setupDescGenerator();
 		setupFormSubmitLoading();
 	</script>
+	<ImageCropModal />
 </Layout>

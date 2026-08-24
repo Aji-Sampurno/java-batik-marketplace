@@ -9,6 +9,7 @@ const motifFilter = searchParams.get("motif");
 const sizeFilter = searchParams.get("size");
 const fitFilter = searchParams.get("fit");
 const colorFilter = searchParams.get("color");
+const outletFilter = searchParams.get("outlet");
 const minPrice = searchParams.get("minP")
 	? Number(searchParams.get("minP"))
 	: null;
@@ -86,6 +87,15 @@ const sort = searchParams.get("sort") || "newest";
 										type="hidden"
 										name="color"
 										value={colorFilter}
+									/>
+								)
+							}
+							{
+								outletFilter && (
+									<input
+										type="hidden"
+										name="outlet"
+										value={outletFilter}
 									/>
 								)
 							}

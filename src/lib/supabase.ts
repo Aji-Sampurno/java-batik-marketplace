@@ -13,8 +13,8 @@ const isConfigured = supabaseUrl &&
 if (isConfigured) {
   try {
     supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
-  } catch (e) {
-    console.error("Supabase client failed to initialize:", e.message);
+  } catch (e: any) {
+    console.error("Supabase client failed to initialize:", e?.message || e);
   }
 }
 

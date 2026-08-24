@@ -3,6 +3,7 @@ export const prerender = false;
 import Layout from "../../../layouts/Layout.astro";
 import { apiFetch, uploadToLaravel } from "../../../lib/api";
 import DeleteConfirmModal from "../../../components/DeleteConfirmModal.astro";
+import ImageCropModal from "../../../components/ImageCropModal.astro";
 
 // Check for session (Authentication Gate)
 const session = Astro.cookies.get("admin_session");
@@ -791,6 +792,7 @@ if (Astro.request.method === "POST") {
 		</div>
 	</section>
 	<DeleteConfirmModal />
+	<ImageCropModal />
 </Layout>
 
 <style is:global>
@@ -1573,10 +1575,8 @@ if (Astro.request.method === "POST") {
 	const previewContainerEdit = document.getElementById("image_upload_preview");
 
 	if (imageFileInputEdit && previewContainerEdit) {
-		imageFileInputEdit.addEventListener("change", function () {
+		function renderEditPreviews(files) {
 			previewContainerEdit.innerHTML = "";
-			const files = Array.from(this.files);
-
 			files.forEach((file) => {
 				if (!file.type.startsWith("image/")) return;
 
@@ -1635,6 +1635,30 @@ if (Astro.request.method === "POST") {
 				};
 				reader.readAsDataURL(file);
 			});
+		}
+
+		imageFileInputEdit.addEventListener("change", function () {
+			const files = Array.from(this.files);
+			if (files.length === 0) return;
+
+			if (files.some(f => !f._isCropped) && typeof window.openImageCropper === 'function') {
+				window.openImageCropper(files, (croppedFiles) => {
+					if (croppedFiles && croppedFiles.length > 0) {
+						croppedFiles.forEach(f => f._isCropped = true);
+						try {
+							const dt = new DataTransfer();
+							croppedFiles.forEach(f => dt.items.add(f));
+							imageFileInputEdit.files = dt.files;
+						} catch (err) {}
+						renderEditPreviews(croppedFiles);
+					} else {
+						imageFileInputEdit.value = "";
+						previewContainerEdit.innerHTML = "";
+					}
+				});
+			} else {
+				renderEditPreviews(files);
+			}
 		});
 
 		document.addEventListener("change", (e) => {

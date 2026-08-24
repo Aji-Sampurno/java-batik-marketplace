@@ -198,7 +198,7 @@ let parsedVariantsList = variants.map((v: any) => {
     displayLabel = `${motifName} - ${baseSize}`;
   }
 
-  let rawOutlet = (v.outlet || v.outlet_location || v.counter_name || v.counter || product.outlet_location || product.counter || '').trim();
+  let rawOutlet = (v.outlet || v.outlet_location || v.counter_name || product.outlet_location || '').trim();
   let outletAlias = rawOutlet ? getOutletAlias(rawOutlet) : '';
 
   return {
@@ -210,7 +210,7 @@ let parsedVariantsList = variants.map((v: any) => {
     subName,
     isSF,
     motifImage,
-    outlet: outletAlias || rawOutlet
+    outlet: outletAlias || (rawOutlet && !/^\d+$/.test(rawOutlet) ? rawOutlet : '')
   };
 });
 
@@ -218,8 +218,7 @@ const variantMotifsList = [...new Set(parsedVariantsList.map((v: any) => v.motif
 
 const rawAllOutlets = [
   product.outlet_location,
-  product.counter,
-  ...(variants || []).map((v: any) => v.outlet || v.outlet_location || v.counter_name || v.counter)
+  ...(variants || []).map((v: any) => v.outlet || v.outlet_location || v.counter_name)
 ].filter(Boolean);
 
 const uniqueOutletsList = [...new Set(rawAllOutlets.map(o => getOutletAlias(o)).filter(Boolean))];
@@ -292,45 +291,95 @@ parsedVariantsList.forEach((v: any) => {
   sizeStockMap[v.baseSize] = (sizeStockMap[v.baseSize] || 0) + stock;
 });
 
-// Group unique (motif, baseSize) for clean size chips display
-interface UniqueMotifSize {
+const allProductSleeves = [...new Set(parsedVariantsList.map((v: any) => v.sleeve).filter(Boolean))];
+const uniqueMotifsList = [...new Set(parsedVariantsList.map((v: any) => v.motifName).filter(Boolean))];
+
+// Group unique sleeves (motif, sleeve)
+interface UniqueMotifSleeve {
   motifName: string;
-  baseSize: string;
+  sleeve: string;
+  sleeveLabel: string;
   totalStock: number;
-  motifImage: string;
+  sleeveImage: string;
   isOutOfStock: boolean;
 }
 
-const motifSizeMap = new Map<string, UniqueMotifSize>();
+const motifSleeveMap = new Map<string, UniqueMotifSleeve>();
 parsedVariantsList.forEach((v: any) => {
   const mName = v.motifName || '';
-  const bSize = v.baseSize || 'ALL SIZE';
-  const key = `${mName}___${bSize}`;
+  const sleeveVal = v.sleeve || '';
+  if (!sleeveVal) return;
+  const key = `${mName}___${sleeveVal}`;
   const stockNum = parseInt(v.stock || 0);
 
-  if (!motifSizeMap.has(key)) {
-    motifSizeMap.set(key, {
+  if (!motifSleeveMap.has(key)) {
+    motifSleeveMap.set(key, {
       motifName: mName,
-      baseSize: bSize,
+      sleeve: sleeveVal,
+      sleeveLabel: sleeveVal.toLowerCase().includes('lengan') ? sleeveVal : `Lengan ${sleeveVal}`,
       totalStock: stockNum,
-      motifImage: v.motifImage || '',
+      sleeveImage: v.image_url || v.motifImage || '',
       isOutOfStock: false
     });
   } else {
-    const existing = motifSizeMap.get(key)!;
+    const existing = motifSleeveMap.get(key)!;
     existing.totalStock += stockNum;
-    if (!existing.motifImage && v.motifImage) {
-      existing.motifImage = v.motifImage;
+    if (!existing.sleeveImage && (v.image_url || v.motifImage)) {
+      existing.sleeveImage = v.image_url || v.motifImage;
     }
   }
 });
 
-const uniqueMotifSizeList = Array.from(motifSizeMap.values()).map(item => ({
+const uniqueSleeveList = Array.from(motifSleeveMap.values()).map(item => ({
   ...item,
   isOutOfStock: item.totalStock <= 0
 }));
 
-uniqueMotifSizeList.sort((a, b) => {
+// Group unique size units per (motif, sleeve, baseSize)
+const sizeUnitMap = new Map<string, any>();
+parsedVariantsList.forEach((v: any) => {
+  const mName = v.motifName || '';
+  const sleeveVal = v.sleeve || '';
+  const bSize = v.baseSize || 'ALL SIZE';
+  const sName = v.subName || '';
+  const priceVal = Number(v.price || 0);
+  const dalamanVal = v.dalaman || '';
+  const key = `${mName}___${sleeveVal}___${bSize}___${sName}___${priceVal}___${dalamanVal}`;
+  const stockNum = parseInt(v.stock || 0);
+  const outName = v.outlet || '';
+
+  if (!sizeUnitMap.has(key)) {
+    sizeUnitMap.set(key, {
+      motifName: mName,
+      sleeve: sleeveVal,
+      baseSize: bSize,
+      price: priceVal,
+      stock: stockNum,
+      dalaman: dalamanVal,
+      subName: sName,
+      counter: v.counter || v.sku || '',
+      outlet: outName,
+      image: v.image_url || v.motifImage || '',
+      sizeName: v.size_name || bSize,
+      counterCodes: [v.counter || v.sku || ''].filter(Boolean),
+      outlets: [outName].filter(Boolean)
+    });
+  } else {
+    const existing = sizeUnitMap.get(key);
+    existing.stock += stockNum;
+    if (v.counter || v.sku) existing.counterCodes.push(v.counter || v.sku);
+    if (outName && !existing.outlets.includes(outName)) existing.outlets.push(outName);
+  }
+});
+
+const uniqueSizeUnits = Array.from(sizeUnitMap.values()).map(item => ({
+  ...item,
+  counter: item.counterCodes.join(', '),
+  outlet: item.outlets.join(', '),
+  isOutOfStock: item.stock <= 0
+}));
+
+uniqueSizeUnits.sort((a, b) => {
   const idxA = sizeOrder.indexOf(a.baseSize);
   const idxB = sizeOrder.indexOf(b.baseSize);
   if (idxA !== -1 && idxB !== -1) return idxA - idxB;
@@ -338,44 +387,6 @@ uniqueMotifSizeList.sort((a, b) => {
   if (idxB !== -1) return 1;
   return a.baseSize.localeCompare(b.baseSize);
 });
-
-// Group consolidated sub-variants by (motif, baseSize, subName, price, dalaman)
-const consolidatedSubVariantsMap = new Map<string, any>();
-parsedVariantsList.forEach((v: any) => {
-  const mName = v.motifName || '';
-  const bSize = v.baseSize || 'ALL SIZE';
-  const sName = v.subName || '';
-  const priceVal = Number(v.price || 0);
-  const dalamanVal = v.dalaman || '';
-  const key = `${mName}___${bSize}___${sName}___${priceVal}___${dalamanVal}`;
-  const stockNum = parseInt(v.stock || 0);
-  const outName = v.outlet || '';
-
-  if (!consolidatedSubVariantsMap.has(key)) {
-    consolidatedSubVariantsMap.set(key, {
-      ...v,
-      totalStock: stockNum,
-      counterCodes: [v.counter || v.sku || ''].filter(Boolean),
-      outlets: [outName].filter(Boolean)
-    });
-  } else {
-    const existing = consolidatedSubVariantsMap.get(key);
-    existing.totalStock += stockNum;
-    if (v.counter || v.sku) {
-      existing.counterCodes.push(v.counter || v.sku);
-    }
-    if (outName && !existing.outlets.includes(outName)) {
-      existing.outlets.push(outName);
-    }
-  }
-});
-
-const consolidatedSubVariantsList = Array.from(consolidatedSubVariantsMap.values()).map(item => ({
-  ...item,
-  stock: item.totalStock,
-  counterSummary: item.counterCodes.join(', '),
-  outletSummary: item.outlets.join(', ')
-}));
 
 function renderMarkdown(md: string): string {
   if (!md) return '';
@@ -456,15 +467,20 @@ function renderMarkdown(md: string): string {
 						<div class="thumbnail-strip">
 							{product.images.map((img: string, i: number) => {
 								let matchedMotif = "";
+								let matchedSize = "";
 								const motifMatch = img.match(/_MOTIF_([A-Z0-9]+)_/i);
 								if (motifMatch) {
 									matchedMotif = `Motif ${motifMatch[1].toUpperCase()}`;
-								} else {
-									const foundVar = parsedVariantsList.find((v: any) => v.motifImage === img || (v.image_url && v.image_url === img));
-									matchedMotif = foundVar?.motifName || (variantMotifsList[i] || "");
+								}
+								const foundVar = parsedVariantsList.find((v: any) => v.motifImage === img || (v.image_url && v.image_url === img));
+								if (foundVar) {
+									if (!matchedMotif) matchedMotif = foundVar.motifName || "";
+									matchedSize = foundVar.baseSize || "";
+								} else if (!matchedMotif) {
+									matchedMotif = String(variantMotifsList[i] || "");
 								}
 								return (
-									<div class={`thumb-item ${i === 0 ? 'active' : ''}`} data-src={img} data-motif={matchedMotif}>
+									<div class={`thumb-item ${i === 0 ? 'active' : ''}`} data-src={img} data-motif={matchedMotif} data-size={matchedSize}>
 										<img src={img} alt={`${product.name} view ${i+1}`} />
 									</div>
 								);
@@ -498,6 +514,7 @@ function renderMarkdown(md: string): string {
 						</div>
 						<div style="display: flex; gap: 0.75rem; align-items: center; margin-top: -0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
 							<div id="dynamic-dalaman-info" style="font-size: 0.9rem; font-weight: 600;"></div>
+							<div id="dynamic-sleeve-info" style="font-size: 0.9rem; font-weight: 600;"></div>
 						</div>
 					</div>
 
@@ -524,6 +541,15 @@ function renderMarkdown(md: string): string {
 									<span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 700; display: block; margin-bottom: 0.25rem;">Motif Batik</span>
 									<span style="font-weight: 700; color: #0f172a; font-size: 0.85rem;">
 										{productMotifs.join(", ")}
+									</span>
+								</div>
+							)}
+
+							{allProductSleeves.length > 0 && (
+								<div>
+									<span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 700; display: block; margin-bottom: 0.25rem;">Tipe Lengan</span>
+									<span style="font-weight: 700; color: #0f172a; font-size: 0.85rem;">
+										{allProductSleeves.join(", ")}
 									</span>
 								</div>
 							)}
@@ -556,16 +582,18 @@ function renderMarkdown(md: string): string {
 						{parsedVariantsList.length > 0 ? (
 							<div class="meta-item" style="margin-top: 0.5rem;">
 								<span class="meta-label" style="font-weight: 800; color: #0f172a; font-size: 0.95rem; display: block; margin-bottom: 0.75rem;">
-									{hasVariantMotifs && variantMotifsList.length > 0 ? "Pilihan Motif & Ukuran" : "Pilihan Ukuran"}
+									Pilihan Varian & Ukuran
 								</span>
 								<div id="variant-group-selector" style="display: flex; flex-direction: column; gap: 1.25rem; width: 100%;">
 									
-									<!-- 1. Motif Selection (Muncul jika produk memiliki varian motif) -->
-									{hasVariantMotifs && variantMotifsList.length > 0 && (
-										<div>
-											<span style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">1. Pilih Motif:</span>
+									<!-- 1. Langkah 1: Pilih Motif (Muncul jika ada lebih dari 1 motif) -->
+									{uniqueMotifsList.length > 1 && (
+										<div id="selector-step-motif">
+											<span style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
+												1. Pilih Motif:
+											</span>
 											<div class="size-chips" id="variant-motif-options" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
-												{variantMotifsList.map((mName, idx) => {
+												{uniqueMotifsList.map((mName, idx) => {
 													const matchedVar = parsedVariantsList.find((v: any) => v.motifName === mName);
 													const mImg = matchedVar?.motifImage || imagesList[idx % imagesList.length] || product.image_url;
 													return (
@@ -585,65 +613,59 @@ function renderMarkdown(md: string): string {
 										</div>
 									)}
 
-									<!-- Base Sizes Selection (Grouped & Deduplicated per Motif) -->
-									<div>
-										<span style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
-											{hasVariantMotifs && variantMotifsList.length > 0 ? "2. Pilih Ukuran:" : "Pilih Ukuran Tersedia:"}
+									<!-- 2. Langkah 2: Pilih Model Lengan (Muncul jika produk memiliki opsi lengan) -->
+									{uniqueSleeveList.length > 0 && (
+										<div id="selector-step-sleeve">
+											<span id="step-sleeve-label" style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
+												{uniqueMotifsList.length > 1 ? "2. Pilih Model Lengan:" : "1. Pilih Model Lengan:"}
+											</span>
+											<div class="size-chips" id="variant-sleeve-options" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+												{uniqueSleeveList.map((s, idx) => (
+													<button
+														type="button"
+														class={`size-chip var-sleeve-btn ${idx === 0 ? 'active' : ''} ${s.isOutOfStock ? 'is-out' : ''}`}
+														data-motif={s.motifName}
+														data-sleeve={s.sleeve}
+														data-image={s.sleeveImage}
+														style={`display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 1.1rem; border-radius: 8px; font-weight: 700; cursor: pointer; transition: all 0.2s; border: 1.5px solid ${idx === 0 ? '#0f172a' : '#cbd5e1'}; background: ${idx === 0 ? '#0f172a' : '#fff'}; color: ${idx === 0 ? '#fff' : '#1e293b'}; font-size: 0.85rem; box-shadow: ${idx === 0 ? '0 4px 6px -1px rgba(0,0,0,0.1)' : 'none'};`}
+													>
+														{s.sleeveImage && <img src={s.sleeveImage} alt={s.sleeveLabel} style="width: 24px; height: 24px; object-fit: cover; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15);" />}
+														<span>👔 {s.sleeveLabel}</span>
+														{s.isOutOfStock && <span style="font-size: 0.6rem; background: #ef4444; color: white; padding: 1px 4px; border-radius: 3px; margin-left: 4px; font-weight: 700;">HABIS</span>}
+													</button>
+												))}
+											</div>
+										</div>
+									)}
+
+									<!-- 3. Langkah 3: Pilih Ukuran (Hanya ukuran yang tersedia pada motif & lengan terpilih) -->
+									<div id="selector-step-size">
+										<span id="step-size-label" style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
+											{uniqueMotifsList.length > 1 && uniqueSleeveList.length > 0 ? "3. Pilih Ukuran:" : (uniqueMotifsList.length > 1 || uniqueSleeveList.length > 0) ? "2. Pilih Ukuran:" : "Pilih Ukuran Tersedia:"}
 										</span>
 										<div class="size-chips" id="base-size-options" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
-											{uniqueMotifSizeList.map((v: any, idx: number) => {
-												const isOutOfStock = v.isOutOfStock;
+											{uniqueSizeUnits.map((u: any, idx: number) => {
+												const isOutOfStock = u.isOutOfStock;
 												return (
 													<button 
 														type="button"
 														class={`size-chip base-sz-btn ${idx === 0 ? 'active' : ''} ${isOutOfStock ? 'is-out' : ''}`}
-														data-size={v.baseSize}
-														data-motif={v.motifName || ''}
-														data-image={v.motifImage || ''}
-														style="position: relative; min-width: 48px; height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 1.25rem; border-radius: 8px; font-weight: 700; cursor: pointer; transition: all 0.2s; border: 1.5px solid #cbd5e1; background: #fff; font-size: 0.9rem; color: #0f172a;"
+														data-motif={u.motifName}
+														data-sleeve={u.sleeve}
+														data-size={u.baseSize}
+														data-price={u.price}
+														data-stock={u.stock}
+														data-dalaman={u.dalaman}
+														data-subname={u.subName}
+														data-counter={u.counter}
+														data-outlet={u.outlet}
+														data-image={u.image}
+														data-fullname={u.sizeName}
+														style="position: relative; min-width: 52px; height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 1.2rem; border-radius: 8px; font-weight: 700; cursor: pointer; transition: all 0.2s; border: 1.5px solid #cbd5e1; background: #fff; font-size: 0.9rem; color: #0f172a;"
 													>
-														<span>{v.baseSize}</span>
+														<span>{u.baseSize}</span>
 														{isOutOfStock && (
 															<span style="position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; font-size: 0.55rem; padding: 1px 4px; border-radius: 4px; font-weight: 700; line-height: 1; border: 1px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">HABIS</span>
-														)}
-													</button>
-												);
-											})}
-										</div>
-									</div>
-
-									<!-- Sub-variants Selection (Sleeve Type & Price info - Grouped) -->
-									<div>
-										<span style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
-											{hasVariantMotifs && variantMotifsList.length > 0 ? "3. Model & Harga:" : "Model & Ketersediaan:"}
-										</span>
-										<div id="sub-variant-options" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem;">
-											{consolidatedSubVariantsList.map((v: any) => {
-												const isOutOfStock = parseInt(v.stock || 0) === 0;
-												return (
-													<button 
-														type="button"
-														class={`sub-var-btn ${isOutOfStock ? 'is-out' : ''}`}
-														data-base-size={v.baseSize}
-														data-motif={v.motifName || ''}
-														data-price={v.price}
-														data-stock={v.stock}
-														data-fullname={v.size_name}
-														data-subname={v.subName || ""}
-														data-counter={v.counterSummary || v.counter || v.sku || ""}
-														data-outlet={v.outletSummary || v.outlet || ""}
-														data-dalaman={v.dalaman || ""}
-														style="display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1.2rem; border-radius: 8px; border: 1.5px solid #e2e8f0; background: #fff; cursor: pointer; transition: all 0.2s; position: relative; gap: 1rem;"
-													>
-														<span class="sub-var-name" style="font-weight: 700; font-size: 0.85rem; color: #0f172a;">
-															{v.subName}
-														</span>
-														{parseInt(v.stock || 0) === 0 ? (
-															<span class="status-badge-compact" style="font-size: 0.65rem; color: #ef4444; font-weight: 700; text-transform: uppercase; background: #fef2f2; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.1);">HABIS</span>
-														) : 5 >= parseInt(v.stock || 0) ? (
-															<span class="status-badge-compact" style="font-size: 0.65rem; color: #f59e0b; font-weight: 700; background: #fffbeb; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(245, 158, 11, 0.1);">Sisa {v.stock}</span>
-														) : (
-															<span class="status-badge-compact" style="font-size: 0.65rem; color: #10b981; font-weight: 700; background: #f0fdf4; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.1);">Ready ({v.stock})</span>
 														)}
 													</button>
 												);
@@ -968,6 +990,21 @@ function renderMarkdown(md: string): string {
 			border-color: var(--color-text);
 		}
 
+		.var-motif-btn, .var-sleeve-btn {
+			cursor: pointer;
+			transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+		}
+		.var-motif-btn:hover, .var-sleeve-btn:hover {
+			border-color: #0f172a !important;
+			transform: translateY(-1px);
+		}
+		.var-motif-btn.active, .var-sleeve-btn.active {
+			background: var(--color-text) !important;
+			color: white !important;
+			border-color: var(--color-text) !important;
+			box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+		}
+
 		.base-sz-btn {
 			cursor: pointer;
 			transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1191,15 +1228,328 @@ function renderMarkdown(md: string): string {
 		window.waNumber = waNumberData;
 	</script>
 	<script is:inline>
-		// Gallery Switcher Logic with Mutual Motif Triggering
+		// =========================================================================
+		// 3-STEP HIERARCHICAL SELECTOR: MOTIF -> SLEEVE -> SIZE
+		// =========================================================================
 		const mainImg = document.getElementById('main-product-img');
 		const thumbs = document.querySelectorAll('.thumb-item');
+		const varMotifBtns = document.querySelectorAll('.var-motif-btn');
+		const varSleeveBtns = document.querySelectorAll('.var-sleeve-btn');
+		const baseSzBtns = document.querySelectorAll('.base-sz-btn');
+		const priceDisplay = document.querySelector('.product-price');
+		const badgeDisplay = document.getElementById('stock-badge');
+		const waBtn = document.getElementById('wa-btn');
 
+		let currentSelectedMotif = '';
+		let currentSelectedSleeve = '';
+
+		// 1. Synchronize Active Thumbnail
+		const syncActiveThumbnail = (src) => {
+			if (!thumbs || thumbs.length === 0 || !src) return;
+			const cleanUrl = (u) => (u || '').split('?')[0].trim();
+			const targetClean = cleanUrl(src);
+			let found = false;
+			thumbs.forEach(t => {
+				const tSrc = cleanUrl(t.getAttribute('data-src'));
+				if (tSrc === targetClean || (targetClean && tSrc && (targetClean.endsWith(tSrc) || tSrc.endsWith(targetClean)))) {
+					t.classList.add('active');
+					found = true;
+				} else {
+					t.classList.remove('active');
+				}
+			});
+			if (!found && thumbs[0]) {
+				thumbs[0].classList.add('active');
+			}
+		};
+
+		// 2. Update Dynamic Badges & WhatsApp URL
+		const updateAvailability = (stock) => {
+			const isAvailable = stock > 0;
+			if (badgeDisplay) {
+				badgeDisplay.className = `status-badge ${stock === 0 ? 'out-of-stock' : stock <= 5 ? 'warning-stock' : ''}`;
+				if (stock === 0) {
+					badgeDisplay.innerHTML = '🔴 HABIS';
+				} else if (stock <= 5) {
+					badgeDisplay.innerHTML = '⚠️ Sisa ' + stock + ' pcs';
+				} else {
+					badgeDisplay.innerHTML = '🟢 Ready Stock';
+				}
+			}
+			if (waBtn && waBtn.getAttribute('target') !== '_self') {
+				waBtn.classList.toggle('btn-disabled', !isAvailable);
+				const btnText = waBtn.querySelector('.btn-text');
+				if (btnText) btnText.innerText = isAvailable ? 'Chat Admin' : 'Stok Ukuran Habis';
+			}
+		};
+
+		const updateDalaman = (dalaman) => {
+			const dynamicDalamanInfo = document.getElementById('dynamic-dalaman-info');
+			if (dynamicDalamanInfo) {
+				if (dalaman === 'F') {
+					dynamicDalamanInfo.innerHTML = '<span style="color: #8b5a2b; background: #fff8f0; border: 1px solid #e1d3c1; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">✨ Furing (F)</span>';
+				} else {
+					dynamicDalamanInfo.innerHTML = '';
+				}
+			}
+		};
+
+		const updateSleeveInfo = (sleeve, subName) => {
+			const dynamicSleeveInfo = document.getElementById('dynamic-sleeve-info');
+			if (dynamicSleeveInfo) {
+				let finalSleeve = sleeve || '';
+				if (!finalSleeve && subName) {
+					if (subName.toLowerCase().includes('lengan')) {
+						finalSleeve = subName.split('(')[0].trim();
+					}
+				}
+				if (finalSleeve) {
+					const cleanSleeve = finalSleeve.toLowerCase().includes('lengan') ? finalSleeve : `Lengan ${finalSleeve}`;
+					dynamicSleeveInfo.innerHTML = `<span style="color: #0369a1; background: #f0f9ff; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">👔 ${cleanSleeve}</span>`;
+				} else {
+					dynamicSleeveInfo.innerHTML = '';
+				}
+			}
+		};
+
+		const updateWAMessage = (selectedVar, dalaman, subName, counter, outlet) => {
+			if (waBtn) {
+				const code = `${product.code || ''}`;
+				const name = `${product.name || ''}`;
+				let detailsArr = [];
+				if (currentSelectedMotif) detailsArr.push(`Motif: ${currentSelectedMotif}`);
+				if (currentSelectedSleeve) detailsArr.push(`Lengan: ${currentSelectedSleeve}`);
+				if (subName) detailsArr.push(`Model: ${subName}`);
+				if (selectedVar) detailsArr.push(`Ukuran: ${selectedVar}`);
+				if (dalaman === 'F') detailsArr.push(`Dalaman: Furing (F)`);
+				else if (dalaman === 'TF') detailsArr.push(`Dalaman: Non Furing`);
+				if (counter) detailsArr.push(`Counter: ${counter}`);
+				if (outlet) detailsArr.push(`Outlet: ${outlet}`);
+				
+				const specText = detailsArr.length > 0 ? ` [${detailsArr.join(' | ')}]` : '';
+				const msg = encodeURIComponent(`Halo, saya tertarik memesan produk ${name} (${code})${specText}. Apakah masih tersedia?`);
+				waBtn.setAttribute('href', `https://wa.me/${waNumber}?text=${msg}`);
+			}
+		};
+
+		// 3. Outlet Badges Filter by Motif
+		const filterOutletBadges = (motifName) => {
+			const outletBadges = document.querySelectorAll('.outlet-pill-badge');
+			const outletLabel = document.getElementById('outlet-section-label');
+			let visibleCount = 0;
+
+			outletBadges.forEach(badge => {
+				const motifsAttr = badge.getAttribute('data-motifs') || '';
+				const motifsList = motifsAttr.split(',').map(m => m.trim()).filter(Boolean);
+				if (!motifName || motifsList.length === 0 || motifsList.includes(motifName)) {
+					badge.style.display = 'inline-flex';
+					visibleCount++;
+				} else {
+					badge.style.display = 'none';
+				}
+			});
+
+			if (outletLabel) {
+				if (motifName) {
+					outletLabel.innerText = `Lokasi Outlet untuk ${motifName} (${visibleCount})`;
+				} else {
+					outletLabel.innerText = `Lokasi Outlet Tersedia (${visibleCount})`;
+				}
+			}
+		};
+
+		// 4. Apply Size Details (Step 3 Target)
+		const applySizeDetails = (btn) => {
+			if (!btn) return;
+			const price = parseInt(btn.getAttribute('data-price') || '0', 10);
+			if (price > 0 && priceDisplay) priceDisplay.innerText = "Rp " + price.toLocaleString('id-ID');
+			const stock = parseInt(btn.getAttribute('data-stock') || '0', 10);
+			const dalaman = btn.getAttribute('data-dalaman') || "";
+			const subName = btn.getAttribute('data-subname') || "";
+			const sleeve = btn.getAttribute('data-sleeve') || currentSelectedSleeve || "";
+			const counter = btn.getAttribute('data-counter') || "";
+			const outlet = btn.getAttribute('data-outlet') || "";
+			const bImg = btn.getAttribute('data-image');
+
+			updateAvailability(stock);
+			updateDalaman(dalaman);
+			updateSleeveInfo(sleeve, subName);
+			updateWAMessage(btn.getAttribute('data-fullname') || btn.getAttribute('data-size'), dalaman, subName, counter, outlet);
+
+			if (mainImg && bImg) {
+				mainImg.style.opacity = '0.3';
+				setTimeout(() => {
+					mainImg.src = bImg;
+					mainImg.style.opacity = '1';
+				}, 150);
+				syncActiveThumbnail(bImg);
+			}
+		};
+
+		// 5. Filter Sizes (Step 3 based on Motif & Sleeve)
+		const filterSizes = (motifName, sleeveName) => {
+			let firstVisibleSize = null;
+			let visibleCount = 0;
+
+			baseSzBtns.forEach(btn => {
+				const btnMotif = btn.getAttribute('data-motif');
+				const btnSleeve = btn.getAttribute('data-sleeve');
+
+				const matchMotif = !motifName || !btnMotif || btnMotif === motifName;
+				const matchSleeve = !sleeveName || !btnSleeve || btnSleeve === sleeveName;
+
+				if (matchMotif && matchSleeve) {
+					btn.style.display = 'inline-flex';
+					visibleCount++;
+					if (!firstVisibleSize) firstVisibleSize = btn;
+				} else {
+					btn.style.display = 'none';
+				}
+			});
+
+			// Auto-activate first visible size
+			const activeSize = Array.from(baseSzBtns).find(b => b.classList.contains('active') && b.style.display !== 'none');
+			if (activeSize) {
+				applySizeDetails(activeSize);
+			} else if (firstVisibleSize) {
+				baseSzBtns.forEach(b => b.classList.remove('active'));
+				firstVisibleSize.classList.add('active');
+				applySizeDetails(firstVisibleSize);
+			}
+		};
+
+		// 6. Filter Sleeves (Step 2 based on Motif)
+		const filterSleeves = (motifName) => {
+			let firstVisibleSleeve = null;
+			let visibleCount = 0;
+
+			varSleeveBtns.forEach(btn => {
+				const btnMotif = btn.getAttribute('data-motif');
+				const matchMotif = !motifName || !btnMotif || btnMotif === motifName;
+
+				if (matchMotif) {
+					btn.style.display = 'inline-flex';
+					visibleCount++;
+					if (!firstVisibleSleeve) firstVisibleSleeve = btn;
+				} else {
+					btn.style.display = 'none';
+				}
+			});
+
+			const stepSleeve = document.getElementById('selector-step-sleeve');
+			if (stepSleeve) {
+				stepSleeve.style.display = visibleCount > 0 ? 'block' : 'none';
+			}
+
+			// Auto-activate first visible sleeve if needed
+			const activeSleeve = Array.from(varSleeveBtns).find(b => b.classList.contains('active') && b.style.display !== 'none');
+			if (activeSleeve) {
+				currentSelectedSleeve = activeSleeve.getAttribute('data-sleeve') || '';
+			} else if (firstVisibleSleeve) {
+				varSleeveBtns.forEach(b => {
+					b.classList.remove('active');
+					b.style.borderColor = '#cbd5e1';
+					b.style.background = '#fff';
+					b.style.color = '#1e293b';
+				});
+				firstVisibleSleeve.classList.add('active');
+				firstVisibleSleeve.style.borderColor = '#0f172a';
+				firstVisibleSleeve.style.background = '#0f172a';
+				firstVisibleSleeve.style.color = '#fff';
+				currentSelectedSleeve = firstVisibleSleeve.getAttribute('data-sleeve') || '';
+			} else {
+				currentSelectedSleeve = '';
+			}
+
+			filterSizes(motifName, currentSelectedSleeve);
+		};
+
+		// 7. Event Handlers: Motif Buttons (Step 1)
+		if (varMotifBtns.length > 0) {
+			varMotifBtns.forEach(btn => {
+				btn.addEventListener('click', () => {
+					varMotifBtns.forEach(b => {
+						b.classList.remove('active');
+						b.style.borderColor = '#cbd5e1';
+						b.style.background = '#fff';
+						b.style.color = '#1e293b';
+					});
+					btn.classList.add('active');
+					btn.style.borderColor = '#0f172a';
+					btn.style.background = '#0f172a';
+					btn.style.color = '#fff';
+
+					const mImg = btn.getAttribute('data-image');
+					const mName = btn.getAttribute('data-motif') || '';
+					currentSelectedMotif = mName;
+
+					if (mainImg && mImg) {
+						mainImg.style.opacity = '0.3';
+						setTimeout(() => {
+							mainImg.src = mImg;
+							mainImg.style.opacity = '1';
+						}, 150);
+						syncActiveThumbnail(mImg);
+					}
+
+					filterOutletBadges(mName);
+					filterSleeves(mName);
+				});
+			});
+		}
+
+		// 8. Event Handlers: Sleeve Buttons (Step 2)
+		if (varSleeveBtns.length > 0) {
+			varSleeveBtns.forEach(btn => {
+				btn.addEventListener('click', () => {
+					varSleeveBtns.forEach(b => {
+						b.classList.remove('active');
+						b.style.borderColor = '#cbd5e1';
+						b.style.background = '#fff';
+						b.style.color = '#1e293b';
+					});
+					btn.classList.add('active');
+					btn.style.borderColor = '#0f172a';
+					btn.style.background = '#0f172a';
+					btn.style.color = '#fff';
+
+					const sName = btn.getAttribute('data-sleeve') || '';
+					const sImg = btn.getAttribute('data-image');
+					currentSelectedSleeve = sName;
+
+					if (mainImg && sImg) {
+						mainImg.style.opacity = '0.3';
+						setTimeout(() => {
+							mainImg.src = sImg;
+							mainImg.style.opacity = '1';
+						}, 150);
+						syncActiveThumbnail(sImg);
+					}
+
+					filterSizes(currentSelectedMotif, sName);
+				});
+			});
+		}
+
+		// 9. Event Handlers: Size Buttons (Step 3)
+		if (baseSzBtns.length > 0) {
+			baseSzBtns.forEach(btn => {
+				btn.addEventListener('click', () => {
+					baseSzBtns.forEach(b => b.classList.remove('active'));
+					btn.classList.add('active');
+					applySizeDetails(btn);
+				});
+			});
+		}
+
+		// 10. Event Handlers: Thumbnails Strip (2-Way Mutual Synchronization)
 		if (thumbs && thumbs.length > 0) {
 			thumbs.forEach(thumb => {
 				thumb.addEventListener('click', () => {
 					const newSrc = thumb.getAttribute('data-src');
 					const thumbMotif = thumb.getAttribute('data-motif');
+					const thumbSleeve = thumb.getAttribute('data-sleeve');
+					const thumbSize = thumb.getAttribute('data-size');
 
 					if (mainImg && newSrc) {
 						mainImg.style.opacity = '0.3';
@@ -1211,302 +1561,49 @@ function renderMarkdown(md: string): string {
 						thumb.classList.add('active');
 					}
 
-					// Mutual Trigger: Selecting a thumbnail automatically triggers the corresponding Motif Button!
-					if (thumbMotif) {
-						const motifBtns = document.querySelectorAll('.var-motif-btn');
-						const matchedBtn = Array.from(motifBtns).find(b => b.getAttribute('data-motif') === thumbMotif);
-						if (matchedBtn && !matchedBtn.classList.contains('active')) {
-							matchedBtn.click();
+					// 1. Sync Motif Button if available
+					if (thumbMotif && varMotifBtns.length > 0) {
+						const matchedMotifBtn = Array.from(varMotifBtns).find(b => b.getAttribute('data-motif') === thumbMotif);
+						if (matchedMotifBtn && !matchedMotifBtn.classList.contains('active')) {
+							matchedMotifBtn.click();
 						}
 					}
-				});
-			});
-		}
 
-		let currentSelectedMotif = '';
-
-		// Color Swatch Click Handler -> Instantly switches main image according to selected color
-		const colorBtns = document.querySelectorAll('.color-swatch-btn');
-		if (colorBtns.length > 0) {
-			colorBtns.forEach(btn => {
-				btn.addEventListener('click', () => {
-					const colorImg = btn.getAttribute('data-image');
-					if (mainImg && colorImg) {
-						mainImg.style.opacity = '0.3';
-						setTimeout(() => {
-							mainImg.src = colorImg;
-							mainImg.style.opacity = '1';
-						}, 150);
+					// 2. Sync Sleeve Button if available
+					if (thumbSleeve && varSleeveBtns.length > 0) {
+						const matchedSleeveBtn = Array.from(varSleeveBtns).find(b => b.getAttribute('data-sleeve') === thumbSleeve && b.style.display !== 'none');
+						if (matchedSleeveBtn && !matchedSleeveBtn.classList.contains('active')) {
+							matchedSleeveBtn.click();
+						}
 					}
-					colorBtns.forEach(b => {
-						b.classList.remove('active');
-						b.style.borderColor = '#e2e8f0';
-						b.style.background = '#fff';
-					});
-					btn.classList.add('active');
-					btn.style.borderColor = '#8c7851';
-					btn.style.background = '#fdfbf7';
 
-					if (thumbs) {
-						thumbs.forEach(thumb => {
-							if (thumb.getAttribute('data-src') === colorImg) {
-								thumbs.forEach(t => t.classList.remove('active'));
-								thumb.classList.add('active');
-							}
+					// 3. Sync Size Button
+					if (thumbSize && baseSzBtns.length > 0) {
+						const matchedSzBtn = Array.from(baseSzBtns).find(b => b.getAttribute('data-size') === thumbSize && b.style.display !== 'none');
+						if (matchedSzBtn && !matchedSzBtn.classList.contains('active')) {
+							matchedSzBtn.click();
+						}
+					} else if (newSrc) {
+						const cleanUrl = (u) => (u || '').split('?')[0].trim();
+						const targetClean = cleanUrl(newSrc);
+						const matchedSzBtn = Array.from(baseSzBtns).find(b => {
+							const bImg = cleanUrl(b.getAttribute('data-image'));
+							return bImg === targetClean && b.style.display !== 'none';
 						});
+						if (matchedSzBtn && !matchedSzBtn.classList.contains('active')) {
+							matchedSzBtn.click();
+						}
 					}
 				});
 			});
 		}
 
-		// Variant Selection Logic
-		const baseSzBtns = document.querySelectorAll('.base-sz-btn');
-		const subVarBtns = document.querySelectorAll('.sub-var-btn');
-		const priceDisplay = document.querySelector('.product-price');
-		const badgeDisplay = document.getElementById('stock-badge');
-		const waBtn = document.getElementById('wa-btn');
-
-		if (baseSzBtns.length > 0 && subVarBtns.length > 0 && priceDisplay) {
-			const updateAvailability = (stock) => {
-				const isAvailable = stock > 0;
-				if (badgeDisplay) {
-					badgeDisplay.className = `status-badge ${stock === 0 ? 'out-of-stock' : stock <= 5 ? 'warning-stock' : ''}`;
-					if (stock === 0) {
-						badgeDisplay.innerHTML = '🔴 HABIS';
-					} else if (stock <= 5) {
-						badgeDisplay.innerHTML = '⚠️ Sisa ' + stock + ' pcs';
-					} else {
-						badgeDisplay.innerHTML = '🟢 Ready Stock';
-					}
-				}
-				if (waBtn && waBtn.getAttribute('target') !== '_self') {
-					waBtn.classList.toggle('btn-disabled', !isAvailable);
-					const btnText = waBtn.querySelector('.btn-text');
-					if (btnText) btnText.innerText = isAvailable ? 'Chat Admin' : 'Stok Ukuran Habis';
-				}
-			};
-
-			const updateDalaman = (dalaman) => {
-				const dynamicDalamanInfo = document.getElementById('dynamic-dalaman-info');
-				if (dynamicDalamanInfo) {
-					if (dalaman === 'F') {
-						dynamicDalamanInfo.innerHTML = '<span style="color: #8b5a2b; background: #fff8f0; border: 1px solid #e1d3c1; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">✨ Furing (F)</span>';
-					} else {
-						dynamicDalamanInfo.innerHTML = '';
-					}
-				}
-			};
-
-			const updateWAMessage = (selectedVar, dalaman, subName, counter, outlet) => {
-				if (waBtn) {
-					const code = `${product.code || ''}`;
-					const name = `${product.name || ''}`;
-					let detailsArr = [];
-					if (currentSelectedMotif) detailsArr.push(`Motif: ${currentSelectedMotif}`);
-					if (subName) detailsArr.push(`Model: ${subName}`);
-					if (selectedVar) detailsArr.push(`Ukuran: ${selectedVar}`);
-					if (dalaman === 'F') detailsArr.push(`Dalaman: Furing (F)`);
-					else if (dalaman === 'TF') detailsArr.push(`Dalaman: Non Furing`);
-					if (counter) detailsArr.push(`Counter: ${counter}`);
-					if (outlet) detailsArr.push(`Outlet: ${outlet}`);
-					
-					const specText = detailsArr.length > 0 ? ` [${detailsArr.join(' | ')}]` : '';
-					const msg = encodeURIComponent(`Halo, saya tertarik memesan produk ${name} (${code})${specText}. Apakah masih tersedia?`);
-					waBtn.setAttribute('href', `https://wa.me/${waNumber}?text=${msg}`);
-				}
-			};
-
-			const selectBaseSize = (size, currentMotif) => {
-				let visibleCount = 0;
-				// Hide all sub-variants first
-				subVarBtns.forEach(btn => {
-					const matchSize = btn.getAttribute('data-base-size') === size;
-					const btnMotif = btn.getAttribute('data-motif');
-					const matchMotif = !currentMotif || !btnMotif || btnMotif === currentMotif;
-
-					if (matchSize && matchMotif) {
-						btn.style.display = 'flex';
-						visibleCount++;
-					} else {
-						btn.style.display = 'none';
-					}
-					btn.classList.remove('active');
-				});
-
-				// Dynamic Hide Step 2 if only 1 sub-variant exists
-				const subVarContainer = document.getElementById('sub-variant-options')?.parentElement;
-				if (subVarContainer) {
-					if (visibleCount <= 1) {
-						subVarContainer.style.display = 'none';
-					} else {
-						subVarContainer.style.display = 'block';
-					}
-				}
-
-				// Auto-select the first visible sub-variant
-				const firstVisible = Array.from(subVarBtns).find(btn => {
-					const matchSize = btn.getAttribute('data-base-size') === size;
-					const btnMotif = btn.getAttribute('data-motif');
-					return matchSize && (!currentMotif || !btnMotif || btnMotif === currentMotif);
-				});
-
-				if (firstVisible) {
-					firstVisible.classList.add('active');
-					const price = parseInt(firstVisible.getAttribute('data-price') || '0', 10);
-					if (price > 0) priceDisplay.innerText = "Rp " + price.toLocaleString('id-ID');
-					const stock = parseInt(firstVisible.getAttribute('data-stock') || '0', 10);
-					const dalaman = firstVisible.getAttribute('data-dalaman') || "";
-					const subName = firstVisible.getAttribute('data-subname') || "";
-					const counter = firstVisible.getAttribute('data-counter') || "";
-					const outlet = firstVisible.getAttribute('data-outlet') || "";
-					updateAvailability(stock);
-					updateDalaman(dalaman);
-					updateWAMessage(firstVisible.getAttribute('data-fullname'), dalaman, subName, counter, outlet);
-				}
-			};
-
-			subVarBtns.forEach(btn => {
-				btn.addEventListener('click', () => {
-					subVarBtns.forEach(b => b.classList.remove('active'));
-					btn.classList.add('active');
-					const price = parseInt(btn.getAttribute('data-price') || '0', 10);
-					if (price > 0) priceDisplay.innerText = "Rp " + price.toLocaleString('id-ID');
-					const stock = parseInt(btn.getAttribute('data-stock') || '0', 10);
-					const dalaman = btn.getAttribute('data-dalaman') || "";
-					const subName = btn.getAttribute('data-subname') || "";
-					const counter = btn.getAttribute('data-counter') || "";
-					const outlet = btn.getAttribute('data-outlet') || "";
-					updateAvailability(stock);
-					updateDalaman(dalaman);
-					updateWAMessage(btn.getAttribute('data-fullname'), dalaman, subName, counter, outlet);
-				});
-			});
-
-			baseSzBtns.forEach(btn => {
-				btn.addEventListener('click', () => {
-					baseSzBtns.forEach(b => b.classList.remove('active'));
-					btn.classList.add('active');
-
-					const bImg = btn.getAttribute('data-image');
-					if (mainImg && bImg) {
-						mainImg.style.opacity = '0.3';
-						setTimeout(() => {
-							mainImg.src = bImg;
-							mainImg.style.opacity = '1';
-						}, 150);
-					}
-
-					selectBaseSize(btn.getAttribute('data-size'), currentSelectedMotif);
-				});
-			});
-
-			// Outlet Badges Filter by Motif
-			const filterOutletBadges = (motifName) => {
-				const outletBadges = document.querySelectorAll('.outlet-pill-badge');
-				const outletLabel = document.getElementById('outlet-section-label');
-				let visibleCount = 0;
-
-				outletBadges.forEach(badge => {
-					const motifsAttr = badge.getAttribute('data-motifs') || '';
-					const motifsList = motifsAttr.split(',').map(m => m.trim()).filter(Boolean);
-					if (!motifName || motifsList.length === 0 || motifsList.includes(motifName)) {
-						badge.style.display = 'inline-flex';
-						visibleCount++;
-					} else {
-						badge.style.display = 'none';
-					}
-				});
-
-				if (outletLabel) {
-					if (motifName) {
-						outletLabel.innerText = `Lokasi Outlet untuk ${motifName} (${visibleCount})`;
-					} else {
-						outletLabel.innerText = `Lokasi Outlet Tersedia (${visibleCount})`;
-					}
-				}
-			};
-
-			// Variant Motif Button Logic
-			const varMotifBtns = document.querySelectorAll('.var-motif-btn');
-			if (varMotifBtns.length > 0) {
-				const selectMotif = (motifName) => {
-					currentSelectedMotif = motifName;
-					let firstMatchBtn = null;
-
-					// Filter outlet badges according to motif
-					filterOutletBadges(motifName);
-
-					// Filter base sizes according to motif
-					baseSzBtns.forEach(btn => {
-						const btnMotif = btn.getAttribute('data-motif');
-						if (!btnMotif || btnMotif === motifName) {
-							btn.style.display = 'inline-flex';
-							if (!firstMatchBtn) firstMatchBtn = btn;
-						} else {
-							btn.style.display = 'none';
-						}
-						btn.classList.remove('active');
-					});
-
-					// Auto-select first matching size
-					if (firstMatchBtn) {
-						firstMatchBtn.classList.add('active');
-						selectBaseSize(firstMatchBtn.getAttribute('data-size'), motifName);
-					}
-				};
-
-				varMotifBtns.forEach(btn => {
-					btn.addEventListener('click', () => {
-						varMotifBtns.forEach(b => {
-							b.classList.remove('active');
-							b.style.borderColor = '#e2e8f0';
-							b.style.background = '#fff';
-							b.style.color = '#1e293b';
-						});
-						btn.classList.add('active');
-						btn.style.borderColor = '#0f172a';
-						btn.style.background = '#0f172a';
-						btn.style.color = '#fff';
-
-						const mImg = btn.getAttribute('data-image');
-						const mName = btn.getAttribute('data-motif');
-
-						if (mainImg && mImg) {
-							mainImg.style.opacity = '0.3';
-							setTimeout(() => {
-								mainImg.src = mImg;
-								mainImg.style.opacity = '1';
-							}, 150);
-						}
-
-						// Mutual Trigger: Synchronize active thumbnail with selected motif
-						if (thumbs && thumbs.length > 0) {
-							thumbs.forEach(t => {
-								const tSrc = t.getAttribute('data-src');
-								const tMotif = t.getAttribute('data-motif');
-								if ((mImg && tSrc === mImg) || (mName && tMotif === mName)) {
-									thumbs.forEach(item => item.classList.remove('active'));
-									t.classList.add('active');
-								}
-							});
-						}
-
-						selectMotif(mName);
-					});
-				});
-
-				// Initial motif selection
-				if (varMotifBtns[0]) {
-					selectMotif(varMotifBtns[0].getAttribute('data-motif'));
-				}
-			} else {
-				filterOutletBadges('');
-				// Initial state without motif filter
-				const initialSize = baseSzBtns[0]?.getAttribute('data-size');
-				if (initialSize) selectBaseSize(initialSize, '');
-			}
+		// 11. Initial State Activation
+		if (varMotifBtns.length > 0 && varMotifBtns[0]) {
+			varMotifBtns[0].click();
+		} else {
+			filterOutletBadges('');
+			filterSleeves('');
 		}
-
-		// Start the engines
 	</script>
 </Layout>
