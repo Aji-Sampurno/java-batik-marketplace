@@ -112,6 +112,22 @@ const isOutOfStock =
 const waBaseUrl = "https://wa.me/";
 const rawOutletStr = p.outlet || p.outlet_location || (p.variants && p.variants[0]?.outlet) || (p.product_variants && p.product_variants[0]?.outlet) || "";
 const outletDisplay = getOutletAlias(rawOutletStr);
+
+// Collect all unique images for card slider
+const rawImagesList: string[] = [];
+if (Array.isArray(p.images) && p.images.length > 0) {
+	rawImagesList.push(...p.images);
+} else if (p.image_url) {
+	rawImagesList.push(p.image_url);
+}
+const rawVariantsForImgs = p.variants || p.product_variants || [];
+rawVariantsForImgs.forEach((v: any) => {
+	if (v.image_url) rawImagesList.push(v.image_url);
+});
+const cardImages = [...new Set(rawImagesList.filter(Boolean))];
+if (cardImages.length === 0) {
+	cardImages.push("https://via.placeholder.com/400x600?text=Batik");
+}
 ---
 
 <div
@@ -119,42 +135,71 @@ const outletDisplay = getOutletAlias(rawOutletStr);
 	data-delay={(index % 4) * 100}
 >
 	<div
-		class="product-image"
+		class="product-image product-image-slider"
 		style="position: relative;"
+		data-images-count={cardImages.length}
+		data-current-slide="0"
+		onmouseleave={`if(window.hoverCardSlide) window.hoverCardSlide(this.querySelector('.hover-segment'), 0);`}
 	>
-		<a href={`/products/${p.id}`}>
-			<img
-				src={
-					p.image_url ||
-					"https://via.placeholder.com/400x600?text=Batik"
-				}
-				alt={p.name}
-				loading="lazy"
-				class={
-					isOutOfStock
-						? "out-of-stock-img"
-						: ""
-				}
-			/>
-			{outletDisplay && (
-				<div class="outlet-tag">
-					<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-					<span>{outletDisplay}</span>
-				</div>
-			)}
-			{isSlimFitProduct && (
-				<div class="fit-tag">
-					SLIM FIT
-				</div>
-			)}
-			{isOutOfStock && (
-				<div class="ribbon-wrapper">
-					<div class="ribbon">
-						HABIS
-					</div>
+		<a href={`/products/${p.id}`} class="slider-link">
+			<div class="slider-track">
+				{cardImages.map((imgUrl, i) => (
+					<img
+						src={imgUrl}
+						alt={`${p.name} - ${i + 1}`}
+						loading={index < 4 && i === 0 ? "eager" : "lazy"}
+						class={`slide-img ${i === 0 ? "active" : ""} ${isOutOfStock ? "out-of-stock-img" : ""}`}
+						data-slide-index={i}
+					/>
+				))}
+			</div>
+
+			<!-- Hover Split Segments Overlay (Zara/ASOS Style) -->
+			{cardImages.length > 1 && (
+				<div class="hover-segments-overlay">
+					{cardImages.map((_, i) => (
+						<div
+							class="hover-segment"
+							data-segment-index={i}
+							onmouseenter={`if(window.hoverCardSlide) window.hoverCardSlide(this, ${i});`}
+						></div>
+					))}
 				</div>
 			)}
 		</a>
+
+		<!-- Thin Segment Indicator Bars (Zara/ASOS Style) -->
+		{cardImages.length > 1 && (
+			<div class="segment-bars-container">
+				{cardImages.map((_, i) => (
+					<div
+						class={`segment-bar ${i === 0 ? "active" : ""}`}
+						data-bar-index={i}
+					>
+						<div class="segment-bar-inner"></div>
+					</div>
+				))}
+			</div>
+		)}
+
+		{outletDisplay && (
+			<div class="outlet-tag">
+				<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+				<span>{outletDisplay}</span>
+			</div>
+		)}
+		{isSlimFitProduct && (
+			<div class="fit-tag">
+				SLIM FIT
+			</div>
+		)}
+		{isOutOfStock && (
+			<div class="ribbon-wrapper">
+				<div class="ribbon">
+					HABIS
+				</div>
+			</div>
+		)}
 	</div>
 
 	<div
@@ -481,4 +526,194 @@ const outletDisplay = getOutletAlias(rawOutletStr);
 		color: var(--color-accent);
 		font-size: 1.1rem;
 	}
+
+	/* Slider Styles (Zara/ASOS Hover Split) */
+	.product-image-slider {
+		position: relative;
+		aspect-ratio: 4/5;
+		overflow: hidden;
+		border-radius: 6px 6px 0 0;
+		background: #f8fafc;
+	}
+
+	.slider-link {
+		display: block;
+		width: 100%;
+		height: 100%;
+		text-decoration: none;
+		position: relative;
+	}
+
+	.slider-track {
+		position: relative;
+		width: 100%;
+		height: 100%;
+		overflow: hidden;
+	}
+
+	.slide-img {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		opacity: 0;
+		display: none;
+		transition: opacity 0.25s ease-in-out, transform 0.35s ease;
+		pointer-events: none;
+	}
+
+	.slide-img.active {
+		display: block !important;
+		opacity: 1 !important;
+		position: relative;
+		pointer-events: auto;
+		z-index: 2;
+	}
+
+	.product-card:hover .slide-img.active {
+		transform: scale(1.03);
+	}
+
+	/* Hover Split Overlay (Invisible clickable/hover zones) */
+	.hover-segments-overlay {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		z-index: 5;
+		pointer-events: auto;
+	}
+
+	.hover-segment {
+		flex: 1;
+		height: 100%;
+		cursor: pointer;
+	}
+
+	/* Segment Progress Bars (Zara/ASOS Style) */
+	.segment-bars-container {
+		position: absolute;
+		bottom: 8px;
+		left: 10px;
+		right: 10px;
+		display: flex;
+		gap: 5px;
+		z-index: 8;
+		pointer-events: none;
+		opacity: 0;
+		transform: translateY(2px);
+		transition: opacity 0.25s ease, transform 0.25s ease;
+	}
+
+	.product-card:hover .segment-bars-container {
+		opacity: 1;
+		transform: translateY(0);
+	}
+
+	@media (max-width: 768px) or (hover: none) {
+		.segment-bars-container {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	.segment-bar {
+		flex: 1;
+		height: 3px;
+		background: rgba(255, 255, 255, 0.45);
+		backdrop-filter: blur(4px);
+		-webkit-backdrop-filter: blur(4px);
+		border-radius: 2px;
+		overflow: hidden;
+		transition: all 0.2s ease;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+	}
+
+	.segment-bar-inner {
+		width: 0%;
+		height: 100%;
+		background: #ffffff;
+		border-radius: 2px;
+		transition: width 0.2s ease;
+	}
+
+	.segment-bar.active {
+		background: rgba(255, 255, 255, 0.35);
+	}
+
+	.segment-bar.active .segment-bar-inner {
+		width: 100%;
+		background: #ffffff;
+		box-shadow: 0 0 6px rgba(255, 255, 255, 0.85);
+	}
 </style>
+
+<script is:inline>
+window.hoverCardSlide = function(el, targetIdx) {
+	if (!el) return;
+	const slider = el.closest('.product-image-slider');
+	if (!slider) return;
+	const cur = parseInt(slider.getAttribute('data-current-slide') || '0', 10);
+	if (cur === targetIdx) return;
+
+	const slides = slider.querySelectorAll('.slide-img');
+	const bars = slider.querySelectorAll('.segment-bar');
+	const count = slides.length;
+	if (count <= 1) return;
+
+	slides.forEach((s, i) => {
+		if (i === targetIdx) {
+			s.classList.add('active');
+			s.style.display = 'block';
+			s.style.opacity = '1';
+			s.style.zIndex = '2';
+		} else {
+			s.classList.remove('active');
+			s.style.display = 'none';
+			s.style.opacity = '0';
+			s.style.zIndex = '1';
+		}
+	});
+
+	bars.forEach((b, i) => {
+		b.classList.toggle('active', i === targetIdx);
+	});
+
+	slider.setAttribute('data-current-slide', targetIdx);
+};
+
+if (!window.__productSliderTouchInitialized) {
+	window.__productSliderTouchInitialized = true;
+	let touchStartX = 0;
+	let touchStartY = 0;
+
+	document.addEventListener('touchstart', (e) => {
+		const slider = e.target.closest('.product-image-slider');
+		if (slider) {
+			touchStartX = e.touches[0].clientX;
+			touchStartY = e.touches[0].clientY;
+		}
+	}, { passive: true });
+
+	document.addEventListener('touchend', (e) => {
+		const slider = e.target.closest('.product-image-slider');
+		if (slider) {
+			const diffX = e.changedTouches[0].clientX - touchStartX;
+			const diffY = e.changedTouches[0].clientY - touchStartY;
+			if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {
+				const cur = parseInt(slider.getAttribute('data-current-slide') || '0', 10);
+				const count = parseInt(slider.getAttribute('data-images-count') || '1', 10);
+				let nextIdx = cur;
+				if (diffX < 0) {
+					nextIdx = (cur + 1) % count;
+				} else if (diffX > 0) {
+					nextIdx = (cur - 1 + count) % count;
+				}
+				if (window.hoverCardSlide) {
+					window.hoverCardSlide(slider.querySelector('.hover-segment'), nextIdx);
+				}
+			}
+		}
+	}, { passive: true });
+}
+</script>

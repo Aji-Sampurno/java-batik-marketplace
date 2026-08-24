@@ -1057,6 +1057,40 @@ const faviconUrl = rawFavicon.includes("?")
 				)
 				.forEach((el) => revealObserver.observe(el));
 			handleHeader(); // Initial check
+
+			// Global Product Card Slider (Zara/ASOS Hover Split)
+			window.hoverCardSlide = function(el, targetIdx) {
+				if (!el) return;
+				const slider = el.closest('.product-image-slider');
+				if (!slider) return;
+				const cur = parseInt(slider.getAttribute('data-current-slide') || '0', 10);
+				if (cur === targetIdx) return;
+
+				const slides = slider.querySelectorAll('.slide-img');
+				const bars = slider.querySelectorAll('.segment-bar');
+				const count = slides.length;
+				if (count <= 1) return;
+
+				slides.forEach((s, i) => {
+					if (i === targetIdx) {
+						s.classList.add('active');
+						s.style.display = 'block';
+						s.style.opacity = '1';
+						s.style.zIndex = '2';
+					} else {
+						s.classList.remove('active');
+						s.style.display = 'none';
+						s.style.opacity = '0';
+						s.style.zIndex = '1';
+					}
+				});
+
+				bars.forEach((b, i) => {
+					b.classList.toggle('active', i === targetIdx);
+				});
+
+				slider.setAttribute('data-current-slide', targetIdx);
+			};
 		</script>
 		<Analytics />
 		<SpeedInsights />
