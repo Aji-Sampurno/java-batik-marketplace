@@ -1,49 +1,75 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-const rawBucket = import.meta.env.PUBLIC_FIREBASE_STORAGE_BUCKET || "";
-const projectId = import.meta.env.PUBLIC_FIREBASE_PROJECT_ID || "";
-
-// Normalize default bucket name if needed
-let defaultBucket = rawBucket;
-if (defaultBucket && !defaultBucket.includes(".")) {
-  // If bucket is e.g. "katalog-batik" or without domain, prepare candidates
-  defaultBucket = defaultBucket.trim();
+function getEnv(key: string, fallback: string = ""): string {
+  if (typeof import.meta !== "undefined" && import.meta.env && import.meta.env[key]) {
+    return import.meta.env[key];
+  }
+  if (typeof process !== "undefined" && process.env && process.env[key]) {
+    return process.env[key] as string;
+  }
+  return fallback;
 }
 
-const firebaseConfig = {
-  apiKey: import.meta.env.PUBLIC_FIREBASE_API_KEY,
-  authDomain: import.meta.env.PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: projectId,
-  storageBucket: defaultBucket,
-  messagingSenderId: import.meta.env.PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.PUBLIC_FIREBASE_APP_ID,
-};
+function getFirebaseConfig() {
+  const apiKey = getEnv("PUBLIC_FIREBASE_API_KEY");
+  const authDomain = getEnv("PUBLIC_FIREBASE_AUTH_DOMAIN");
+  const projectId = getEnv("PUBLIC_FIREBASE_PROJECT_ID");
+  const rawBucket = getEnv("PUBLIC_FIREBASE_STORAGE_BUCKET");
+  const messagingSenderId = getEnv("PUBLIC_FIREBASE_MESSAGING_SENDER_ID");
+  const appId = getEnv("PUBLIC_FIREBASE_APP_ID");
 
-const isConfigured = 
-  firebaseConfig.apiKey && 
-  firebaseConfig.apiKey !== "your_api_key_here" &&
-  firebaseConfig.projectId &&
-  firebaseConfig.projectId !== "your_project_id";
+  let defaultBucket = rawBucket;
+  if (defaultBucket && !defaultBucket.includes(".")) {
+    defaultBucket = defaultBucket.trim();
+  }
 
-let app: any = null;
-let storageInstance: any = null;
+  const isConfigured = 
+    Boolean(apiKey) && 
+    apiKey !== "your_api_key_here" &&
+    Boolean(projectId) &&
+    projectId !== "your_project_id";
 
-if (isConfigured) {
+  return {
+    apiKey,
+    authDomain,
+    projectId,
+    storageBucket: defaultBucket,
+    rawBucket,
+    messagingSenderId,
+    appId,
+    isConfigured
+  };
+}
+
+function getFirebaseApp() {
+  const config = getFirebaseConfig();
+  if (!config.isConfigured) {
+    return null;
+  }
   try {
-    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-    storageInstance = getStorage(app);
+    return getApps().length === 0 ? initializeApp(config) : getApp();
   } catch (e: any) {
     console.error("Firebase Storage failed to initialize:", e.message);
+    return null;
   }
 }
 
-export const storage = storageInstance;
+export const storage = (() => {
+  const app = getFirebaseApp();
+  return app ? getStorage(app) : null;
+})();
 
 export async function uploadToFirebase(file: File, path: string, customBucket?: string): Promise<string> {
-  if (!isConfigured || !app) {
-    throw new Error("Firebase Storage belum dikonfigurasi atau gagal diinisialisasi. Periksa file .env Anda.");
+  const config = getFirebaseConfig();
+  const app = getFirebaseApp();
+
+  if (!config.isConfigured || !app) {
+    throw new Error("Firebase Storage belum dikonfigurasi di Environment Variables Production. Pastikan PUBLIC_FIREBASE_API_KEY dan PUBLIC_FIREBASE_PROJECT_ID sudah diinput di dashboard hosting / file .env server.");
   }
+
+  const projectId = config.projectId;
+  const rawBucket = config.rawBucket;
 
   // Generate bucket candidates to try
   const candidates: string[] = [];
@@ -70,7 +96,6 @@ export async function uploadToFirebase(file: File, path: string, customBucket?: 
 
   for (const bucket of uniqueCandidates) {
     try {
-      // Determine storage bucket instance
       let currentStorage: any;
       if (bucket.startsWith("gs://")) {
         currentStorage = getStorage(app, bucket);
@@ -94,5 +119,5 @@ export async function uploadToFirebase(file: File, path: string, customBucket?: 
     }
   }
 
-  throw lastError || new Error("Semua percobaan bucket Firebase gagal.");
+  throw lastError || new Error("Semua percobaan upload ke bucket Firebase gagal.");
 }
