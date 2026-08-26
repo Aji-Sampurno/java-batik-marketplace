@@ -1059,6 +1059,39 @@ const faviconUrl = rawFavicon.includes("?")
 			handleHeader(); // Initial check
 
 			// Global Product Card Slider (Zara/ASOS Hover Split + Native Mobile Scroll Snap)
+			window.updateCardOutlet = function(slider, idx) {
+				if (!slider) return;
+				const rawOutlets = slider.getAttribute('data-image-outlets');
+				if (!rawOutlets) return;
+				try {
+					const outlets = JSON.parse(rawOutlets);
+					const outletTag = slider.querySelector('.outlet-tag span');
+					const parentTag = slider.querySelector('.outlet-tag');
+					if (outlets && outlets[idx] !== undefined) {
+						const text = outlets[idx] || '';
+						if (outletTag) outletTag.textContent = text;
+						if (parentTag) parentTag.style.display = text ? 'flex' : 'none';
+					}
+				} catch(e) {}
+			};
+
+			window.handleCardTrackScroll = function(track) {
+				if (!track) return;
+				const slider = track.closest('.product-image-slider');
+				if (!slider) return;
+				const width = track.clientWidth || 1;
+				const idx = Math.round(track.scrollLeft / width);
+				const cur = parseInt(slider.getAttribute('data-current-slide') || '0', 10);
+				if (idx !== cur) {
+					slider.setAttribute('data-current-slide', idx);
+					const bars = slider.querySelectorAll('.segment-bar');
+					bars.forEach((b, i) => {
+						b.classList.toggle('active', i === idx);
+					});
+					window.updateCardOutlet(slider, idx);
+				}
+			};
+
 			window.hoverCardSlide = function(el, targetIdx) {
 				if (!el) return;
 				const slider = el.closest('.product-image-slider');
@@ -1082,6 +1115,7 @@ const faviconUrl = rawFavicon.includes("?")
 				});
 
 				slider.setAttribute('data-current-slide', targetIdx);
+				window.updateCardOutlet(slider, targetIdx);
 			};
 		</script>
 		<Analytics />

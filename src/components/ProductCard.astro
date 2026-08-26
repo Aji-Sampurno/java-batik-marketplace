@@ -128,6 +128,13 @@ const cardImages = [...new Set(rawImagesList.filter(Boolean))];
 if (cardImages.length === 0) {
 	cardImages.push("https://via.placeholder.com/400x600?text=Batik");
 }
+
+// Map each image to its respective variant's outlet
+const imageOutlets: string[] = cardImages.map((img) => {
+	const matchedVar = rawVariantsForImgs.find((v: any) => v.image_url === img || (img && v.image_url && (img.endsWith(v.image_url) || v.image_url.endsWith(img))));
+	const rawOut = (matchedVar?.outlet || matchedVar?.outlet_location || matchedVar?.counter_name || rawOutletStr || "").trim();
+	return rawOut ? getOutletAlias(rawOut) : (outletDisplay || "");
+});
 ---
 
 <div
@@ -139,10 +146,14 @@ if (cardImages.length === 0) {
 		style="position: relative;"
 		data-images-count={cardImages.length}
 		data-current-slide="0"
+		data-image-outlets={JSON.stringify(imageOutlets)}
 		onmouseleave={`if(window.hoverCardSlide) window.hoverCardSlide(this.querySelector('.hover-segment'), 0);`}
 	>
 		<a href={`/products/${p.id}`} class="slider-link">
-			<div class="slider-track">
+			<div 
+				class="slider-track"
+				onscroll="if(window.handleCardTrackScroll) window.handleCardTrackScroll(this);"
+			>
 				{cardImages.map((imgUrl, i) => (
 					<img
 						src={imgUrl}
@@ -182,12 +193,10 @@ if (cardImages.length === 0) {
 			</div>
 		)}
 
-		{outletDisplay && (
-			<div class="outlet-tag">
-				<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-				<span>{outletDisplay}</span>
-			</div>
-		)}
+		<div class="outlet-tag" style={imageOutlets[0] ? "" : "display: none;"}>
+			<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+			<span>{imageOutlets[0] || outletDisplay}</span>
+		</div>
 		{isSlimFitProduct && (
 			<div class="fit-tag">
 				SLIM FIT
@@ -661,6 +670,39 @@ if (cardImages.length === 0) {
 </style>
 
 <script is:inline>
+window.updateCardOutlet = function(slider, idx) {
+	if (!slider) return;
+	const rawOutlets = slider.getAttribute('data-image-outlets');
+	if (!rawOutlets) return;
+	try {
+		const outlets = JSON.parse(rawOutlets);
+		const outletTag = slider.querySelector('.outlet-tag span');
+		const parentTag = slider.querySelector('.outlet-tag');
+		if (outlets && outlets[idx] !== undefined) {
+			const text = outlets[idx] || '';
+			if (outletTag) outletTag.textContent = text;
+			if (parentTag) parentTag.style.display = text ? 'flex' : 'none';
+		}
+	} catch(e) {}
+};
+
+window.handleCardTrackScroll = function(track) {
+	if (!track) return;
+	const slider = track.closest('.product-image-slider');
+	if (!slider) return;
+	const width = track.clientWidth || 1;
+	const idx = Math.round(track.scrollLeft / width);
+	const cur = parseInt(slider.getAttribute('data-current-slide') || '0', 10);
+	if (idx !== cur) {
+		slider.setAttribute('data-current-slide', idx);
+		const bars = slider.querySelectorAll('.segment-bar');
+		bars.forEach((b, i) => {
+			b.classList.toggle('active', i === idx);
+		});
+		window.updateCardOutlet(slider, idx);
+	}
+};
+
 window.hoverCardSlide = function(el, targetIdx) {
 	if (!el) return;
 	const slider = el.closest('.product-image-slider');
@@ -684,26 +726,17 @@ window.hoverCardSlide = function(el, targetIdx) {
 	});
 
 	slider.setAttribute('data-current-slide', targetIdx);
+	window.updateCardOutlet(slider, targetIdx);
 };
 
-// Global Listener for Mobile Scroll & Drag Sync
+// Global Listener for Mobile Scroll & Drag Sync Fallback
 if (!window.__productSliderTouchInitialized) {
 	window.__productSliderTouchInitialized = true;
 
-	// Real-time progress bar update on horizontal swipe scroll
 	document.addEventListener('scroll', (e) => {
 		const track = e.target;
 		if (track && track.classList && track.classList.contains('slider-track')) {
-			const slider = track.closest('.product-image-slider');
-			if (!slider) return;
-			const width = track.clientWidth || 1;
-			const idx = Math.round(track.scrollLeft / width);
-			const cur = parseInt(slider.getAttribute('data-current-slide') || '0', 10);
-			if (idx !== cur) {
-				slider.setAttribute('data-current-slide', idx);
-				const bars = slider.querySelectorAll('.segment-bar');
-				bars.forEach((b, i) => b.classList.toggle('active', i === idx));
-			}
+			window.handleCardTrackScroll(track);
 		}
 	}, { capture: true, passive: true });
 }

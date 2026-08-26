@@ -2744,12 +2744,19 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			document.getElementById("btnApplySameSleeve")?.addEventListener("click", () => {
 				const selectedSleeve = document.getElementById("globalBatchSleeveSelect")?.value;
 				if (!selectedSleeve) return;
+				const checkedRows = getCheckedCounterRows();
+				if (checkedRows.length === 0) {
+					alert("Silakan centang [✓] varian counter yang ingin diubah terlebih dahulu.");
+					return;
+				}
 				checkedRows.forEach(row => {
 					const select = row.querySelector(".v-sleeve-select");
 					if (select) {
 						select.value = selectedSleeve;
+						updateRowVariantName(row);
 					}
 				});
+				renderMotifPhotoCards();
 			});
 
 			// Apply Same Fit to Checked Rows

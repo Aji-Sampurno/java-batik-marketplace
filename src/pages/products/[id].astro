@@ -467,20 +467,31 @@ function renderMarkdown(md: string): string {
 						<div class="thumbnail-strip">
 							{product.images.map((img: string, i: number) => {
 								let matchedMotif = "";
+								let matchedSleeve = "";
 								let matchedSize = "";
+								let matchedOutlet = "";
 								const motifMatch = img.match(/_MOTIF_([A-Z0-9]+)_/i);
 								if (motifMatch) {
 									matchedMotif = `Motif ${motifMatch[1].toUpperCase()}`;
 								}
-								const foundVar = parsedVariantsList.find((v: any) => v.motifImage === img || (v.image_url && v.image_url === img));
+								const foundVar = parsedVariantsList.find((v: any) => v.motifImage === img || v.image_url === img || (img && v.motifImage && (img.endsWith(v.motifImage) || v.motifImage.endsWith(img))));
 								if (foundVar) {
 									if (!matchedMotif) matchedMotif = foundVar.motifName || "";
+									matchedSleeve = foundVar.sleeve || "";
 									matchedSize = foundVar.baseSize || "";
+									matchedOutlet = foundVar.outlet || "";
 								} else if (!matchedMotif) {
 									matchedMotif = String(variantMotifsList[i] || "");
 								}
 								return (
-									<div class={`thumb-item ${i === 0 ? 'active' : ''}`} data-src={img} data-motif={matchedMotif} data-size={matchedSize}>
+									<div 
+										class={`thumb-item ${i === 0 ? 'active' : ''}`} 
+										data-src={img} 
+										data-motif={matchedMotif} 
+										data-sleeve={matchedSleeve}
+										data-size={matchedSize}
+										data-outlet={matchedOutlet}
+									>
 										<img src={img} alt={`${product.name} view ${i+1}`} />
 									</div>
 								);
@@ -1612,9 +1623,10 @@ function renderMarkdown(md: string): string {
 			thumbs.forEach(thumb => {
 				thumb.addEventListener('click', () => {
 					const newSrc = thumb.getAttribute('data-src');
-					const thumbMotif = thumb.getAttribute('data-motif');
-					const thumbSleeve = thumb.getAttribute('data-sleeve');
-					const thumbSize = thumb.getAttribute('data-size');
+					const thumbMotif = thumb.getAttribute('data-motif') || '';
+					const thumbSleeve = thumb.getAttribute('data-sleeve') || '';
+					const thumbSize = thumb.getAttribute('data-size') || '';
+					const thumbOutlet = thumb.getAttribute('data-outlet') || '';
 
 					if (mainImg && newSrc) {
 						mainImg.style.opacity = '0.3';
@@ -1629,35 +1641,81 @@ function renderMarkdown(md: string): string {
 					// 1. Sync Motif Button if available
 					if (thumbMotif && varMotifBtns.length > 0) {
 						const matchedMotifBtn = Array.from(varMotifBtns).find(b => b.getAttribute('data-motif') === thumbMotif);
-						if (matchedMotifBtn && !matchedMotifBtn.classList.contains('active')) {
-							matchedMotifBtn.click();
+						if (matchedMotifBtn) {
+							varMotifBtns.forEach(b => {
+								b.classList.remove('active');
+								b.style.borderColor = '#cbd5e1';
+								b.style.background = '#fff';
+								b.style.color = '#1e293b';
+							});
+							matchedMotifBtn.classList.add('active');
+							matchedMotifBtn.style.borderColor = '#0f172a';
+							matchedMotifBtn.style.background = '#0f172a';
+							matchedMotifBtn.style.color = '#fff';
+							currentSelectedMotif = thumbMotif;
+							filterOutletBadges(thumbMotif);
 						}
 					}
 
 					// 2. Sync Sleeve Button if available
-					if (thumbSleeve && varSleeveBtns.length > 0) {
-						const matchedSleeveBtn = Array.from(varSleeveBtns).find(b => b.getAttribute('data-sleeve') === thumbSleeve && b.style.display !== 'none');
-						if (matchedSleeveBtn && !matchedSleeveBtn.classList.contains('active')) {
-							matchedSleeveBtn.click();
+					if (varSleeveBtns.length > 0) {
+						filterSleeves(currentSelectedMotif || thumbMotif);
+						let matchedSleeveBtn = null;
+						if (thumbSleeve) {
+							matchedSleeveBtn = Array.from(varSleeveBtns).find(b => b.getAttribute('data-sleeve') === thumbSleeve);
+						}
+						if (!matchedSleeveBtn && newSrc) {
+							const cleanUrl = (u) => (u || '').split('?')[0].trim();
+							matchedSleeveBtn = Array.from(varSleeveBtns).find(b => {
+								const sImg = cleanUrl(b.getAttribute('data-image'));
+								return sImg && sImg === cleanUrl(newSrc);
+							});
+						}
+						if (matchedSleeveBtn) {
+							varSleeveBtns.forEach(b => {
+								b.classList.remove('active');
+								b.style.borderColor = '#cbd5e1';
+								b.style.background = '#fff';
+								b.style.color = '#1e293b';
+							});
+							matchedSleeveBtn.classList.add('active');
+							matchedSleeveBtn.style.borderColor = '#0f172a';
+							matchedSleeveBtn.style.background = '#0f172a';
+							matchedSleeveBtn.style.color = '#fff';
+							currentSelectedSleeve = matchedSleeveBtn.getAttribute('data-sleeve') || thumbSleeve;
+							filterSizes(currentSelectedMotif || thumbMotif, currentSelectedSleeve);
 						}
 					}
 
-					// 3. Sync Size Button
-					if (thumbSize && baseSzBtns.length > 0) {
-						const matchedSzBtn = Array.from(baseSzBtns).find(b => b.getAttribute('data-size') === thumbSize && b.style.display !== 'none');
-						if (matchedSzBtn && !matchedSzBtn.classList.contains('active')) {
-							matchedSzBtn.click();
-						}
-					} else if (newSrc) {
-						const cleanUrl = (u) => (u || '').split('?')[0].trim();
-						const targetClean = cleanUrl(newSrc);
-						const matchedSzBtn = Array.from(baseSzBtns).find(b => {
+					// 3. Sync Size Button & Trigger Details (Price, Stock, Outlet)
+					const cleanUrl = (u) => (u || '').split('?')[0].trim();
+					const targetClean = cleanUrl(newSrc);
+					let matchedSzBtn = null;
+
+					if (thumbSize) {
+						matchedSzBtn = Array.from(baseSzBtns).find(b => {
+							const bSz = b.getAttribute('data-size');
+							const bSlv = b.getAttribute('data-sleeve');
+							const matchSlv = !thumbSleeve || !bSlv || bSlv === thumbSleeve;
+							return bSz === thumbSize && matchSlv && b.style.display !== 'none';
+						});
+					}
+					if (!matchedSzBtn && newSrc) {
+						matchedSzBtn = Array.from(baseSzBtns).find(b => {
 							const bImg = cleanUrl(b.getAttribute('data-image'));
 							return bImg === targetClean && b.style.display !== 'none';
 						});
-						if (matchedSzBtn && !matchedSzBtn.classList.contains('active')) {
-							matchedSzBtn.click();
-						}
+					}
+					if (!matchedSzBtn) {
+						matchedSzBtn = Array.from(baseSzBtns).find(b => b.style.display !== 'none');
+					}
+
+					if (matchedSzBtn) {
+						baseSzBtns.forEach(b => b.classList.remove('active'));
+						matchedSzBtn.classList.add('active');
+						applySizeDetails(matchedSzBtn);
+					} else if (thumbOutlet) {
+						updateOutletInfo(thumbOutlet);
 					}
 				});
 			});
