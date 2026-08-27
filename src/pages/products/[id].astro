@@ -549,13 +549,6 @@ function renderMarkdown(md: string): string {
 								</div>
 
 								<div>
-									<span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #8c827a; font-weight: 600; display: block; margin-bottom: 0.2rem;">Tipe Lengan</span>
-									<span id="spec-sleeve-val" style="font-size: 0.85rem; font-weight: 600; color: #1c1917;">
-										{allProductSleeves.join(", ") || '-'}
-									</span>
-								</div>
-
-								<div>
 									<span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #8c827a; font-weight: 600; display: block; margin-bottom: 0.2rem;">Lapisan Dalaman</span>
 									<span id="spec-dalaman-val" style="font-size: 0.85rem; font-weight: 600; color: #1c1917;">
 										{product.dalaman === 'F' ? 'Furing' : product.dalaman === 'TF' ? 'Non Furing' : 'Furing'}
