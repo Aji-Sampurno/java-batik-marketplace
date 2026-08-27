@@ -8,12 +8,13 @@ Dokumen ini merupakan panduan arsitektur, alur data, dan perbandingan komprehens
 1. [Gambaran Umum & Perubahan Paradigma](#1-gambaran-umum--perubahan-paradigma)
 2. [Tabel Perbandingan: Pra-Produk Lama vs Pra-Produk Baru](#2-tabel-perbandingan-pra-produk-lama-vs-pra-produk-baru)
 3. [Arsitektur & Spesifikasi Alur Data Baru](#3-arsitektur--spesifikasi-alur-data-baru)
-4. [Mesin Pemetaan Motif & Counter Otomatis](#4-mesin-pemetaan-motif--counter-otomatis)
-5. [Sistem Pemrosesan & Penyimpanan Foto (Firebase Storage)](#5-sistem-pemrosesan--penyimpanan-foto-firebase-storage)
-6. [Penanganan Model Fit (Regular Fit vs Slim Fit)](#6-penanganan-model-fit-regular-fit-vs-slim-fit)
-7. [Aturan Khusus: Setelan, Kain, Gulungan & Kategori Lainnya](#7-aturan-khusus-setelan-kain-gulungan--kategori-lainnya)
-8. [Tampilan & Alur Pembeli di Halaman Detail Produk](#8-tampilan--alur-pembeli-di-halaman-detail-produk)
-9. [Arsitektur Berkas & Referensi Kode](#9-arsitektur-berkas--referensi-kode)
+4. [Standar Klasifikasi Barcode POS (API Noir v1/tipe) & Aturan Kategori](#4-standar-klasifikasi-barcode-pos-api-noir-v1tipe--aturan-kategori)
+5. [Mesin Pemetaan Motif & Counter Otomatis](#5-mesin-pemetaan-motif--counter-otomatis)
+6. [Sistem Pemrosesan & Penyimpanan Foto (Firebase Storage)](#6-sistem-pemrosesan--penyimpanan-foto-firebase-storage)
+7. [Penanganan Model Fit (Regular Fit vs Slim Fit)](#7-penanganan-model-fit-regular-fit-vs-slim-fit)
+8. [Aturan Khusus: Setelan, Kain, Gulungan & Kategori Lainnya](#8-aturan-khusus-setelan-kain-gulungan--kategori-lainnya)
+9. [Tampilan & Alur Pembeli di Halaman Detail Produk](#9-tampilan--alur-pembeli-di-halaman-detail-produk)
+10. [Arsitektur Berkas & Referensi Kode](#10-arsitektur-berkas--referensi-kode)
 
 ---
 
@@ -80,7 +81,121 @@ graph TD
 
 ---
 
-## 4. Mesin Pemetaan Motif & Counter Otomatis
+## 4. Standar Klasifikasi Barcode POS (API Noir v1/tipe) & Aturan Kategori
+
+Seluruh proses klasifikasi kategori, bahan, proses batik, warna, dan ukuran mengacu **100% pada struktur kode barcode POS 17 digit** dari API resmi Noir (`https://noir.grace.gracianna.web.id/api/v1/tipe`). Kode barcode diprioritaskan mutlak dibandingkan teks nama produk.
+
+### A. Anatomi Barcode 17 Digit POS
+
+```text
+Contoh Kode:  W  I  0  S  P  0  J  E  D  9  9  0  2  0  3  1  1
+Posisi Digit: 1  2  3  4  5  6  7  8  9  10 11 12 13 14 15 16 17
+              │  │  │  │  │  │  └───────────────────────────────┘
+              │  │  │  │  │  └─ Digit 6 : t4 (Warna Utama)
+              │  │  │  │  └──── Digit 5 : t6 (Proses / Detail)
+              │  │  │  └─────── Digit 4 : t3 (Bahan Kain)
+              │  │  └────────── Digit 3 : t5 (Ukuran Dasar)
+              │  └───────────── Digit 2 : t2 (Kategori Utama / Sub-Aksesoris)
+              └──────────────── Digit 1 : t1 (Divisi / Gender)
+```
+
+---
+
+### B. Aturan Klasifikasi Karakter ke-2 (`t2`): Non-Aksesoris vs Aksesoris
+
+1. **Aturan Non-Aksesoris (Level 1 Mandiri):**
+   * Semua kategori pakaian/busana non-aksesoris langsung ditetapkan sebagai **Level 1** di database marketplace.
+2. **Aturan Aksesoris (Level 2 di bawah "Accessories"):**
+   * Semua item aksesoris (*Syal, Selendang, Kalung/Anting, Bros, Topi, Sabuk*) dimasukkan sebagai **Level 2**, dengan **Level 1 = "Accessories"**.
+3. **Aturan Otomatis Buat Kategori Baru (Auto-Create):**
+   * Jika kategori Level 1 atau sub-aksesoris Level 2 belum terdaftar di database marketplace, sistem secara otomatis:
+     * Menambahkan opsi baru ke dropdown form client-side secara real-time.
+     * Membuat data kategori baru di database backend (`POST /types`) saat form produk disimpan.
+
+#### 📋 Tabel Pemetaan Karakter ke-2 (`t2`):
+
+| Kode `t2` | Keterangan API Noir | Tingkat Kategori | Target Kategori Marketplace |
+| :---: | :--- | :---: | :--- |
+| **`K`** | KEMEJA | **Level 1** | **Kemeja** |
+| **`B`** | BLUES | **Level 1** | **Blues** |
+| **`P`** | DRESS | **Level 1** | **Dress** |
+| **`G`** | GAUN | **Level 1** | **Gaun** |
+| **`X`** | GAMIS | **Level 1** | **Gamis** |
+| **`R`** | ROK | **Level 1** | **Rok** |
+| **`C`** | CELANA | **Level 1** | **Celana** |
+| **`E`** | LEGGING | **Level 1** | **Legging** |
+| **`F`** | SARUNG | **Level 1** | **Sarung** |
+| **`O`** | OUTER | **Level 1** | **Outer** |
+| **`J`** | JAKET | **Level 1** | **Jaket** |
+| **`A`** | JAS | **Level 1** | **Jas** |
+| **`V`** | KEBAYA | **Level 1** | **Kebaya** |
+| **`S`** | STELAN | **Level 1** | **Setelan** |
+| **`U`** | JUMPSUIT | **Level 1** | **Jumpsuit** |
+| **`T`** | T - SHIRT | **Level 1** | **T - Shirt** |
+| **`N`** | TANK TOP | **Level 1** | **Tank Top** |
+| **`M`** | SARIMBIT | **Level 1** | **Sarimbit** |
+| **`L`** | SYAL | **Level 2** | Level 1: **Accessories** • Level 2: **Syal** |
+| **`H`** | SELENDANG | **Level 2** | Level 1: **Accessories** • Level 2: **Selendang** |
+| **`Q`** | KLG/ANTG | **Level 2** | Level 1: **Accessories** • Level 2: **Kalung / Anting** |
+| **`W`** | BROS | **Level 2** | Level 1: **Accessories** • Level 2: **Bros** |
+| **`I`** | TOPI | **Level 2** | Level 1: **Accessories** • Level 2: **Topi** |
+| **`D`** | SABUK | **Level 2** | Level 1: **Accessories** • Level 2: **Sabuk** |
+
+---
+
+### C. Tabel Lengkap Segmen Barcode Lainnya (Sesuai API Noir)
+
+#### 1. Karakter 1 (`t1` - Divisi / Gender):
+`L`=LADYS, `M`=MAN, `A`=ASESORIS, `T`=TAS, `J`=JAM, `K`=KOSMETIK, `S`=SEPATU, `D`=SANDAL, `E`=DOMPET, `W`=WANITA, `Y`=YUAN-YUAN, `X`=KONSI, `I`=KAIN, `R`=SARIMBIT, `G`=GULUNGAN, `C`=METERAN, `P`=KPJ.
+
+#### 2. Karakter 3 (`t5` - Ukuran Dasar):
+* **`S`** = S, **`M`** = M, **`L`** = L, **`X`** = XL, **`Y`** = XXL
+* **`2`** = 2L, **`3`** = 3L, **`4`** = 4L, **`5`** = 5L, **`6`** = 6L, **`7`** = 7L
+* **`0`** = ALL SIZE
+
+#### 3. Karakter 4 (`t3` - Bahan Kain / Level 2 untuk Pakaian):
+* **`T`** = KATUN (Target L2: Katun)
+* **`G`** = SUTRA (Target L2: Sutra)
+* **`M`** = TENUN (Target L2: Tenun)
+* **`S`** = SATEN (Target L2: Saten)
+* **`D`** = DOBY (Target L2: Dobby)
+* **`A`** = BROKLAT (Target L2: Broklat)
+* **`F`** = SIFONE (Target L2: Sifone)
+* **`E` / `H`** = PARIS (Target L2: Paris)
+* **`V`** = VISCOS (Target L2: Viscos)
+* **`J`** = JEANS (Target L2: Jeans)
+* **`K`** = KAOS (Target L2: Kaos)
+* **`P`** = PARASIT, **`N`** = NILON, **`B`** = BENANG, **`L`** = KALDORE, **`U`** = KULIT, **`R`** = BLUDRU, **`C`** = JERUK, **`I`** = BABY, **`W`** = SILKY, **`X`** = KREP.
+
+#### 4. Karakter 5 (`t6` - Proses / Detail Level 3):
+* **`P`** = **PRINT** (Target L3: Printing)
+* **`C`** = **CAP** (Target L3: Cap)
+* **`T`** = **TULIS** (Target L3: Tulis)
+* **`R`** = **PERADA** (Target L3: Prada)
+* **`S`** = **TULISP** *(Tulis Print)* (Target L3: Tulis)
+* **`Q`** = **PERADAP** *(Perada Print)* (Target L3: Prada)
+
+#### 5. Karakter 6 (`t4` - Warna Utama):
+* **`H`** = HITAM, **`P`** = PUTIH, **`M`** = MERAH, **`K`** = KUNING, **`I`** = HIJAU
+* **`B`** = BIRU, **`A`** = ABU-ABU, **`C`** = COKLAT, **`N`** = PINK, **`O`** = ORANGE
+* **`J`** = JINGGA, **`U`** = UNGU, **`R`** = KREM, **`S`** = SILVER, **`W`** = WARNAWARNI
+
+#### 6. Suffix / Substring Barcode (Dalaman / Furing):
+* Memuat **`TF`** ➔ **Tanpa Furing (TF)**
+* Memuat **`F`** (tanpa T) ➔ **Furing (F)**
+
+---
+
+### D. Banner Referensi POS & Verifikasi Keakuratan Data
+
+Pada halaman input produk counter, sistem menyediakan **Master POS Reference Badge Card** (Navy Card) yang menampilkan informasi asli mentah dari POS:
+1. 📌 **Kode Barcode POS Lengkap** (Monospace Yellow, misal `WI0SP0JED99020311`, `MKYTPRSUL01831482`)
+2. 🏷️ **Kode Barang Model** (Monospace Sky Blue, misal `D021`, `I327`)
+3. 📦 **Nama Mentah POS** (misal `KMJ 18701 MUST TF`, `KMJ 5166 MARON TF`)
+4. ✨ **Uraian Tipe Terdeteksi** (Hasil parsing lengkap 6 digit: *MAN • KEMEJA • Bahan: KATUN • Proses: PRINT • Warna: COKLAT • Ukuran: M*)
+5. 🆔 **ID Master POS**
+
+## 5. Mesin Pemetaan Motif & Counter Otomatis
 
 Setiap counter secara otomatis diberikan abjad motif berdasarkan indeks urutan:
 * Baris 1 $\rightarrow$ `Motif A`
@@ -96,7 +211,7 @@ Jika seller mengunggah foto baru untuk `Motif A`:
 
 ---
 
-## 5. Sistem Pemrosesan & Penyimpanan Foto (Firebase Storage)
+## 6. Sistem Pemrosesan & Penyimpanan Foto (Firebase Storage)
 
 ### A. Format Struktur Folder & Penamaan Berkas
 Berkas disimpan langsung ke Google Firebase Storage bucket `katalog-batik` dengan struktur hierarki folder rapi:
@@ -134,7 +249,7 @@ Content-Type: application/json
 
 ---
 
-## 6. Penanganan Model Fit (Regular Fit vs Slim Fit)
+## 7. Penanganan Model Fit (Regular Fit vs Slim Fit)
 
 Pada Pra-Produk Baru, penanganan model fit diatur secara eksplisit:
 1. **Deteksi Otomatis POS**:
@@ -148,7 +263,7 @@ Pada Pra-Produk Baru, penanganan model fit diatur secara eksplisit:
 
 ---
 
-## 7. Aturan Khusus: Setelan, Kain, Gulungan & Kategori Lainnya
+## 8. Aturan Khusus: Setelan, Kain, Gulungan & Kategori Lainnya
 
 ### A. Produk Setelan (STELAN / 1 Set Lengkap)
 * **Identifikasi**: Kode SKU posisi ke-2 bernilai **`S`** (contoh: `WS...`) atau nama kategori memuat kata `STELAN` / `SETELAN`.
@@ -194,7 +309,7 @@ Pada Pra-Produk Baru, penanganan model fit diatur secara eksplisit:
 
 ---
 
-## 8. Tampilan & Alur Pembeli di Halaman Detail Produk
+## 9. Tampilan & Alur Pembeli di Halaman Detail Produk
 
 Pada halaman detail produk pembeli ([`/products/[id].astro`](file:///Users/ajisampurno/Project/Batik/java-batik-marketplace/src/pages/products/[id].astro)):
 
@@ -227,7 +342,7 @@ Pada halaman detail produk pembeli ([`/products/[id].astro`](file:///Users/ajisa
 
 ---
 
-## 9. Arsitektur Berkas & Referensi Kode
+## 10. Arsitektur Berkas & Referensi Kode
 
 1. **Halaman Pra-Produk Baru (Tabel Counter & Batch Engine)**:
    - [`src/pages/buka-toko/tambah-produk-counter.astro`](file:///Users/ajisampurno/Project/Batik/java-batik-marketplace/src/pages/buka-toko/tambah-produk-counter.astro)

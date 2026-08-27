@@ -506,7 +506,7 @@ function renderMarkdown(md: string): string {
 						<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
 							<p class="sku-code">{product.code || 'NO SKU'}</p>
 							<div id="stock-badge" class={`status-badge ${isOutOfStock ? 'out-of-stock' : (product.total_stock > 0 && 5 >= product.total_stock) ? 'warning-stock' : ''}`}>
-								{isOutOfStock ? '🔴 HABIS' : (product.total_stock > 0 && 5 >= product.total_stock) ? `⚠️ Sisa ${product.total_stock} pcs` : '🟢 Ready Stock'}
+								{isOutOfStock ? 'STOK HABIS' : (product.total_stock > 0 && 5 >= product.total_stock) ? `Sisa ${product.total_stock} pcs` : 'Tersedia'}
 							</div>
 						</div>
 						<h1 class="product-name">{product.name}</h1>
@@ -517,61 +517,58 @@ function renderMarkdown(md: string): string {
 									<span style="text-decoration: line-through; color: #999; font-size: 0.9rem;">
 										Rp {Number(product.original_price).toLocaleString('id-ID')}
 									</span>
-									<span style="color: #10b981; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
+									<span style="color: #047857; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;">
 										Hemat Rp {Number(product.original_price - effectiveProductPrice).toLocaleString("id-ID")}
 									</span>
 								</div>
 							)}
 						</div>
-						<div style="display: flex; gap: 0.75rem; align-items: center; margin-top: -0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-							<div id="dynamic-dalaman-info" style="font-size: 0.9rem; font-weight: 600;"></div>
-							<div id="dynamic-sleeve-info" style="font-size: 0.9rem; font-weight: 600;"></div>
-							<div id="dynamic-outlet-info" style="font-size: 0.9rem; font-weight: 600;"></div>
-						</div>
 					</div>
 
 					<div class="meta-section">
-						<!-- Product Spec Info: Kategori, Motif, Outlet in a clean modern row -->
-						<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.25rem; padding: 1.1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 1.25rem;">
-							<div>
-								<span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 700; display: block; margin-bottom: 0.25rem;">Kategori</span>
-								<div class="tag-container" style="gap: 6px; font-size: 0.85rem;">
-									{productCategories.map((cat: any, i: number) => (
-										<>
-											<span style={i > 0 ? "color: #64748b;" : "font-weight: 700; color: #0f172a;"}>
-												{cat.name}
+						<!-- Product Spec Info: Kategori, Motif, Lengan, Dalaman, Outlet in a clean editorial specs card -->
+						<div class="product-specs-card" style="background: #faf8f5; border: 1px solid #ede8df; border-radius: 6px; padding: 1.25rem 1.4rem; margin-bottom: 1.75rem;">
+							<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.1rem 1.5rem;">
+								<div>
+									<span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #8c827a; font-weight: 600; display: block; margin-bottom: 0.2rem;">Kategori</span>
+									<div style="font-size: 0.85rem; font-weight: 500; color: #1c1917;">
+										{productCategories.map((cat: any, i: number) => (
+											<span style={i > 0 ? "color: #78716c;" : "color: #1c1917; font-weight: 600;"}>
+												{cat.name}{i < productCategories.length - 1 ? ' › ' : ''}
 											</span>
-											{i < productCategories.length - 1 && <span style="color: #cbd5e1;">›</span>}
-										</>
-									))}
-									{productCategories.length === 0 && <span style="font-weight: 700; color: #0f172a;">{product.types?.name || '-'}</span>}
+										))}
+										{productCategories.length === 0 && <span>{product.types?.name || '-'}</span>}
+									</div>
+								</div>
+
+								<div>
+									<span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #8c827a; font-weight: 600; display: block; margin-bottom: 0.2rem;">Motif Batik</span>
+									<span id="spec-motif-val" style="font-size: 0.85rem; font-weight: 600; color: #1c1917;">
+										{productMotifs.join(", ") || '-'}
+									</span>
+								</div>
+
+								<div>
+									<span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #8c827a; font-weight: 600; display: block; margin-bottom: 0.2rem;">Tipe Lengan</span>
+									<span id="spec-sleeve-val" style="font-size: 0.85rem; font-weight: 600; color: #1c1917;">
+										{allProductSleeves.join(", ") || '-'}
+									</span>
+								</div>
+
+								<div>
+									<span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #8c827a; font-weight: 600; display: block; margin-bottom: 0.2rem;">Lapisan Dalaman</span>
+									<span id="spec-dalaman-val" style="font-size: 0.85rem; font-weight: 600; color: #1c1917;">
+										{product.dalaman === 'F' ? 'Furing' : product.dalaman === 'TF' ? 'Non Furing' : 'Furing'}
+									</span>
 								</div>
 							</div>
 
-							{productMotifs.length > 0 && (
-								<div>
-									<span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 700; display: block; margin-bottom: 0.25rem;">Motif Batik</span>
-									<span style="font-weight: 700; color: #0f172a; font-size: 0.85rem;">
-										{productMotifs.join(", ")}
-									</span>
-								</div>
-							)}
-
-							{allProductSleeves.length > 0 && (
-								<div>
-									<span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 700; display: block; margin-bottom: 0.25rem;">Tipe Lengan</span>
-									<span style="font-weight: 700; color: #0f172a; font-size: 0.85rem;">
-										{allProductSleeves.join(", ")}
-									</span>
-								</div>
-							)}
-
 							{uniqueOutletsList.length > 0 && (
-								<div id="product-outlet-section" style="grid-column: 1 / -1; border-top: 1px dashed #e2e8f0; padding-top: 0.75rem;">
-									<span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: 700; display: block; margin-bottom: 0.4rem;">
-										<span id="outlet-section-label">Lokasi Outlet Tersedia</span>:
+								<div id="product-outlet-section" style="border-top: 1px solid #ede8df; margin-top: 1rem; padding-top: 0.85rem; display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
+									<span id="outlet-section-label" style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #8c827a; font-weight: 600;">
+										Lokasi Outlet:
 									</span>
-									<div id="outlet-pills-container" style="display: flex; flex-wrap: wrap; gap: 0.45rem;">
+									<div id="outlet-pills-container" style="display: inline-flex; flex-wrap: wrap; gap: 0.45rem;">
 										{uniqueOutletsList.map(out => {
 											const associatedMotifs = outletMotifsMap[out] || [];
 											return (
@@ -579,9 +576,9 @@ function renderMarkdown(md: string): string {
 													class="outlet-pill-badge" 
 													data-outlet={out}
 													data-motifs={associatedMotifs.join(",")}
-													style="background: #f0f9ff; color: #0369a1; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s;"
+													style="background: #ffffff; color: #44403c; border: 1px solid #e2ddd5; padding: 3px 9px; border-radius: 4px; font-size: 0.76rem; font-weight: 500; transition: all 0.2s;"
 												>
-													📍 {out}
+													{out}
 												</span>
 											);
 										})}
@@ -593,18 +590,15 @@ function renderMarkdown(md: string): string {
 						{/* Variant & Size Selection */}
 						{parsedVariantsList.length > 0 ? (
 							<div class="meta-item" style="margin-top: 0.5rem;">
-								<span class="meta-label" style="font-weight: 800; color: #0f172a; font-size: 0.95rem; display: block; margin-bottom: 0.75rem;">
-									Pilihan Varian & Ukuran
-								</span>
 								<div id="variant-group-selector" style="display: flex; flex-direction: column; gap: 1.25rem; width: 100%;">
 									
-									<!-- 1. Langkah 1: Pilih Motif (Muncul jika ada lebih dari 1 motif) -->
+									<!-- 1. Pilih Motif (Muncul jika ada lebih dari 1 motif) -->
 									{uniqueMotifsList.length > 1 && (
 										<div id="selector-step-motif">
-											<span style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
-												1. Pilih Motif:
+											<span style="font-size: 0.72rem; color: #78716c; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 0.5rem;">
+												PILIH MOTIF
 											</span>
-											<div class="size-chips" id="variant-motif-options" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+											<div class="size-chips" id="variant-motif-options" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
 												{uniqueMotifsList.map((mName, idx) => {
 													const matchedVar = parsedVariantsList.find((v: any) => v.motifName === mName);
 													const mImg = matchedVar?.motifImage || imagesList[idx % imagesList.length] || product.image_url;
@@ -614,9 +608,8 @@ function renderMarkdown(md: string): string {
 															class={`size-chip var-motif-btn ${idx === 0 ? 'active' : ''}`}
 															data-motif={mName}
 															data-image={mImg}
-															style={`display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 1.1rem; border-radius: 8px; font-weight: 700; cursor: pointer; transition: all 0.2s; border: 1.5px solid ${idx === 0 ? '#0f172a' : '#cbd5e1'}; background: ${idx === 0 ? '#0f172a' : '#fff'}; color: ${idx === 0 ? '#fff' : '#1e293b'}; font-size: 0.85rem; box-shadow: ${idx === 0 ? '0 4px 6px -1px rgba(0,0,0,0.1)' : 'none'};`}
 														>
-															{mImg && <img src={mImg} alt={String(mName)} style="width: 24px; height: 24px; object-fit: cover; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15);" />}
+															{mImg && <img src={mImg} alt={String(mName)} style="width: 22px; height: 22px; object-fit: cover; border-radius: 3px; border: 1px solid #e2e8f0; background: #f8fafc;" />}
 															<span>{mName}</span>
 														</button>
 													);
@@ -625,13 +618,13 @@ function renderMarkdown(md: string): string {
 										</div>
 									)}
 
-									<!-- 2. Langkah 2: Pilih Model Lengan (Muncul jika produk memiliki opsi lengan) -->
-									{uniqueSleeveList.length > 0 && (
+									<!-- 2. Pilih Model Lengan (Muncul hanya jika produk memiliki > 1 opsi lengan) -->
+									{uniqueSleeveList.length > 1 && (
 										<div id="selector-step-sleeve">
-											<span id="step-sleeve-label" style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
-												{uniqueMotifsList.length > 1 ? "2. Pilih Model Lengan:" : "1. Pilih Model Lengan:"}
+											<span id="step-sleeve-label" style="font-size: 0.72rem; color: #78716c; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 0.5rem;">
+												MODEL LENGAN
 											</span>
-											<div class="size-chips" id="variant-sleeve-options" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+											<div class="size-chips" id="variant-sleeve-options" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
 												{uniqueSleeveList.map((s, idx) => (
 													<button
 														type="button"
@@ -639,23 +632,22 @@ function renderMarkdown(md: string): string {
 														data-motif={s.motifName}
 														data-sleeve={s.sleeve}
 														data-image={s.sleeveImage}
-														style={`display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 1.1rem; border-radius: 8px; font-weight: 700; cursor: pointer; transition: all 0.2s; border: 1.5px solid ${idx === 0 ? '#0f172a' : '#cbd5e1'}; background: ${idx === 0 ? '#0f172a' : '#fff'}; color: ${idx === 0 ? '#fff' : '#1e293b'}; font-size: 0.85rem; box-shadow: ${idx === 0 ? '0 4px 6px -1px rgba(0,0,0,0.1)' : 'none'};`}
 													>
-														{s.sleeveImage && <img src={s.sleeveImage} alt={s.sleeveLabel} style="width: 24px; height: 24px; object-fit: cover; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15);" />}
-														<span>👔 {s.sleeveLabel}</span>
-														{s.isOutOfStock && <span style="font-size: 0.6rem; background: #ef4444; color: white; padding: 1px 4px; border-radius: 3px; margin-left: 4px; font-weight: 700;">HABIS</span>}
+														{s.sleeveImage && <img src={s.sleeveImage} alt={s.sleeveLabel} style="width: 22px; height: 22px; object-fit: cover; border-radius: 3px; border: 1px solid #e2e8f0; background: #f8fafc;" />}
+														<span>{s.sleeveLabel}</span>
+														{s.isOutOfStock && <span style="font-size: 0.6rem; background: #a8a29e; color: white; padding: 1px 4px; border-radius: 3px; margin-left: 4px; font-weight: 600;">HABIS</span>}
 													</button>
 												))}
 											</div>
 										</div>
 									)}
 
-									<!-- 3. Langkah 3: Pilih Ukuran (Hanya ukuran yang tersedia pada motif & lengan terpilih) -->
+									<!-- 3. Pilih Ukuran (Hanya ukuran yang tersedia pada motif & lengan terpilih) -->
 									<div id="selector-step-size">
-										<span id="step-size-label" style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
-											{uniqueMotifsList.length > 1 && uniqueSleeveList.length > 0 ? "3. Pilih Ukuran:" : (uniqueMotifsList.length > 1 || uniqueSleeveList.length > 0) ? "2. Pilih Ukuran:" : "Pilih Ukuran Tersedia:"}
+										<span id="step-size-label" style="font-size: 0.72rem; color: #78716c; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 0.5rem;">
+											PILIH UKURAN
 										</span>
-										<div class="size-chips" id="base-size-options" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+										<div class="size-chips" id="base-size-options" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
 											{uniqueSizeUnits.map((u: any, idx: number) => {
 												const isOutOfStock = u.isOutOfStock;
 												return (
@@ -673,11 +665,10 @@ function renderMarkdown(md: string): string {
 														data-outlet={u.outlet}
 														data-image={u.image}
 														data-fullname={u.sizeName}
-														style="position: relative; min-width: 52px; height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 1.2rem; border-radius: 8px; font-weight: 700; cursor: pointer; transition: all 0.2s; border: 1.5px solid #cbd5e1; background: #fff; font-size: 0.9rem; color: #0f172a;"
 													>
 														<span>{u.baseSize}</span>
 														{isOutOfStock && (
-															<span style="position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; font-size: 0.55rem; padding: 1px 4px; border-radius: 4px; font-weight: 700; line-height: 1; border: 1px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">HABIS</span>
+															<span style="position: absolute; top: -5px; right: -5px; background: #a8a29e; color: white; font-size: 0.55rem; padding: 1px 4px; border-radius: 3px; font-weight: 600; line-height: 1; border: 1px solid white;">HABIS</span>
 														)}
 													</button>
 												);
@@ -906,27 +897,27 @@ function renderMarkdown(md: string): string {
 		}
 
 		.status-badge {
-			font-size: 0.65rem;
+			font-size: 0.68rem;
 			text-transform: uppercase;
 			letter-spacing: 1.2px;
-			color: #0d5a15;
-			background: #e6f9e9;
-			padding: 0.25rem 0.7rem;
-			border-radius: 100px;
-			font-weight: 800;
-			border: 1px solid rgba(13, 90, 21, 0.1);
+			color: #334155;
+			background: #f8fafc;
+			padding: 0.3rem 0.75rem;
+			border-radius: 4px;
+			font-weight: 600;
+			border: 1px solid #e2e8f0;
 		}
 
 		.status-badge.out-of-stock {
-			color: #b91c1c;
-			background: #fef2f2;
-			border: 1px solid rgba(185, 28, 28, 0.1);
+			color: #64748b;
+			background: #f1f5f9;
+			border: 1px solid #cbd5e1;
 		}
 
 		.status-badge.warning-stock {
-			color: #d97706;
-			background: #fffbeb;
-			border: 1px solid rgba(217, 119, 6, 0.1);
+			color: #92400e;
+			background: #fefce8;
+			border: 1px solid #fef08a;
 		}
 
 		.product-name {
@@ -1004,33 +995,64 @@ function renderMarkdown(md: string): string {
 
 		.var-motif-btn, .var-sleeve-btn {
 			cursor: pointer;
-			transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+			background: #ffffff;
+			border: 1px solid #dcd7ce;
+			color: #1c1917;
+			padding: 0.45rem 0.9rem;
+			border-radius: 4px;
+			font-size: 0.82rem;
+			font-weight: 500;
+			display: inline-flex;
+			align-items: center;
+			gap: 0.5rem;
+			transition: all 0.15s ease;
 		}
 		.var-motif-btn:hover, .var-sleeve-btn:hover {
-			border-color: #0f172a !important;
-			transform: translateY(-1px);
+			border-color: #1c1917 !important;
+			background: #faf8f5 !important;
 		}
 		.var-motif-btn.active, .var-sleeve-btn.active {
-			background: var(--color-text) !important;
-			color: white !important;
-			border-color: var(--color-text) !important;
-			box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+			background: #ffffff !important;
+			color: #1c1917 !important;
+			border: 1.5px solid #1c1917 !important;
+			font-weight: 600 !important;
+			box-shadow: 0 2px 6px rgba(0,0,0,0.06) !important;
 		}
 
 		.base-sz-btn {
 			cursor: pointer;
-			transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+			position: relative;
+			background: #ffffff;
+			border: 1px solid #dcd7ce;
+			color: #1c1917;
+			min-width: 44px;
+			height: 40px;
+			padding: 0 0.9rem;
+			border-radius: 4px;
+			font-size: 0.86rem;
+			font-weight: 500;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			transition: all 0.15s ease;
 		}
 		.base-sz-btn:hover {
-			border-color: var(--color-accent) !important;
-			background: #fffcf8 !important;
-			transform: translateY(-1px);
+			border-color: #1c1917 !important;
+			background: #faf8f5 !important;
 		}
 		.base-sz-btn.active {
-			background: var(--color-text) !important;
-			color: white !important;
-			border-color: var(--color-text) !important;
-			box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+			background: #1c1917 !important;
+			color: #ffffff !important;
+			border: 1px solid #1c1917 !important;
+			font-weight: 600 !important;
+			box-shadow: 0 2px 6px rgba(0,0,0,0.12) !important;
+		}
+		.base-sz-btn.is-out {
+			background: #fafafa !important;
+			color: #a8a29e !important;
+			border: 1px dashed #d6d3d1 !important;
+			cursor: not-allowed !important;
+			opacity: 0.6;
 		}
 
 		.sub-var-btn {
@@ -1313,11 +1335,11 @@ function renderMarkdown(md: string): string {
 			if (badgeDisplay) {
 				badgeDisplay.className = `status-badge ${stock === 0 ? 'out-of-stock' : stock <= 5 ? 'warning-stock' : ''}`;
 				if (stock === 0) {
-					badgeDisplay.innerHTML = '🔴 HABIS';
+					badgeDisplay.innerHTML = 'STOK HABIS';
 				} else if (stock <= 5) {
-					badgeDisplay.innerHTML = '⚠️ Sisa ' + stock + ' pcs';
+					badgeDisplay.innerHTML = 'Sisa ' + stock + ' pcs';
 				} else {
-					badgeDisplay.innerHTML = '🟢 Ready Stock';
+					badgeDisplay.innerHTML = 'Tersedia';
 				}
 			}
 			if (waBtn && waBtn.getAttribute('target') !== '_self') {
@@ -1328,19 +1350,23 @@ function renderMarkdown(md: string): string {
 		};
 
 		const updateDalaman = (dalaman) => {
-			const dynamicDalamanInfo = document.getElementById('dynamic-dalaman-info');
-			if (dynamicDalamanInfo) {
+			const specDalamanVal = document.getElementById('spec-dalaman-val');
+			if (specDalamanVal) {
 				if (dalaman === 'F') {
-					dynamicDalamanInfo.innerHTML = '<span style="color: #8b5a2b; background: #fff8f0; border: 1px solid #e1d3c1; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">✨ Furing (F)</span>';
+					specDalamanVal.textContent = 'Furing';
+				} else if (dalaman === 'TF') {
+					specDalamanVal.textContent = 'Non Furing';
+				} else if (dalaman) {
+					specDalamanVal.textContent = dalaman.replace(/\s*\([^)]*\)/g, '').trim();
 				} else {
-					dynamicDalamanInfo.innerHTML = '';
+					specDalamanVal.textContent = 'Furing';
 				}
 			}
 		};
 
 		const updateSleeveInfo = (sleeve, subName) => {
-			const dynamicSleeveInfo = document.getElementById('dynamic-sleeve-info');
-			if (dynamicSleeveInfo) {
+			const specSleeveVal = document.getElementById('spec-sleeve-val');
+			if (specSleeveVal) {
 				let finalSleeve = sleeve || '';
 				if (!finalSleeve && subName) {
 					if (subName.toLowerCase().includes('lengan')) {
@@ -1349,9 +1375,7 @@ function renderMarkdown(md: string): string {
 				}
 				if (finalSleeve) {
 					const cleanSleeve = finalSleeve.toLowerCase().includes('lengan') ? finalSleeve : `Lengan ${finalSleeve}`;
-					dynamicSleeveInfo.innerHTML = `<span style="color: #0369a1; background: #f0f9ff; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">👔 ${cleanSleeve}</span>`;
-				} else {
-					dynamicSleeveInfo.innerHTML = '';
+					specSleeveVal.textContent = cleanSleeve.replace(/\s*\([^)]*\)/g, '').trim();
 				}
 			}
 		};
@@ -1365,7 +1389,7 @@ function renderMarkdown(md: string): string {
 				if (currentSelectedSleeve) detailsArr.push(`Lengan: ${currentSelectedSleeve}`);
 				if (subName) detailsArr.push(`Model: ${subName}`);
 				if (selectedVar) detailsArr.push(`Ukuran: ${selectedVar}`);
-				if (dalaman === 'F') detailsArr.push(`Dalaman: Furing (F)`);
+				if (dalaman === 'F') detailsArr.push(`Dalaman: Furing`);
 				else if (dalaman === 'TF') detailsArr.push(`Dalaman: Non Furing`);
 				if (counter) detailsArr.push(`Counter: ${counter}`);
 				if (outlet) detailsArr.push(`Outlet: ${outlet}`);
@@ -1377,30 +1401,23 @@ function renderMarkdown(md: string): string {
 		};
 
 		const updateOutletInfo = (outlet) => {
-			const dynamicOutletInfo = document.getElementById('dynamic-outlet-info');
-			if (dynamicOutletInfo) {
-				if (outlet) {
-					dynamicOutletInfo.innerHTML = `<span style="color: #0369a1; background: #f0f9ff; border: 1px solid #bae6fd; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">📍 ${outlet}</span>`;
-				} else {
-					dynamicOutletInfo.innerHTML = '';
-				}
-			}
-
 			// Highlight active outlet in spec section
 			const outletBadges = document.querySelectorAll('.outlet-pill-badge');
 			outletBadges.forEach(badge => {
 				const badgeOutlet = badge.getAttribute('data-outlet');
 				const isMatch = outlet && badgeOutlet && (badgeOutlet.toLowerCase() === outlet.toLowerCase() || outlet.toLowerCase().includes(badgeOutlet.toLowerCase()));
 				if (isMatch) {
-					badge.style.background = '#0284c7';
+					badge.style.background = '#1c1917';
 					badge.style.color = '#ffffff';
-					badge.style.borderColor = '#0284c7';
-					badge.style.boxShadow = '0 2px 6px rgba(2,132,199,0.3)';
-					badge.style.transform = 'scale(1.04)';
+					badge.style.borderColor = '#1c1917';
+					badge.style.fontWeight = '600';
+					badge.style.boxShadow = '0 1px 4px rgba(0,0,0,0.1)';
+					badge.style.transform = 'none';
 				} else {
-					badge.style.background = '#f0f9ff';
-					badge.style.color = '#0369a1';
-					badge.style.borderColor = '#bae6fd';
+					badge.style.background = '#ffffff';
+					badge.style.color = '#44403c';
+					badge.style.borderColor = '#e2ddd5';
+					badge.style.fontWeight = '500';
 					badge.style.boxShadow = 'none';
 					badge.style.transform = 'none';
 				}
@@ -1426,11 +1443,22 @@ function renderMarkdown(md: string): string {
 
 			if (outletLabel) {
 				if (motifName) {
-					outletLabel.innerText = `Lokasi Outlet untuk ${motifName} (${visibleCount})`;
+					outletLabel.innerText = `Lokasi Outlet untuk ${motifName}`;
 				} else {
-					outletLabel.innerText = `Lokasi Outlet Tersedia (${visibleCount})`;
 				}
 			}
+		};
+
+		const cleanUrl = (u) => (u || '').split('?')[0].trim();
+
+		const updateMainImage = (newSrc) => {
+			if (!mainImg || !newSrc) return;
+			const currentSrcClean = cleanUrl(mainImg.getAttribute('src') || mainImg.src);
+			const targetSrcClean = cleanUrl(newSrc);
+			if (currentSrcClean !== targetSrcClean) {
+				mainImg.src = newSrc;
+			}
+			syncActiveThumbnail(newSrc);
 		};
 
 		// 4. Apply Size Details (Step 3 Target)
@@ -1452,13 +1480,8 @@ function renderMarkdown(md: string): string {
 			updateOutletInfo(outlet);
 			updateWAMessage(btn.getAttribute('data-fullname') || btn.getAttribute('data-size'), dalaman, subName, counter, outlet);
 
-			if (mainImg && bImg) {
-				mainImg.style.opacity = '0.3';
-				setTimeout(() => {
-					mainImg.src = bImg;
-					mainImg.style.opacity = '1';
-				}, 150);
-				syncActiveThumbnail(bImg);
+			if (bImg) {
+				updateMainImage(bImg);
 			}
 		};
 
@@ -1522,16 +1545,8 @@ function renderMarkdown(md: string): string {
 			if (activeSleeve) {
 				currentSelectedSleeve = activeSleeve.getAttribute('data-sleeve') || '';
 			} else if (firstVisibleSleeve) {
-				varSleeveBtns.forEach(b => {
-					b.classList.remove('active');
-					b.style.borderColor = '#cbd5e1';
-					b.style.background = '#fff';
-					b.style.color = '#1e293b';
-				});
+				varSleeveBtns.forEach(b => b.classList.remove('active'));
 				firstVisibleSleeve.classList.add('active');
-				firstVisibleSleeve.style.borderColor = '#0f172a';
-				firstVisibleSleeve.style.background = '#0f172a';
-				firstVisibleSleeve.style.color = '#fff';
 				currentSelectedSleeve = firstVisibleSleeve.getAttribute('data-sleeve') || '';
 			} else {
 				currentSelectedSleeve = '';
@@ -1540,190 +1555,162 @@ function renderMarkdown(md: string): string {
 			filterSizes(motifName, currentSelectedSleeve);
 		};
 
-		// 7. Event Handlers: Motif Buttons (Step 1)
+		// 7. Event Handlers: Motif Buttons (Step 1 - Hover & Click)
+		const activateMotif = (btn) => {
+			if (!btn || btn.classList.contains('active')) return;
+			varMotifBtns.forEach(b => b.classList.remove('active'));
+			btn.classList.add('active');
+
+			const mImg = btn.getAttribute('data-image');
+			const mName = btn.getAttribute('data-motif') || '';
+			currentSelectedMotif = mName;
+
+			if (mImg) {
+				updateMainImage(mImg);
+			}
+
+			filterOutletBadges(mName);
+			filterSleeves(mName);
+		};
+
 		if (varMotifBtns.length > 0) {
 			varMotifBtns.forEach(btn => {
-				btn.addEventListener('click', () => {
-					varMotifBtns.forEach(b => {
-						b.classList.remove('active');
-						b.style.borderColor = '#cbd5e1';
-						b.style.background = '#fff';
-						b.style.color = '#1e293b';
-					});
-					btn.classList.add('active');
-					btn.style.borderColor = '#0f172a';
-					btn.style.background = '#0f172a';
-					btn.style.color = '#fff';
-
-					const mImg = btn.getAttribute('data-image');
-					const mName = btn.getAttribute('data-motif') || '';
-					currentSelectedMotif = mName;
-
-					if (mainImg && mImg) {
-						mainImg.style.opacity = '0.3';
-						setTimeout(() => {
-							mainImg.src = mImg;
-							mainImg.style.opacity = '1';
-						}, 150);
-						syncActiveThumbnail(mImg);
-					}
-
-					filterOutletBadges(mName);
-					filterSleeves(mName);
-				});
+				btn.addEventListener('click', () => activateMotif(btn));
+				btn.addEventListener('mouseenter', () => activateMotif(btn));
 			});
 		}
 
-		// 8. Event Handlers: Sleeve Buttons (Step 2)
+		// 8. Event Handlers: Sleeve Buttons (Step 2 - Hover & Click)
+		const activateSleeve = (btn) => {
+			if (!btn || btn.classList.contains('active')) return;
+			varSleeveBtns.forEach(b => b.classList.remove('active'));
+			btn.classList.add('active');
+
+			const sName = btn.getAttribute('data-sleeve') || '';
+			const sImg = btn.getAttribute('data-image');
+			currentSelectedSleeve = sName;
+
+			if (sImg) {
+				updateMainImage(sImg);
+			}
+
+			filterSizes(currentSelectedMotif, sName);
+		};
+
 		if (varSleeveBtns.length > 0) {
 			varSleeveBtns.forEach(btn => {
-				btn.addEventListener('click', () => {
-					varSleeveBtns.forEach(b => {
-						b.classList.remove('active');
-						b.style.borderColor = '#cbd5e1';
-						b.style.background = '#fff';
-						b.style.color = '#1e293b';
-					});
-					btn.classList.add('active');
-					btn.style.borderColor = '#0f172a';
-					btn.style.background = '#0f172a';
-					btn.style.color = '#fff';
-
-					const sName = btn.getAttribute('data-sleeve') || '';
-					const sImg = btn.getAttribute('data-image');
-					currentSelectedSleeve = sName;
-
-					if (mainImg && sImg) {
-						mainImg.style.opacity = '0.3';
-						setTimeout(() => {
-							mainImg.src = sImg;
-							mainImg.style.opacity = '1';
-						}, 150);
-						syncActiveThumbnail(sImg);
-					}
-
-					filterSizes(currentSelectedMotif, sName);
-				});
+				btn.addEventListener('click', () => activateSleeve(btn));
+				btn.addEventListener('mouseenter', () => activateSleeve(btn));
 			});
 		}
 
-		// 9. Event Handlers: Size Buttons (Step 3)
+		// 9. Event Handlers: Size Buttons (Step 3 - Hover & Click)
+		const activateSize = (btn) => {
+			if (!btn || btn.classList.contains('active')) return;
+			baseSzBtns.forEach(b => b.classList.remove('active'));
+			btn.classList.add('active');
+			applySizeDetails(btn);
+		};
+
 		if (baseSzBtns.length > 0) {
 			baseSzBtns.forEach(btn => {
-				btn.addEventListener('click', () => {
-					baseSzBtns.forEach(b => b.classList.remove('active'));
-					btn.classList.add('active');
-					applySizeDetails(btn);
-				});
+				btn.addEventListener('click', () => activateSize(btn));
+				btn.addEventListener('mouseenter', () => activateSize(btn));
 			});
 		}
 
-		// 10. Event Handlers: Thumbnails Strip (2-Way Mutual Synchronization)
+		// 10. Event Handlers: Thumbnails Strip (2-Way Mutual Synchronization - Hover & Click)
+		const activateThumbnail = (thumb) => {
+			if (!thumb || thumb.classList.contains('active')) return;
+			const newSrc = thumb.getAttribute('data-src');
+			const thumbMotif = thumb.getAttribute('data-motif') || '';
+			const thumbSleeve = thumb.getAttribute('data-sleeve') || '';
+			const thumbSize = thumb.getAttribute('data-size') || '';
+			const thumbOutlet = thumb.getAttribute('data-outlet') || '';
+
+			if (newSrc) {
+				updateMainImage(newSrc);
+				thumbs.forEach(t => t.classList.remove('active'));
+				thumb.classList.add('active');
+			}
+
+			// 1. Sync Motif Button if available
+			if (thumbMotif && varMotifBtns.length > 0) {
+				const matchedMotifBtn = Array.from(varMotifBtns).find(b => b.getAttribute('data-motif') === thumbMotif);
+				if (matchedMotifBtn && !matchedMotifBtn.classList.contains('active')) {
+					varMotifBtns.forEach(b => b.classList.remove('active'));
+					matchedMotifBtn.classList.add('active');
+					currentSelectedMotif = thumbMotif;
+					filterOutletBadges(thumbMotif);
+				}
+			}
+
+			// 2. Sync Sleeve Button if available
+			if (varSleeveBtns.length > 0) {
+				filterSleeves(currentSelectedMotif || thumbMotif);
+				let matchedSleeveBtn = null;
+				if (thumbSleeve) {
+					matchedSleeveBtn = Array.from(varSleeveBtns).find(b => b.getAttribute('data-sleeve') === thumbSleeve);
+				}
+				if (!matchedSleeveBtn && newSrc) {
+					matchedSleeveBtn = Array.from(varSleeveBtns).find(b => {
+						const sImg = cleanUrl(b.getAttribute('data-image'));
+						return sImg && sImg === cleanUrl(newSrc);
+					});
+				}
+				if (matchedSleeveBtn && !matchedSleeveBtn.classList.contains('active')) {
+					varSleeveBtns.forEach(b => b.classList.remove('active'));
+					matchedSleeveBtn.classList.add('active');
+					currentSelectedSleeve = matchedSleeveBtn.getAttribute('data-sleeve') || thumbSleeve;
+					filterSizes(currentSelectedMotif || thumbMotif, currentSelectedSleeve);
+				}
+			}
+
+			// 3. Sync Size Button & Trigger Details (Price, Stock, Outlet)
+			const targetClean = cleanUrl(newSrc);
+			let matchedSzBtn = null;
+
+			if (thumbSize) {
+				matchedSzBtn = Array.from(baseSzBtns).find(b => {
+					const bSz = b.getAttribute('data-size');
+					const bSlv = b.getAttribute('data-sleeve');
+					const matchSlv = !thumbSleeve || !bSlv || bSlv === thumbSleeve;
+					return bSz === thumbSize && matchSlv && b.style.display !== 'none';
+				});
+			}
+			if (!matchedSzBtn && newSrc) {
+				matchedSzBtn = Array.from(baseSzBtns).find(b => {
+					const bImg = cleanUrl(b.getAttribute('data-image'));
+					return bImg === targetClean && b.style.display !== 'none';
+				});
+			}
+			if (!matchedSzBtn) {
+				matchedSzBtn = Array.from(baseSzBtns).find(b => b.style.display !== 'none');
+			}
+
+			if (matchedSzBtn) {
+				baseSzBtns.forEach(b => b.classList.remove('active'));
+				matchedSzBtn.classList.add('active');
+				applySizeDetails(matchedSzBtn);
+			} else if (thumbOutlet) {
+				updateOutletInfo(thumbOutlet);
+			}
+		};
+
 		if (thumbs && thumbs.length > 0) {
 			thumbs.forEach(thumb => {
-				thumb.addEventListener('click', () => {
-					const newSrc = thumb.getAttribute('data-src');
-					const thumbMotif = thumb.getAttribute('data-motif') || '';
-					const thumbSleeve = thumb.getAttribute('data-sleeve') || '';
-					const thumbSize = thumb.getAttribute('data-size') || '';
-					const thumbOutlet = thumb.getAttribute('data-outlet') || '';
-
-					if (mainImg && newSrc) {
-						mainImg.style.opacity = '0.3';
-						setTimeout(() => {
-							mainImg.src = newSrc;
-							mainImg.style.opacity = '1';
-						}, 150);
-						thumbs.forEach(t => t.classList.remove('active'));
-						thumb.classList.add('active');
-					}
-
-					// 1. Sync Motif Button if available
-					if (thumbMotif && varMotifBtns.length > 0) {
-						const matchedMotifBtn = Array.from(varMotifBtns).find(b => b.getAttribute('data-motif') === thumbMotif);
-						if (matchedMotifBtn) {
-							varMotifBtns.forEach(b => {
-								b.classList.remove('active');
-								b.style.borderColor = '#cbd5e1';
-								b.style.background = '#fff';
-								b.style.color = '#1e293b';
-							});
-							matchedMotifBtn.classList.add('active');
-							matchedMotifBtn.style.borderColor = '#0f172a';
-							matchedMotifBtn.style.background = '#0f172a';
-							matchedMotifBtn.style.color = '#fff';
-							currentSelectedMotif = thumbMotif;
-							filterOutletBadges(thumbMotif);
-						}
-					}
-
-					// 2. Sync Sleeve Button if available
-					if (varSleeveBtns.length > 0) {
-						filterSleeves(currentSelectedMotif || thumbMotif);
-						let matchedSleeveBtn = null;
-						if (thumbSleeve) {
-							matchedSleeveBtn = Array.from(varSleeveBtns).find(b => b.getAttribute('data-sleeve') === thumbSleeve);
-						}
-						if (!matchedSleeveBtn && newSrc) {
-							const cleanUrl = (u) => (u || '').split('?')[0].trim();
-							matchedSleeveBtn = Array.from(varSleeveBtns).find(b => {
-								const sImg = cleanUrl(b.getAttribute('data-image'));
-								return sImg && sImg === cleanUrl(newSrc);
-							});
-						}
-						if (matchedSleeveBtn) {
-							varSleeveBtns.forEach(b => {
-								b.classList.remove('active');
-								b.style.borderColor = '#cbd5e1';
-								b.style.background = '#fff';
-								b.style.color = '#1e293b';
-							});
-							matchedSleeveBtn.classList.add('active');
-							matchedSleeveBtn.style.borderColor = '#0f172a';
-							matchedSleeveBtn.style.background = '#0f172a';
-							matchedSleeveBtn.style.color = '#fff';
-							currentSelectedSleeve = matchedSleeveBtn.getAttribute('data-sleeve') || thumbSleeve;
-							filterSizes(currentSelectedMotif || thumbMotif, currentSelectedSleeve);
-						}
-					}
-
-					// 3. Sync Size Button & Trigger Details (Price, Stock, Outlet)
-					const cleanUrl = (u) => (u || '').split('?')[0].trim();
-					const targetClean = cleanUrl(newSrc);
-					let matchedSzBtn = null;
-
-					if (thumbSize) {
-						matchedSzBtn = Array.from(baseSzBtns).find(b => {
-							const bSz = b.getAttribute('data-size');
-							const bSlv = b.getAttribute('data-sleeve');
-							const matchSlv = !thumbSleeve || !bSlv || bSlv === thumbSleeve;
-							return bSz === thumbSize && matchSlv && b.style.display !== 'none';
-						});
-					}
-					if (!matchedSzBtn && newSrc) {
-						matchedSzBtn = Array.from(baseSzBtns).find(b => {
-							const bImg = cleanUrl(b.getAttribute('data-image'));
-							return bImg === targetClean && b.style.display !== 'none';
-						});
-					}
-					if (!matchedSzBtn) {
-						matchedSzBtn = Array.from(baseSzBtns).find(b => b.style.display !== 'none');
-					}
-
-					if (matchedSzBtn) {
-						baseSzBtns.forEach(b => b.classList.remove('active'));
-						matchedSzBtn.classList.add('active');
-						applySizeDetails(matchedSzBtn);
-					} else if (thumbOutlet) {
-						updateOutletInfo(thumbOutlet);
-					}
-				});
+				thumb.addEventListener('click', () => activateThumbnail(thumb));
+				thumb.addEventListener('mouseenter', () => activateThumbnail(thumb));
 			});
 		}
 
 		// 11. Initial State Activation
 		if (varMotifBtns.length > 0 && varMotifBtns[0]) {
-			varMotifBtns[0].click();
+			varMotifBtns[0].classList.add('active');
+			const initMotifName = varMotifBtns[0].getAttribute('data-motif') || '';
+			currentSelectedMotif = initMotifName;
+			filterOutletBadges(initMotifName);
+			filterSleeves(initMotifName);
 		} else {
 			filterOutletBadges('');
 			filterSleeves('');

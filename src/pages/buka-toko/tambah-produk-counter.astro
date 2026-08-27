@@ -165,9 +165,8 @@ if (Astro.request.method === "POST") {
 			if (action === "add_product") {
 				const name = formData.get("name");
 				const price = formData.get("price");
-				const category_ids = formData.getAll("category_ids");
+				const raw_category_ids = formData.getAll("category_ids");
 				const category_chain = formData.getAll("category_chain");
-				const type_id = category_ids[0] || null;
 				const motif_ids = formData.getAll("motif_ids");
 				const colors = formData.getAll("colors");
 				const description = formData.get("description");
@@ -175,6 +174,49 @@ if (Astro.request.method === "POST") {
 				const tokopedia_url = formData.get("tokopedia_url");
 				const original_price = formData.get("original_price");
 				const item_code = formData.get("item_code");
+
+				// Resolve categories: If a category in category_ids is a new name string rather than existing UUID,
+				// check or create it in database types table so it gets a valid ID!
+				let resolvedCategoryIds: string[] = [];
+				let resolvedL1Id: string | null = null;
+
+				for (let i = 0; i < raw_category_ids.length; i++) {
+					const catVal = String(raw_category_ids[i]).trim();
+					if (!catVal) continue;
+
+					// Check if it's already an existing type ID
+					const existingType = types.find((t: any) => String(t.id) === catVal);
+					if (existingType) {
+						resolvedCategoryIds.push(existingType.id);
+						if (i === 0) resolvedL1Id = existingType.id;
+					} else {
+						// It's a custom or new category name! Find by name or create via API
+						const matchedByName = types.find((t: any) => (t.name || "").trim().toLowerCase() === catVal.toLowerCase());
+						if (matchedByName) {
+							resolvedCategoryIds.push(matchedByName.id);
+							if (i === 0) resolvedL1Id = matchedByName.id;
+						} else {
+							try {
+								const parent_id = i === 0 ? null : (resolvedL1Id || null);
+								const newTypeRes = await apiFetch<any>("types", {
+									method: "POST",
+									body: JSON.stringify({ name: catVal, parent_id }),
+								});
+								const newId = newTypeRes?.data?.id || newTypeRes?.id;
+								if (newId) {
+									resolvedCategoryIds.push(newId);
+									if (i === 0) resolvedL1Id = newId;
+									types.push({ id: newId, name: catVal, parent_id });
+								}
+							} catch (createTypeErr) {
+								console.error("Gagal auto-create type baru:", catVal, createTypeErr);
+							}
+						}
+					}
+				}
+
+				const category_ids = resolvedCategoryIds;
+				const type_id = category_ids[0] || null;
 
 				// Variant Arrays
 				const variant_motif_names = formData.getAll("variant_motif_name") as string[];
@@ -190,7 +232,7 @@ if (Astro.request.method === "POST") {
 				const variant_stocks = formData.getAll("variant_stock") as string[];
 				const variant_dalamans = formData.getAll("variant_dalaman") as string[];
 
-				const selectedType = hierarchicalTypes.find((t: any) => t.id === type_id);
+				const selectedType = hierarchicalTypes.find((t: any) => t.id === type_id) || types.find((t: any) => t.id === type_id);
 				let jenisProduk = "umum";
 				if (selectedType && selectedType.name) {
 					jenisProduk = selectedType.name
@@ -593,6 +635,37 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				</div>
 			)}
 
+			<!-- POS DATA VERIFICATION BADGE (MASTER POS) -->
+			<div id="pos-reference-badge-card" style="display: none; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white; padding: 1.25rem 1.5rem; border-radius: 12px; margin-bottom: 1.5rem; border: 1px solid #334155; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);">
+				<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+					<div style="display: flex; align-items: center; gap: 0.5rem;">
+						<span style="font-size: 1.25rem;">📦</span>
+						<strong style="font-size: 0.95rem; letter-spacing: 0.5px; text-transform: uppercase;">DATA REFERENSI MASTER POS (ASLI)</strong>
+					</div>
+					<span id="ref-pos-id-badge" style="font-size: 0.75rem; font-family: monospace; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1;">
+						ID: -
+					</span>
+				</div>
+				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; font-size: 0.82rem;">
+					<div>
+						<span style="color: #94a3b8; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; display: block; margin-bottom: 2px;">📌 Kode Barcode POS (Lengkap)</span>
+						<strong id="ref-pos-code-val" style="font-family: monospace; font-size: 0.95rem; color: #fbbf24; letter-spacing: 1px;">-</strong>
+					</div>
+					<div>
+						<span style="color: #94a3b8; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; display: block; margin-bottom: 2px;">🏷️ Kode Barang (Model)</span>
+						<strong id="ref-pos-itemcode-val" style="font-family: monospace; font-size: 0.95rem; color: #38bdf8;">-</strong>
+					</div>
+					<div style="grid-column: 1 / -1;">
+						<span style="color: #94a3b8; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; display: block; margin-bottom: 2px;">📦 Nama Mentah POS</span>
+						<strong id="ref-pos-name-val" style="font-size: 0.95rem; color: #f8fafc;">-</strong>
+					</div>
+					<div style="grid-column: 1 / -1; background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
+						<span style="color: #38bdf8; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; display: block; margin-bottom: 2px;">✨ Uraian Tipe Terdeteksi (API Noir POS)</span>
+						<span id="ref-pos-type-val" style="font-size: 0.85rem; color: #e2e8f0; font-weight: 600;">-</span>
+					</div>
+				</div>
+			</div>
+
 			<!-- Main Product Form Container -->
 			<div style="background: white; border: 1px solid #e2e8f0; padding: var(--spacing-lg); border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05);">
 				<h2 style="font-size: 1rem; margin-bottom: var(--spacing-lg); font-weight: 700; color: #1e293b;" class="text-uppercase">
@@ -608,28 +681,50 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 					<!-- Main Inputs -->
 					<div style="display: flex; flex-direction: column; gap: var(--spacing-md); width: 100%;">
 						<div>
-							<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">Nama Produk</label>
-							<input name="name" id="product_name_input" type="text" required placeholder="Contoh: Rok Klok TP Furing J780" style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px;" />
-						</div>
-
-						<div>
-							<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">Kode SKU / Counter Utama</label>
-							<input name="code" id="product_sku_input" type="text" placeholder="01930798" style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px;" />
-						</div>
-
-						<div>
-							<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">Kode Barang (Auto-Name)</label>
-							<input name="item_code" id="product_item_code_input" type="text" placeholder="J780" style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px;" />
-						</div>
-
-						<div>
-							<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">Harga Utama (Rp)</label>
-							<input type="text" class="currency-mask" data-hidden-id="product_price_input" required id="product_price_input_display" placeholder="450.000" style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px;" />
-							<input type="hidden" name="price" id="product_price_input" />
-							<div id="price_markup_preview" style="font-size: 0.65rem; color: #10b981; margin-top: 0.4rem; font-weight: 600; display: none;">
-								Harga Coret: Rp <span id="markup_val">0</span> (Hemat Rp <span id="markup_pct">0</span>)
+							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+								<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; margin: 0;">Nama Produk</label>
+								<span style="font-size: 0.65rem; color: #0284c7; font-weight: 700; letter-spacing: 0.3px;">OTOMATIS DARI POS / EDIT SESUAI KEBUTUHAN</span>
 							</div>
-							<input type="hidden" name="original_price" id="original_price_input" />
+							<input name="name" id="product_name_input" type="text" required placeholder="Contoh: Kemeja Katun Printing Krem I327" style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; font-size: 0.95rem;" />
+						</div>
+
+						<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+							<div>
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+									<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; margin: 0;">Kode Barcode POS (Lengkap)</label>
+									<span style="font-size: 0.62rem; color: #b45309; font-weight: 700;">AKUNTANSI / POS</span>
+								</div>
+								<input name="pos_code" id="product_pos_code_input" type="text" placeholder="WI0SP0JED99020311" style="width: 100%; padding: 0.7rem; border: 1.5px solid #fde047; border-radius: 6px; font-family: monospace; font-weight: 700; color: #854d0e; background: #fefce8;" />
+							</div>
+							<div>
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+									<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; margin: 0;">Kode Barang / Model</label>
+									<span style="font-size: 0.62rem; color: #0284c7; font-weight: 700;">AUTO-NAME</span>
+								</div>
+								<input name="item_code" id="product_item_code_input" type="text" placeholder="D021" style="width: 100%; padding: 0.7rem; border: 1.5px solid #bae6fd; border-radius: 6px; font-family: monospace; font-weight: 700; color: #0369a1; background: #f0f9ff;" />
+							</div>
+						</div>
+
+						<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+							<div>
+								<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">Kode SKU / Counter Utama</label>
+								<input name="code" id="product_sku_input" type="text" placeholder="01930798" style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; font-family: monospace; font-weight: 600;" />
+							</div>
+							<div>
+								<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">Harga Utama (Rp)</label>
+								<input type="text" class="currency-mask" data-hidden-id="product_price_input" required id="product_price_input_display" placeholder="450.000" style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 700; font-size: 0.95rem;" />
+								<input type="hidden" name="price" id="product_price_input" />
+								<div id="price_markup_preview" style="font-size: 0.65rem; color: #10b981; margin-top: 0.4rem; font-weight: 600; display: none;">
+									Harga Coret: Rp <span id="markup_val">0</span> (Hemat Rp <span id="markup_pct">0</span>)
+								</div>
+								<input type="hidden" name="original_price" id="original_price_input" />
+							</div>
+						</div>
+
+						<!-- Detected Type Info Row -->
+						<div id="detected-type-info-row" style="display: none; align-items: center; gap: 8px; padding: 8px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 0.78rem; color: #166534;">
+							<span>✨</span>
+							<span id="detected-type-info-text"></span>
 						</div>
 					</div>
 
@@ -1209,17 +1304,15 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 		const motifPhotoStore = new Map();
 
 		function cleanSize(rawSize, rawKode) {
-			if (!rawSize) {
-				if (rawKode && rawKode.length >= 3) {
-					const char3 = rawKode.charAt(2).toUpperCase();
-					const sizeCodeMap = {
-						'0': 'ALL SIZE', 'S': 'S', 'M': 'M', 'L': 'L', 'X': 'XL', 'Y': 'XXL',
-						'2': '2L', '3': '3L', '4': '4L', '5': '5L', '6': '6L', '7': '7L'
-					};
-					if (sizeCodeMap[char3]) return sizeCodeMap[char3];
-				}
-				return "ALL SIZE";
+			if (rawKode && rawKode.length >= 3) {
+				const char3 = rawKode.charAt(2).toUpperCase();
+				const sizeCodeMap = {
+					'0': 'ALL SIZE', 'S': 'S', 'M': 'M', 'L': 'L', 'X': 'XL', 'Y': 'XXL',
+					'2': '2L', '3': '3L', '4': '4L', '5': '5L', '6': '6L', '7': '7L'
+				};
+				if (sizeCodeMap[char3]) return sizeCodeMap[char3];
 			}
+			if (!rawSize) return "ALL SIZE";
 			let s = String(rawSize).trim().toUpperCase();
 			if (s === "00" || s === "0" || s === "ALL" || s === "ALLSIZE" || s === "ALL SIZE" || s === "-") {
 				return "ALL SIZE";
@@ -1269,7 +1362,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			if (!rawItem && (praProdukId || qParam)) {
 				const queryTerm = qParam || praProdukId;
 				try {
-					const res = await fetch(`https://noir.grace.gracianna.web.id/api/v1/praProduk?per_page=12&q=${encodeURIComponent(queryTerm)}`);
+					const res = await fetch(`https://noir.grace.gracianna.web.id/api/v1/praProdukV2?per_page=12&q=${encodeURIComponent(queryTerm)}`);
 					const json = await res.json();
 					const listData = Array.isArray(json) ? json : (json.data?.data || json.data || []);
 					if (listData.length > 0) {
@@ -1285,18 +1378,253 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			}
 		});
 
+		// Definisi Standar POS Noir Persis dari API https://noir.grace.gracianna.web.id/api/v1/tipe
+		const NOIR_TIPE_MAP = {
+			t1: { // Divisi / Gender (Char 1)
+				L: "LADYS", M: "MAN", A: "ASESORIS", T: "TAS", J: "JAM", K: "KOSMETIK",
+				S: "SEPATU", D: "SANDAL", E: "DOMPET", W: "WANITA", Y: "YUAN-YUAN",
+				X: "KONSI", I: "KAIN", R: "SARIMBIT", G: "GULUNGAN", C: "METERAN", P: "KPJ"
+			},
+			t2: { // Kategori Utama (Char 2)
+				// Semua selain aksesoris dijadikan Level 1 tersendiri
+				K: { name: "KEMEJA", targetL1: "Kemeja", isAccessory: false },
+				B: { name: "BLUES", targetL1: "Blues", isAccessory: false },
+				P: { name: "DRESS", targetL1: "Dress", isAccessory: false },
+				G: { name: "GAUN", targetL1: "Gaun", isAccessory: false },
+				X: { name: "GAMIS", targetL1: "Gamis", isAccessory: false },
+				R: { name: "ROK", targetL1: "Rok", isAccessory: false },
+				C: { name: "CELANA", targetL1: "Celana", isAccessory: false },
+				E: { name: "LEGGING", targetL1: "Legging", isAccessory: false },
+				F: { name: "SARUNG", targetL1: "Sarung", isAccessory: false },
+				O: { name: "OUTER", targetL1: "Outer", isAccessory: false },
+				J: { name: "JAKET", targetL1: "Jaket", isAccessory: false },
+				A: { name: "JAS", targetL1: "Jas", isAccessory: false },
+				V: { name: "KEBAYA", targetL1: "Kebaya", isAccessory: false },
+				S: { name: "STELAN", targetL1: "Setelan", isAccessory: false },
+				U: { name: "JUMPSUIT", targetL1: "Jumpsuit", isAccessory: false },
+				T: { name: "T - SHIRT", targetL1: "T - Shirt", isAccessory: false },
+				N: { name: "TANK TOP", targetL1: "Tank Top", isAccessory: false },
+				M: { name: "SARIMBIT", targetL1: "Sarimbit", isAccessory: false },
+				// Aksesoris: Level 1 = "Accessories", Level 2 = Sub-kategori Aksesoris
+				L: { name: "SYAL", targetL1: "Accessories", isAccessory: true, subName: "Syal" },
+				H: { name: "SELENDANG", targetL1: "Accessories", isAccessory: true, subName: "Selendang" },
+				Q: { name: "KLG/ANTG", targetL1: "Accessories", isAccessory: true, subName: "Kalung / Anting" },
+				W: { name: "BROS", targetL1: "Accessories", isAccessory: true, subName: "Bros" },
+				I: { name: "TOPI", targetL1: "Accessories", isAccessory: true, subName: "Topi" },
+				D: { name: "SABUK", targetL1: "Accessories", isAccessory: true, subName: "Sabuk" }
+			},
+			t3: { // Bahan (Char 4) -> Maps to Level 2
+				T: { name: "KATUN", targetL2: "Katun" },
+				G: { name: "SUTRA", targetL2: "Sutra" },
+				M: { name: "TENUN", targetL2: "Tenun" },
+				S: { name: "SATEN", targetL2: "Saten" },
+				D: { name: "DOBY", targetL2: "Dobby" },
+				A: { name: "BROKLAT", targetL2: "Broklat" },
+				F: { name: "SIFONE", targetL2: "Sifone" },
+				E: { name: "PARIS", targetL2: "Paris" },
+				H: { name: "PARIS", targetL2: "Paris" },
+				V: { name: "VISCOS", targetL2: "Viscos" },
+				J: { name: "JEANS", targetL2: "Jeans" },
+				K: { name: "KAOS", targetL2: "Kaos" },
+				P: { name: "PARASIT", targetL2: "Parasit" },
+				N: { name: "NILON", targetL2: "Nilon" },
+				B: { name: "BENANG", targetL2: "Benang" },
+				L: { name: "KALDORE", targetL2: "Kaldore" },
+				U: { name: "KULIT", targetL2: "Kulit" },
+				R: { name: "BLUDRU", targetL2: "Bludru" },
+				C: { name: "JERUK", targetL2: "Jeruk" },
+				I: { name: "BABY", targetL2: "Baby" },
+				W: { name: "SILKY", targetL2: "Silky" },
+				X: { name: "KREP", targetL2: "Krep" }
+			},
+			t4: { // Warna Utama (Char 6)
+				B: "BIRU", K: "KUNING", H: "HITAM", I: "HIJAU", A: "ABU-ABU",
+				C: "COKLAT", J: "JINGGA", M: "MERAH", N: "PINK", O: "ORANGE",
+				P: "PUTIH", S: "SILVER", U: "UNGU", R: "KREM", W: "WARNAWARNI"
+			},
+			t5: { // Ukuran Dasar (Char 3)
+				S: "S", M: "M", L: "L", X: "XL", Y: "XXL",
+				'2': "2L", '3': "3L", '4': "4L", '5': "5L", '6': "6L", '7': "7L", '0': "ALL SIZE"
+			},
+			t6: { // Proses / Detail (Char 5) -> Maps to Level 3
+				C: { name: "CAP", targetL3: "Cap" },
+				P: { name: "PRINT", targetL3: "Printing" },
+				T: { name: "TULIS", targetL3: "Tulis" },
+				R: { name: "PERADA", targetL3: "Prada" },
+				S: { name: "TULISP", targetL3: "Tulis" },
+				Q: { name: "PERADAP", targetL3: "Prada" }
+			}
+		};
+
+		function decodePosItemInfo(item) {
+			const rawCode = (item.kode || item.code || item.sku || "").toUpperCase().trim();
+			const rawName = (item.nama || item.name || "").toUpperCase().trim();
+
+			let divisi = "";
+			let kategori = "";
+			let bahan = "";
+			let proses = "";
+			let warna = "";
+			let ukuran = "";
+			let dalaman = "";
+
+			// 1. PRIORITAS UTAMA MUTLAK: ANALISIS KODE BARCODE POS (17 DIGIT)
+			if (rawCode.length >= 1) {
+				const char1 = rawCode.charAt(0);
+				if (NOIR_TIPE_MAP.t1[char1]) divisi = NOIR_TIPE_MAP.t1[char1];
+			}
+			if (rawCode.length >= 2) {
+				const char2 = rawCode.charAt(1);
+				if (NOIR_TIPE_MAP.t2[char2]) {
+					kategori = NOIR_TIPE_MAP.t2[char2].name;
+				}
+			}
+			if (rawCode.length >= 3) {
+				const char3 = rawCode.charAt(2);
+				if (NOIR_TIPE_MAP.t5[char3]) ukuran = NOIR_TIPE_MAP.t5[char3];
+			}
+			if (rawCode.length >= 4) {
+				const char4 = rawCode.charAt(3);
+				if (NOIR_TIPE_MAP.t3[char4]) bahan = NOIR_TIPE_MAP.t3[char4].name;
+			}
+			if (rawCode.length >= 5) {
+				const char5 = rawCode.charAt(4);
+				if (NOIR_TIPE_MAP.t6[char5]) proses = NOIR_TIPE_MAP.t6[char5].name;
+			}
+			if (rawCode.length >= 6) {
+				const char6 = rawCode.charAt(5);
+				if (NOIR_TIPE_MAP.t4[char6]) warna = NOIR_TIPE_MAP.t4[char6];
+			}
+
+			// Cek Furing / Tanpa Furing dari kode barcode
+			if (rawCode.includes("TF")) {
+				dalaman = "Tanpa Furing (TF)";
+			} else if (rawCode.includes("F")) {
+				dalaman = "Furing (F)";
+			}
+
+			// 2. CADANGAN HANYA JIKA KODE TIDAK MENYEDIAKAN
+			if (!kategori) {
+				if (rawName.includes("KMJ") || rawName.includes("KEMEJA")) kategori = "KEMEJA";
+				else if (rawName.includes("HEM")) kategori = "T - SHIRT";
+				else if (rawName.includes("BLUS") || rawName.includes("BLOUSE") || rawName.includes("BLUES")) kategori = "BLUES";
+				else if (rawName.includes("DRS") || rawName.includes("DRESS")) kategori = "DRESS";
+				else if (rawName.includes("GAUN")) kategori = "GAUN";
+				else if (rawName.includes("GAMIS") || rawName.includes("KAFTAN")) kategori = "GAMIS";
+				else if (rawName.includes("ROK") || rawName.includes("SKIRT")) kategori = "ROK";
+				else if (rawName.includes("CLN") || rawName.includes("CELANA")) kategori = "CELANA";
+				else if (rawName.includes("LEGGING")) kategori = "LEGGING";
+				else if (rawName.includes("SARUNG")) kategori = "SARUNG";
+				else if (rawName.includes("TNK") || rawName.includes("TUNIK")) kategori = "TUNIK";
+				else if (rawName.includes("OUTER") || rawName.includes("CARDIGAN") || rawName.includes("ROMPI")) kategori = "OUTER";
+				else if (rawName.includes("JAKET")) kategori = "JAKET";
+				else if (rawName.includes("JAS") || rawName.includes("BLAZER")) kategori = "JAS";
+				else if (rawName.includes("KEBAYA")) kategori = "KEBAYA";
+				else if (rawName.includes("STL") || rawName.includes("SETELAN") || rawName.includes("STELAN")) kategori = "STELAN";
+				else if (rawName.includes("JUMPSUIT")) kategori = "JUMPSUIT";
+				else if (rawName.includes("TANK TOP")) kategori = "TANK TOP";
+				else if (rawName.includes("SARIMBIT")) kategori = "SARIMBIT";
+			}
+
+			if (!bahan) {
+				if (rawName.includes("KATUN") || rawName.includes("COTTON")) bahan = "KATUN";
+				else if (rawName.includes("SUTRA") || rawName.includes("SILK") || rawName.includes("SUTERA")) bahan = "SUTRA";
+				else if (rawName.includes("TENUN")) bahan = "TENUN";
+				else if (rawName.includes("SATEN") || rawName.includes("SATIN")) bahan = "SATEN";
+				else if (rawName.includes("DOBY") || rawName.includes("DOBBY")) bahan = "DOBY";
+				else if (rawName.includes("BROKLAT") || rawName.includes("BRUKAT")) bahan = "BROKLAT";
+				else if (rawName.includes("SIFONE") || rawName.includes("CHIFFON")) bahan = "SIFONE";
+				else if (rawName.includes("PARIS")) bahan = "PARIS";
+				else if (rawName.includes("VISCOS") || rawName.includes("VISCOSE")) bahan = "VISCOS";
+				else if (rawName.includes("JEANS")) bahan = "JEANS";
+			}
+
+			if (!proses) {
+				if (rawName.includes("TULIS")) proses = "TULIS";
+				else if (rawName.includes("CAP")) proses = "CAP";
+				else if (rawName.includes("PRINTING") || rawName.includes("PRINT")) proses = "PRINT";
+				else if (rawName.includes("PERADA") || rawName.includes("PRADA")) proses = "PERADA";
+			}
+
+			if (!warna) {
+				if (rawName.includes("MUST") || rawName.includes("MUSTARD")) warna = "KUNING";
+				else if (rawName.includes("HTM") || rawName.includes("HITAM") || rawName.includes("BLACK")) warna = "HITAM";
+				else if (rawName.includes("PTH") || rawName.includes("PUTIH") || rawName.includes("WHITE")) warna = "PUTIH";
+				else if (rawName.includes("MRH") || rawName.includes("MERAH") || rawName.includes("RED")) warna = "MERAH";
+				else if (rawName.includes("MRN") || rawName.includes("MAROON") || rawName.includes("MARON")) warna = "MAROON";
+				else if (rawName.includes("NVY") || rawName.includes("NAVY")) warna = "NAVY";
+				else if (rawName.includes("CKL") || rawName.includes("COKLAT") || rawName.includes("BROWN")) warna = "COKLAT";
+				else if (rawName.includes("KNG") || rawName.includes("KUNING") || rawName.includes("YELLOW")) warna = "KUNING";
+				else if (rawName.includes("HJU") || rawName.includes("HIJAU") || rawName.includes("GREEN")) warna = "HIJAU";
+			}
+
+			const parts = [];
+			if (divisi) parts.push(divisi);
+			if (kategori) parts.push(kategori);
+			if (bahan) parts.push(`Bahan: ${bahan}`);
+			if (proses) parts.push(`Proses: ${proses}`);
+			if (dalaman) parts.push(dalaman);
+			if (warna) parts.push(`Warna: ${warna}`);
+			if (ukuran && ukuran !== "ALL SIZE") parts.push(`Ukuran: ${ukuran}`);
+
+			return {
+				divisi,
+				kategori,
+				bahan,
+				proses,
+				dalaman: dalaman || "Tanpa Furing (TF)",
+				warna,
+				ukuran,
+				summary: parts.join(" • ") || "Produk Standar"
+			};
+		}
+
 		function hydrateForm(item) {
 			const nameInput = document.getElementById("product_name_input");
 			const skuInput = document.getElementById("product_sku_input");
 			const itemCodeInput = document.getElementById("product_item_code_input");
+			const posCodeInput = document.getElementById("product_pos_code_input");
 			const priceDisplay = document.getElementById("product_price_input_display");
 			const priceHidden = document.getElementById("product_price_input");
 			const mainPraInput = document.getElementById("main_praproduk_id_input");
 
+			const activeSku = (item.counter || "").toString().trim();
+			const activeItemCode = (item.kodeitem || "").toString().trim();
+			const activePosCode = (item.kode || item.code || "").toString().trim();
+			const activeName = (item.nama || item.name || "").toString().trim();
+
 			if (mainPraInput && item.id) mainPraInput.value = item.id;
-			if (nameInput && item.nama) nameInput.value = item.nama;
-			if (skuInput && item.counter) skuInput.value = item.counter;
-			if (itemCodeInput && (item.kodeitem || item.kode)) itemCodeInput.value = item.kodeitem || item.kode;
+			if (nameInput && activeName) nameInput.value = activeName;
+			if (skuInput && activeSku) skuInput.value = activeSku;
+			if (itemCodeInput && activeItemCode) itemCodeInput.value = activeItemCode;
+			if (posCodeInput && activePosCode) posCodeInput.value = activePosCode;
+
+			// Tampilkan Master POS Reference Badge Card di atas form
+			const posRefCard = document.getElementById("pos-reference-badge-card");
+			const refPosCode = document.getElementById("ref-pos-code-val");
+			const refPosItemCode = document.getElementById("ref-pos-itemcode-val");
+			const refPosName = document.getElementById("ref-pos-name-val");
+			const refPosType = document.getElementById("ref-pos-type-val");
+			const refPosIdBadge = document.getElementById("ref-pos-id-badge");
+
+			const posDecoded = decodePosItemInfo(item);
+
+			if (posRefCard) {
+				if (refPosCode) refPosCode.textContent = activePosCode || "-";
+				if (refPosItemCode) refPosItemCode.textContent = activeItemCode || "-";
+				if (refPosName) refPosName.textContent = activeName || "-";
+				if (refPosType) refPosType.textContent = posDecoded.summary;
+				if (refPosIdBadge) refPosIdBadge.textContent = item.id ? `ID: #${item.id}` : "ID: -";
+				posRefCard.style.display = "block";
+			}
+
+			// Tampilkan informasi tipe terdeteksi
+			const detectedRow = document.getElementById("detected-type-info-row");
+			const detectedText = document.getElementById("detected-type-info-text");
+			if (detectedRow && detectedText) {
+				detectedText.innerHTML = `<strong>Tipe Terdeteksi dari Barcode POS:</strong> ${posDecoded.summary}`;
+				detectedRow.style.display = "flex";
+			}
 
 			const rawPrice = parseInt(item.hjual || 0);
 			if (rawPrice > 0) {
@@ -1304,76 +1632,15 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				if (priceDisplay) priceDisplay.value = rawPrice.toLocaleString("id-ID");
 			}
 
-			// ==========================================
-			// 1. AUTO-DETECT CATEGORY (L1 & L2)
-			// ==========================================
-			const itemUpperName = (item.nama || "").toUpperCase();
-			const activeCode = (item.kode || item.kodeitem || "").toString().trim();
-			let typeLetter = activeCode.length >= 2 ? activeCode.charAt(1).toUpperCase() : (activeCode.length === 1 ? activeCode.toUpperCase() : "");
-
-			const t2Map = {
-				C: "CELANA", K: "KEMEJA", J: "JAKET", R: "ROK", T: "T - SHIRT", B: "BLUES",
-				S: "STELAN", N: "TANK TOP", A: "JAS", M: "SARIMBIT", L: "SYAL", U: "JUMPSUIT",
-				G: "GAUN", I: "TOPI", D: "SABUK", E: "LEGGING", P: "DRESS", H: "SELENDANG",
-				O: "OUTER", F: "SARUNG", V: "KEBAYA", Q: "KLG/ANTG", W: "BROS", X: "GAMIS"
-			};
-
-			let categoryName = null;
-			// Check direct keyword in name first (e.g. ROK, KEMEJA, CELANA, DRESS, GAMIS, dll.)
-			const commonCategories = [
-				{ kw: "ROK", cat: "ROK" },
-				{ kw: "KEMEJA", cat: "KEMEJA" },
-				{ kw: "CELANA", cat: "CELANA" },
-				{ kw: "DRESS", cat: "DRESS" },
-				{ kw: "GAMIS", cat: "GAMIS" },
-				{ kw: "BLUS", cat: "BLUES" },
-				{ kw: "BLUES", cat: "BLUES" },
-				{ kw: "OUTER", cat: "OUTER" },
-				{ kw: "JAKET", cat: "JAKET" },
-				{ kw: "SETELAN", cat: "STELAN" },
-				{ kw: "STELAN", cat: "STELAN" },
-				{ kw: "KAIN", cat: "KAIN" },
-				{ kw: "SARUNG", cat: "SARUNG" },
-				{ kw: "KEBAYA", cat: "KEBAYA" },
-				{ kw: "KAOS", cat: "T - SHIRT" },
-				{ kw: "T-SHIRT", cat: "T - SHIRT" }
-			];
-
-			for (const itemCat of commonCategories) {
-				if (itemUpperName.includes(itemCat.kw)) {
-					categoryName = itemCat.cat;
-					break;
-				}
-			}
-
-			if (!categoryName && typeLetter && t2Map[typeLetter]) {
-				categoryName = t2Map[typeLetter];
-			}
-			if (!categoryName && item.kategori) {
-				categoryName = item.kategori;
-			}
-
-			if (categoryName) {
-				selectCategoryByName(categoryName);
-			}
-
-			// Auto detect L2 (Bahan) from 4th char of SKU
-			if (activeCode.length >= 4) {
-				const bahanLetter = activeCode.charAt(3).toUpperCase();
-				const t3Map = {
-					J: "JEANS", K: "KAOS", T: "KATUN", P: "PARASIT", N: "NILON", B: "BENANG",
-					L: "KALDORE", A: "BROKLAT", F: "SIFONE", U: "KULIT", R: "BLUDRU", M: "TENUN",
-					E: "PARIS", S: "SATEN", C: "JERUK", D: "DOBY", G: "SUTRA", H: "PARIS",
-					I: "BABY", V: "VISCOS", W: "SILKY", X: "KREP"
-				};
-				if (t3Map[bahanLetter]) {
-					setTimeout(() => selectL2ByName(t3Map[bahanLetter]), 100);
-				}
-			}
+			// =========================================================================
+			// 1. AUTO-DETECT & SELECT KATEGORI (L1 & L2 SESUAI ATURAN MUTLAK)
+			// =========================================================================
+			autoDetectAndSelectCategories(item);
 
 			// ==========================================
 			// 2. AUTO-DETECT MOTIF GLOBAL
 			// ==========================================
+			const itemUpperName = activeName.toUpperCase();
 			const motifGrid = document.getElementById("motif-grid");
 			if (motifGrid) {
 				const motifKeywords = [
@@ -1394,28 +1661,11 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			// ==========================================
 			const colorGrid = document.getElementById("color-grid");
 			if (colorGrid) {
-				const colorKeywords = [
-					{ kw: "HITAM", name: "Hitam" }, { kw: "BLACK", name: "BLACK" },
-					{ kw: "PUTIH", name: "Putih" }, { kw: "WHITE", name: "Putih" },
-					{ kw: "MERAH", name: "Merah" }, { kw: "RED", name: "Merah" },
-					{ kw: "MAROON", name: "Maroon" }, { kw: "MARON", name: "MARON" },
-					{ kw: "COKLAT", name: "Coklat" }, { kw: "BROWN", name: "Coklat" },
-					{ kw: "KUNING", name: "Kuning" }, { kw: "YELLOW", name: "Kuning" },
-					{ kw: "HIJAU", name: "Hijau" }, { kw: "GREEN", name: "Hijau" },
-					{ kw: "BIRU", name: "Biru" }, { kw: "BLUE", name: "Biru" },
-					{ kw: "NAVY", name: "NAVY" }, { kw: "ABU", name: "Abu-abu" },
-					{ kw: "GREY", name: "GREY" }, { kw: "GRAY", name: "GREY" },
-					{ kw: "KREM", name: "Krem" }, { kw: "CREAM", name: "Krem" },
-					{ kw: "PINK", name: "PINK" }, { kw: "UNGU", name: "Ungu" },
-					{ kw: "GOLD", name: "Gold" }, { kw: "SOGA", name: "SOGA" },
-					{ kw: "SOGAN", name: "SOGA" }, { kw: "ORANYE", name: "Oranye" }
-				];
-				colorKeywords.forEach(c => {
-					if (itemUpperName.includes(c.kw)) {
-						const cb = colorGrid.querySelector(`input[value="${c.name}" i]`);
-						if (cb) cb.checked = true;
-					}
-				});
+				const detectedColor = posDecoded.warna;
+				if (detectedColor) {
+					const cb = colorGrid.querySelector(`input[value="${detectedColor}" i]`);
+					if (cb) cb.checked = true;
+				}
 			}
 
 			// Render Counter & Motif Variant Rows
@@ -1442,42 +1692,209 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			}
 		}
 
-		function selectCategoryByName(name) {
-			if (!name) return;
-			const cleanTarget = name.trim().toUpperCase();
-			const options = Array.from(document.querySelectorAll('.searchable-select[data-ss-type="product-l1"] .ss-option'));
-			
-			// 1. Try exact match first
-			let targetOpt = options.find(opt => opt.querySelector("span")?.textContent.trim().toUpperCase() === cleanTarget);
-			
-			// 2. Try partial match
-			if (!targetOpt) {
-				targetOpt = options.find(opt => opt.textContent.toUpperCase().includes(cleanTarget) || cleanTarget.includes(opt.querySelector("span")?.textContent.trim().toUpperCase() || ""));
+		function autoDetectAndSelectCategories(item, localProduct) {
+			if (!item && !localProduct) return;
+
+			// 1. Mode Edit Produk Lokal dengan Kategori Tersimpan
+			if (localProduct && Array.isArray(localProduct.categories) && localProduct.categories.length > 0) {
+				const catIds = localProduct.categories.map(c => String(c.id || c.category_id));
+				const l1Cat = hierarchicalTypes.find(t => catIds.includes(String(t.id)) && t.parent_id === null);
+				if (l1Cat) {
+					applyL1CategorySelection(l1Cat.id, l1Cat.name);
+					setTimeout(() => {
+						const l2Cats = hierarchicalTypes.filter(t => catIds.includes(String(t.id)) && String(t.parent_id) === String(l1Cat.id));
+						if (l2Cats.length > 0) {
+							selectL2ByName(l2Cats[0].name);
+							setTimeout(() => {
+								const l3Cats = hierarchicalTypes.filter(t => catIds.includes(String(t.id)) && l2Cats.some(l2 => String(t.parent_id) === String(l2.id)));
+								l3Cats.forEach(l3 => selectL3ByName(l3.name));
+							}, 150);
+						}
+					}, 100);
+					return;
+				}
 			}
 
-			if (targetOpt) {
-				targetOpt.click();
-			} else {
-				// If not found in L1 root, check if it exists in hierarchicalTypes to find its L1 parent
-				const matchedType = hierarchicalTypes.find(t => t.name.trim().toUpperCase() === cleanTarget || t.name.toUpperCase().includes(cleanTarget));
-				if (matchedType) {
-					if (matchedType.parent_id) {
-						const parentL1 = hierarchicalTypes.find(t => t.id === matchedType.parent_id);
-						if (parentL1) {
-							selectCategoryByName(parentL1.name);
-							setTimeout(() => selectL2ByName(matchedType.name), 150);
-							return;
-						}
+			const rawCode = (item.kode || item.sku || item.code || "").toUpperCase().trim();
+			const rawName = (item.nama || item.name || "").toUpperCase().trim();
+
+			// 2. TAHAP 1: KATEGORI UTAMA (100% PRIORITAS MUTLAK DARI KARAKTER KE-2 KODE BARCODE POS - t2)
+			let targetL1Name = null;
+			let isAccessory = false;
+			let accessorySubName = "";
+
+			if (rawCode.length >= 2) {
+				const char2 = rawCode.charAt(1);
+				if (NOIR_TIPE_MAP.t2[char2]) {
+					const t2Entry = NOIR_TIPE_MAP.t2[char2];
+					targetL1Name = t2Entry.targetL1;
+					isAccessory = !!t2Entry.isAccessory;
+					accessorySubName = t2Entry.subName || "";
+				}
+			}
+
+			// Fallback nama untuk L1 hanya jika kode barcode tidak tersedia (< 2 karakter)
+			if (!targetL1Name) {
+				if (rawName.includes("KMJ") || rawName.includes("KEMEJA")) targetL1Name = "Kemeja";
+				else if (rawName.includes("HEM")) targetL1Name = "T - Shirt";
+				else if (rawName.includes("BLUS") || rawName.includes("BLOUSE") || rawName.includes("BLUES")) targetL1Name = "Blues";
+				else if (rawName.includes("DRS") || rawName.includes("DRESS")) targetL1Name = "Dress";
+				else if (rawName.includes("GAUN")) targetL1Name = "Gaun";
+				else if (rawName.includes("GAMIS") || rawName.includes("KAFTAN")) targetL1Name = "Gamis";
+				else if (rawName.includes("ROK") || rawName.includes("SKIRT")) targetL1Name = "Rok";
+				else if (rawName.includes("CLN") || rawName.includes("CELANA")) targetL1Name = "Celana";
+				else if (rawName.includes("LEGGING")) targetL1Name = "Legging";
+				else if (rawName.includes("SARUNG")) targetL1Name = "Sarung";
+				else if (rawName.includes("TNK") || rawName.includes("TUNIK")) targetL1Name = "Tunik";
+				else if (rawName.includes("OUTER") || rawName.includes("CARDIGAN") || rawName.includes("ROMPI")) targetL1Name = "Outer";
+				else if (rawName.includes("JAKET")) targetL1Name = "Jaket";
+				else if (rawName.includes("JAS") || rawName.includes("BLAZER")) targetL1Name = "Jas";
+				else if (rawName.includes("KEBAYA")) targetL1Name = "Kebaya";
+				else if (rawName.includes("SETELAN") || rawName.includes("STELAN") || rawName.includes("STL")) targetL1Name = "Setelan";
+				else if (rawName.includes("JUMPSUIT")) targetL1Name = "Jumpsuit";
+				else if (rawName.includes("TANK TOP")) targetL1Name = "Tank Top";
+				else if (rawName.includes("SARIMBIT")) targetL1Name = "Sarimbit";
+				else if (rawName.includes("SYAL")) { targetL1Name = "Accessories"; isAccessory = true; accessorySubName = "Syal"; }
+				else if (rawName.includes("SELENDANG")) { targetL1Name = "Accessories"; isAccessory = true; accessorySubName = "Selendang"; }
+				else if (rawName.includes("BROS")) { targetL1Name = "Accessories"; isAccessory = true; accessorySubName = "Bros"; }
+				else if (rawName.includes("TOPI")) { targetL1Name = "Accessories"; isAccessory = true; accessorySubName = "Topi"; }
+				else if (rawName.includes("SABUK")) { targetL1Name = "Accessories"; isAccessory = true; accessorySubName = "Sabuk"; }
+				else if (rawName.includes("ANTING") || rawName.includes("KALUNG")) { targetL1Name = "Accessories"; isAccessory = true; accessorySubName = "Kalung / Anting"; }
+			}
+
+			if (targetL1Name) {
+				selectCategoryByName(targetL1Name, isAccessory, accessorySubName);
+			}
+
+			// 3. TAHAP 2: JENIS / BAHAN L2 (UNTUK NON-AKSESORIS) DARI KARAKTER KE-4 (t3)
+			if (!isAccessory) {
+				let targetL2Name = null;
+				if (rawCode.length >= 4) {
+					const char4 = rawCode.charAt(3);
+					if (NOIR_TIPE_MAP.t3[char4]) {
+						targetL2Name = NOIR_TIPE_MAP.t3[char4].targetL2;
 					}
-					// Select directly
-					const optDirect = options.find(opt => opt.dataset.value == matchedType.id);
-					if (optDirect) optDirect.click();
+				}
+
+				if (!targetL2Name) {
+					if (rawName.includes("KATUN") || rawName.includes("COTTON")) targetL2Name = "Katun";
+					else if (rawName.includes("SUTRA") || rawName.includes("SILK") || rawName.includes("SUTERA")) targetL2Name = "Sutra";
+					else if (rawName.includes("TENUN")) targetL2Name = "Tenun";
+					else if (rawName.includes("SATEN") || rawName.includes("SATIN")) targetL2Name = "Saten";
+					else if (rawName.includes("DOBY") || rawName.includes("DOBBY")) targetL2Name = "Dobby";
+					else if (rawName.includes("BROKLAT") || rawName.includes("BRUKAT")) targetL2Name = "Broklat";
+					else if (rawName.includes("SIFONE") || rawName.includes("CHIFFON")) targetL2Name = "Sifone";
+					else if (rawName.includes("PARIS")) targetL2Name = "Paris";
+					else if (rawName.includes("VISCOS") || rawName.includes("VISCOSE")) targetL2Name = "Viscos";
+					else if (rawName.includes("JEANS")) targetL2Name = "Jeans";
+					else if (rawName.includes("KAOS")) targetL2Name = "Kaos";
+				}
+
+				if (targetL2Name) {
+					setTimeout(() => selectL2ByName(targetL2Name), 120);
+				}
+			}
+
+			// 4. TAHAP 3: PROSES / DETAIL L3 DARI KARAKTER KE-5 (t6)
+			let targetL3Name = null;
+			if (rawCode.length >= 5) {
+				const char5 = rawCode.charAt(4);
+				if (NOIR_TIPE_MAP.t6[char5]) {
+					targetL3Name = NOIR_TIPE_MAP.t6[char5].targetL3;
+				}
+			}
+
+			if (!targetL3Name) {
+				if (rawName.includes("TULIS")) targetL3Name = "Tulis";
+				else if (rawName.includes("CAP")) targetL3Name = "Cap";
+				else if (rawName.includes("PRINTING") || rawName.includes("PRINT")) targetL3Name = "Printing";
+				else if (rawName.includes("LUKIS")) targetL3Name = "Lukis";
+				else if (rawName.includes("PRADA") || rawName.includes("PERADA")) targetL3Name = "Prada";
+			}
+
+			if (targetL3Name) {
+				setTimeout(() => selectL3ByName(targetL3Name), 250);
+			}
+		}
+
+		function applyL1CategorySelection(val, text) {
+			const container = document.querySelector('.searchable-select[data-ss-type="product-l1"]');
+			if (!container) return;
+			const input = container.querySelector(".ss-input");
+			const hidden = document.getElementById("l1_category_input");
+			const dropdown = container.querySelector(".ss-dropdown");
+
+			if (hidden) hidden.value = val;
+			if (input) input.value = text;
+			if (dropdown) dropdown.style.display = "none";
+
+			renderSubCategoriesFromList([val]);
+			updateName();
+		}
+
+		function selectCategoryByName(targetName, isAccessory = false, subCategoryName = "") {
+			if (!targetName) return;
+			const cleanTarget = targetName.trim().toUpperCase();
+
+			// 1. Search in existing hierarchicalTypes (L1 Roots)
+			const l1Matches = hierarchicalTypes.filter(t => t.parent_id === null);
+			let matchedL1 = l1Matches.find(t => t.name.trim().toUpperCase() === cleanTarget);
+
+			// Fuzzy alias matching (misal Blues <-> Blus, Stelan <-> Setelan, T - Shirt <-> Hem, Accessories <-> Aksesoris)
+			if (!matchedL1) {
+				matchedL1 = l1Matches.find(t => {
+					const tUpper = t.name.trim().toUpperCase();
+					if (cleanTarget === "BLUES" && (tUpper === "BLUS" || tUpper === "BLOUSE")) return true;
+					if ((cleanTarget === "STELAN" || cleanTarget === "SETELAN") && (tUpper === "SETELAN" || tUpper === "STELAN" || tUpper === "SET")) return true;
+					if (cleanTarget === "T - SHIRT" && (tUpper === "HEM" || tUpper === "KAOS")) return true;
+					if (cleanTarget === "ACCESSORIES" && tUpper === "AKSESORIS") return true;
+					return tUpper.includes(cleanTarget) || cleanTarget.includes(tUpper);
+				});
+			}
+
+			if (matchedL1) {
+				applyL1CategorySelection(matchedL1.id, matchedL1.name);
+				if (isAccessory && subCategoryName) {
+					setTimeout(() => selectL2ByName(subCategoryName), 150);
+				}
+			} else {
+				// JIKA BELUM ADA DI MARKETPLACE: BUAT BARU SECARA OTOMATIS!
+				console.log(`[Auto-Create Category] Kategori L1 '${targetName}' belum ada di marketplace, membuat baru...`);
+
+				// 1. Tambahkan ke hierarchicalTypes in-memory
+				const newL1Obj = {
+					id: targetName,
+					name: targetName,
+					parent_id: null,
+					depth: 0,
+					is_new: true
+				};
+				hierarchicalTypes.push(newL1Obj);
+
+				// 2. Tambahkan opsi baru ke dropdown UI
+				const dropdownOptions = document.querySelector('.searchable-select[data-ss-type="product-l1"] .ss-options');
+				if (dropdownOptions) {
+					const optDiv = document.createElement("div");
+					optDiv.className = "ss-option";
+					optDiv.dataset.value = targetName;
+					optDiv.innerHTML = `<span>${targetName}</span><span class="lvl-badge lvl-1" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">Baru</span>`;
+					optDiv.addEventListener("click", () => {
+						applyL1CategorySelection(targetName, targetName);
+					});
+					dropdownOptions.appendChild(optDiv);
+				}
+
+				// 3. Langsung pilih kategori baru ini
+				applyL1CategorySelection(targetName, targetName);
+				if (isAccessory && subCategoryName) {
+					setTimeout(() => selectL2ByName(subCategoryName), 150);
 				}
 			}
 		}
 
 		function selectL2ByName(l2Name) {
 			if (!l2Name) return;
+			const cleanL2 = l2Name.trim().toUpperCase();
 			const l2Row = document.getElementById("l2-selection-row");
 			if (!l2Row) return;
 
@@ -1485,7 +1902,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			let found = false;
 			for (const lbl of labels) {
 				const text = lbl.textContent.trim().toUpperCase();
-				if (text.includes(l2Name.toUpperCase()) || l2Name.toUpperCase().includes(text)) {
+				if (text.includes(cleanL2) || cleanL2.includes(text)) {
 					const cb = lbl.querySelector('input[type="checkbox"]');
 					if (cb) {
 						cb.checked = true;
@@ -1496,11 +1913,44 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				}
 			}
 
+			// JIKA BELUM ADA DI LEVEL 2: BUAT BARU SECARA OTOMATIS!
 			if (!found) {
 				const customInput = document.getElementById("new-l2-input");
 				const addBtn = document.getElementById("add-l2-btn");
 				if (customInput && addBtn) {
 					customInput.value = l2Name;
+					addBtn.click();
+				}
+			}
+		}
+
+		function selectL3ByName(l3Name) {
+			if (!l3Name) return;
+			const cleanL3 = l3Name.trim().toUpperCase();
+			const l3Grid = document.getElementById("l3-grid");
+			if (!l3Grid) return;
+
+			const labels = l3Grid.querySelectorAll("label.cat-pill-label, label");
+			let found = false;
+			for (const lbl of labels) {
+				const text = lbl.textContent.trim().toUpperCase();
+				if (text.includes(cleanL3) || cleanL3.includes(text)) {
+					const cb = lbl.querySelector('input[type="checkbox"]');
+					if (cb) {
+						cb.checked = true;
+						cb.dispatchEvent(new Event("change"));
+						found = true;
+						break;
+					}
+				}
+			}
+
+			// JIKA BELUM ADA DI LEVEL 3: BUAT BARU SECARA OTOMATIS!
+			if (!found) {
+				const customInput = document.getElementById("new-l3-input");
+				const addBtn = document.getElementById("add-l3-btn");
+				if (customInput && addBtn) {
+					customInput.value = l3Name;
 					addBtn.click();
 				}
 			}
@@ -2631,7 +3081,7 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			const input = container.querySelector(".ss-input");
 			const dropdown = container.querySelector(".ss-dropdown");
 			const search = container.querySelector(".ss-search");
-			const options = container.querySelectorAll(".ss-option");
+			const optionsContainer = container.querySelector(".ss-options");
 			const hidden = document.getElementById("l1_category_input");
 
 			input.addEventListener("click", () => {
@@ -2646,21 +3096,22 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 			if (search) {
 				search.addEventListener("input", () => {
 					const q = search.value.toLowerCase();
-					options.forEach(opt => {
+					const allOptions = container.querySelectorAll(".ss-option");
+					allOptions.forEach(opt => {
 						opt.style.display = opt.textContent.toLowerCase().includes(q) ? "flex" : "none";
 					});
 				});
 			}
 
-			options.forEach(opt => {
-				opt.addEventListener("click", () => {
-					hidden.value = opt.dataset.value;
-					input.value = opt.querySelector("span").textContent;
-					dropdown.style.display = "none";
-					renderSubCategoriesFromList([opt.dataset.value]);
-					updateName();
+			if (optionsContainer) {
+				optionsContainer.addEventListener("click", (e) => {
+					const opt = e.target.closest(".ss-option");
+					if (!opt) return;
+					const val = opt.dataset.value;
+					const text = opt.querySelector("span") ? opt.querySelector("span").textContent : opt.textContent;
+					applyL1CategorySelection(val, text);
 				});
-			});
+			}
 		}
 
 		function setupPriceMasking() {
