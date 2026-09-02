@@ -20,7 +20,7 @@ if (searchParams.get("logout")) {
 	return Astro.redirect("/login");
 }
 const adminSearchQuery = searchParams.get("q");
-const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://java.batik.katalog.gooproper.id/api";
+const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://katalog.javabatikgallery.com/api";
 
 // Fetch Types and Motifs for the dropdowns
 let types: any[] = [];

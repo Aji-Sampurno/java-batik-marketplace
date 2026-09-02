@@ -8,7 +8,7 @@ if (session?.value !== "authenticated") {
 	return Astro.redirect("/login");
 }
 
-const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://java.batik.katalog.gooproper.id/api";
+const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://katalog.javabatikgallery.com/api";
 
 let settings: any = { site_name: "Batik Nusantara" };
 try {

@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.PUBLIC_API_URL || "https://java.batik.katalog.gooproper.id/api";
+const API_URL = import.meta.env.PUBLIC_API_URL || "https://katalog.javabatikgallery.com/api";
 
 const apiCache = new Map<string, { data: any; expiry: number }>();
 const CACHEABLE_ENDPOINTS = new Set(["types", "motifs", "sizes", "colors", "settings"]);
