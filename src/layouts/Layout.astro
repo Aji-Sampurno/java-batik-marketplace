@@ -6,8 +6,6 @@ interface Props {
 const { title } = Astro.props;
 import { apiFetch } from "../lib/api";
 import "../styles/index.css";
-import Analytics from "@vercel/analytics/astro";
-import SpeedInsights from "@vercel/speed-insights/astro";
 
 // Fetch Site Settings
 let settings: any = { site_name: "Batik Nusantara" };
@@ -1118,7 +1116,5 @@ const faviconUrl = rawFavicon.includes("?")
 				window.updateCardOutlet(slider, targetIdx);
 			};
 		</script>
-		<Analytics />
-		<SpeedInsights />
 	</body>
 </html>
