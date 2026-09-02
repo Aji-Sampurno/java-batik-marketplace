@@ -3,7 +3,7 @@ import node from '@astrojs/node';
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://javabatik.online.gooproper.id',
+  site: 'https://javabatikgallery.com',
   output: 'server',
   adapter: node({
     mode: 'standalone',
