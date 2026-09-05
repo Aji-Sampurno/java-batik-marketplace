@@ -3790,26 +3790,34 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 						return;
 					}
 
-					// Synchronize files from motifPhotoStore to row inputs before submit
+					// Synchronize files from motifPhotoStore to row inputs before submit (DEDUP: 1 file per motif)
+					const attachedGroups = new Set();
 					document.querySelectorAll(".counter-table-row").forEach(row => {
 						const isChecked = row.querySelector(".v-counter-cb")?.checked;
+						const fileInp = row.querySelector(".v-row-file-input");
+						const photoHidden = row.querySelector(".v-photo-url-hidden");
+						if (fileInp) fileInp.value = "";
+
 						if (!isChecked) return;
 						const key = getRowPhotoGroupKey(row);
 						const motif = row.querySelector(".v-motif-select")?.value;
-						const fileInp = row.querySelector(".v-row-file-input");
-						const photoHidden = row.querySelector(".v-photo-url-hidden");
 
 						const data = (key && motifPhotoStore.has(key)) ? motifPhotoStore.get(key) : (motif && motifPhotoStore.has(motif) ? motifPhotoStore.get(motif) : null);
 						if (data) {
-							if (data.file && fileInp && window.DataTransfer) {
+							if (data.file && fileInp && !attachedGroups.has(key) && window.DataTransfer) {
 								try {
 									const dt = new DataTransfer();
 									dt.items.add(data.file);
 									fileInp.files = dt.files;
+									attachedGroups.add(key);
 								} catch(err) {}
 							}
-							if (photoHidden && data.previewUrl && !photoHidden.value) {
-								photoHidden.value = data.previewUrl;
+							if (photoHidden) {
+								if (data.previewUrl && data.previewUrl.startsWith("http") && !data.previewUrl.startsWith("blob:")) {
+									photoHidden.value = data.previewUrl;
+								} else {
+									photoHidden.value = "";
+								}
 							}
 						}
 					});
