@@ -2,39 +2,36 @@
 export const prerender = false;
 import Layout from "../../../layouts/Layout.astro";
 import { apiFetch, uploadToLaravel } from "../../../lib/api";
-import DeleteConfirmModal from "../../../components/DeleteConfirmModal.astro";
+import { uploadToFirebase } from "../../../lib/firebase";
+import { getWatermarkLogoBuffer, getWatermarkFontBase64 } from "../../../lib/watermarkAssets";
 import ImageCropModal from "../../../components/ImageCropModal.astro";
+import DeleteConfirmModal from "../../../components/DeleteConfirmModal.astro";
+import sharp from "sharp";
 
-// Check for session (Authentication Gate)
+// 1. Check for session (Authentication Gate)
 const session = Astro.cookies.get("admin_session");
 if (session?.value !== "authenticated") {
 	return Astro.redirect("/login");
 }
 
 const { id } = Astro.params;
+const publicApiUrl = import.meta.env.PUBLIC_API_URL || "https://katalog.javabatikgallery.com/api";
 
 let product: any = null;
 let types: any[] = [];
 let motifs: any[] = [];
 let sizesData: any[] = [];
-let selectedMotifIds: string[] = [];
+let colorsData: any[] = [];
+let settings: any = null;
 let message = "";
 let isError = false;
-
-let colorsData: any[] = [];
-let selectedColors: string[] = [];
 
 try {
 	// Fetch product data
 	const pRes = await apiFetch<any>(`products/${id}`);
 	product = pRes?.data || pRes;
 
-	if (product) {
-		selectedMotifIds = (product.motifs || product.product_motifs || []).map((pm: any) => pm.id || pm.motif_id) || [];
-		selectedColors = product.colors || [];
-	}
-
-	// Fetch Types, Motifs and Sizes
+	// Fetch Types, Motifs, Sizes, Colors, Settings
 	const tRes = await apiFetch<any>("types");
 	types = tRes?.data || tRes || [];
 
@@ -49,9 +46,94 @@ try {
 
 	const colRes = await apiFetch<any>("colors");
 	colorsData = colRes?.data || colRes || [];
+
+	// Sort sizes
+	const sizeOrder = [
+		"ALL SIZE", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"
+	];
+	sizesData.sort((a, b) => {
+		const nameA = (a.name || "").trim().toUpperCase();
+		const nameB = (b.name || "").trim().toUpperCase();
+		let idxA = sizeOrder.indexOf(nameA);
+		let idxB = sizeOrder.indexOf(nameB);
+		if (idxA === -1) idxA = 999;
+		if (idxB === -1) idxB = 999;
+		return idxA - idxB;
+	});
+
+	const sRes = await apiFetch<any>("settings");
+	settings = sRes?.data || sRes || { site_name: "Batik Nusantara" };
 } catch (e: any) {
 	console.error("API Fetch Error:", e.message);
 }
+
+if (!product) {
+	return Astro.redirect("/buka-toko");
+}
+
+// Color Palette Swatch Mapping & Formatting Helpers
+const COLOR_PALETTE: Record<string, string> = {
+	"coklat": "#78350f",
+	"soga": "#92400e",
+	"sogan": "#92400e",
+	"abu-abu": "#64748b",
+	"abu": "#64748b",
+	"grey": "#64748b",
+	"gray": "#64748b",
+	"ungu": "#7c3aed",
+	"purple": "#7c3aed",
+	"kuning": "#eab308",
+	"yellow": "#eab308",
+	"biru": "#2563eb",
+	"blue": "#2563eb",
+	"navy": "#1e3a8a",
+	"hitam": "#0f172a",
+	"black": "#0f172a",
+	"kombinasi": "linear-gradient(135deg, #ef4444 0%, #3b82f6 50%, #10b981 100%)",
+	"multicolor": "linear-gradient(135deg, #ef4444 0%, #3b82f6 50%, #10b981 100%)",
+	"hijau": "#16a34a",
+	"green": "#16a34a",
+	"krem": "#fef08a",
+	"cream": "#fef08a",
+	"merah": "#dc2626",
+	"red": "#dc2626",
+	"maroon": "#881337",
+	"maron": "#881337",
+	"putih": "#ffffff",
+	"white": "#ffffff",
+	"oranye": "#ea580c",
+	"orange": "#ea580c",
+	"gold": "#d97706",
+	"emas": "#d97706",
+	"merah muda": "#ec4899",
+	"pink": "#ec4899",
+	"tosca": "#0d9488",
+	"toska": "#0d9488",
+	"turquoise": "#0d9488",
+	"silver": "#94a3b8",
+	"perak": "#94a3b8",
+	"denim": "#3b82f6",
+	"khaki": "#a8a29e",
+	"terrakota": "#c2410c",
+	"terracotta": "#c2410c",
+	"magenta": "#c026d3",
+	"peach": "#fb923c",
+	"salem": "#f472b6"
+};
+
+const getColorHex = (c: any): string => {
+	if (c && c.hex && typeof c.hex === "string" && c.hex.startsWith("#")) return c.hex;
+	const name = ((c && typeof c === "object" ? c.name : c) || "").trim().toLowerCase();
+	return COLOR_PALETTE[name] || "#94a3b8";
+};
+
+const formatColorTitle = (name: string): string => {
+	if (!name) return "";
+	return name
+		.split(" ")
+		.map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+		.join(" ");
+};
 
 // Hierarchical Helper: Sort categories into a flat list with levels
 const buildCategoryTree = (list: any[], parentId = null, depth = 0): any[] => {
@@ -66,1620 +148,2523 @@ const buildCategoryTree = (list: any[], parentId = null, depth = 0): any[] => {
 
 const hierarchicalTypes = buildCategoryTree(types);
 
-let currentL1CatId = null;
-let currentCategoryIds: string[] = [];
-
-if (product) {
-	currentCategoryIds = (product.categories || product.product_categories || []).map(
-		(pc: any) => pc.id || pc.category_id,
-	);
-	// Find the Level 1 category among selection
-	const l1 = types.find(
-		(t) => currentCategoryIds.includes(t.id) && t.parent_id === null,
-	);
-	currentL1CatId = l1?.id || null;
-}
-
-if (!product) {
-	return Astro.redirect("/buka-toko");
-}
-
-// Handle Form Submission
+// Handle Form Submission (Server Side)
 if (Astro.request.method === "POST") {
-	try {
-		const formData = await Astro.request.formData();
-		const action = formData.get("action");
+	const contentType = Astro.request.headers.get("content-type");
+	if (contentType?.includes("form")) {
+		try {
+			const formData = await Astro.request.formData();
+			const action = formData.get("action");
 
-		if (action === "delete_product") {
-			await apiFetch(`products/${id}`, { method: "DELETE" });
-			return Astro.redirect("/buka-toko?success=delete");
-		}
+			// Action: Delete Product
+			if (action === "delete_product") {
+				await apiFetch(`products/${id}`, { method: "DELETE" });
+				return Astro.redirect("/buka-toko?success=delete");
+			}
 
-		const name = formData.get("name");
-		const price = formData.get("price");
-		const type_id = formData.get("type_id");
-		const motif_ids = formData.getAll("motif_ids");
-		const colors = formData.getAll("colors");
-		const description = formData.get("description");
-		const code = formData.get("code");
-		const image_files = formData.getAll("image_file") as File[];
-		const tokopedia_url = formData.get("tokopedia_url");
-		const is_active = formData.get("is_active") === "on";
+			// Action: Edit Product
+			if (action === "edit_product") {
+				const name = formData.get("name");
+				const price = formData.get("price");
+				const raw_category_ids = formData.getAll("category_ids");
+				const category_chain = formData.getAll("category_chain");
+				const motif_ids = formData.getAll("motif_ids");
+				const colors = formData.getAll("colors");
+				const description = formData.get("description");
+				const code = formData.get("code");
+				const tokopedia_url = formData.get("tokopedia_url");
+				const original_price = formData.get("original_price");
+				const item_code = formData.get("item_code");
+				const is_active = formData.get("is_active") === "off" ? false : true;
 
-		let updatedImages = [...(product.images || [])];
-		let primaryImageUrl = product.image_url;
+				// Resolve categories: Check or create custom category
+				let resolvedCategoryIds: string[] = [];
+				let resolvedL1Id: string | null = null;
 
-		const category_ids = formData.getAll("category_ids");
-		const typeId = category_ids[0] || null;
-		const selectedType = hierarchicalTypes.find((t: any) => t.id === typeId);
-		let folderPath = "products";
-		if (selectedType) {
-			const slug = selectedType.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-			folderPath = `products/${slug}`;
-		}
+				for (let i = 0; i < raw_category_ids.length; i++) {
+					const catVal = String(raw_category_ids[i]).trim();
+					if (!catVal) continue;
 
-		// Handle new image uploads with auto-rename per color variant
-		if (image_files && image_files.length > 0 && image_files[0].size > 0) {
-			const newImages: string[] = [];
-			const activeColors = (colors || []) as string[];
-			const itemCodeVal = formData.get("item_code") || code || "PRODUK";
-			const actualCode = itemCodeVal.toString().trim().replace(/[^a-zA-Z0-9]/g, '');
-
-			const imageColorTags = formData.getAll("image_color_tags") as string[];
-			for (let i = 0; i < image_files.length; i++) {
-				const file = image_files[i];
-				if (file && file.size > 0) {
-					const colorTag = imageColorTags[i] || activeColors[i % (activeColors.length || 1)] || "";
-					const cleanColorTag = colorTag ? `_${colorTag.toUpperCase().replace(/[^A-Z0-9]/g, '')}` : "";
-					const ext = file.name.split('.').pop() || 'jpg';
-					const customName = `${actualCode}${cleanColorTag}_${Date.now()}_${i + 1}.${ext}`;
-					
-					const renamedFile = new File([await file.arrayBuffer()], customName, { type: file.type });
-					const publicUrl = await uploadToLaravel(renamedFile, folderPath);
-					newImages.push(publicUrl);
+					const existingType = types.find((t: any) => String(t.id) === catVal);
+					if (existingType) {
+						resolvedCategoryIds.push(existingType.id);
+						if (i === 0) resolvedL1Id = existingType.id;
+					} else {
+						const matchedByName = types.find((t: any) => (t.name || "").trim().toLowerCase() === catVal.toLowerCase());
+						if (matchedByName) {
+							resolvedCategoryIds.push(matchedByName.id);
+							if (i === 0) resolvedL1Id = matchedByName.id;
+						} else {
+							try {
+								const parent_id: string | null = i === 0 ? null : (resolvedL1Id || null);
+								const newTypeRes: any = await apiFetch<any>("types", {
+									method: "POST",
+									body: JSON.stringify({ name: catVal, parent_id }),
+								});
+								const newId: any = newTypeRes?.data?.id || newTypeRes?.id;
+								if (newId) {
+									resolvedCategoryIds.push(newId);
+									if (i === 0) resolvedL1Id = newId;
+									types.push({ id: newId, name: catVal, parent_id });
+								}
+							} catch (createTypeErr) {
+								console.error("Gagal auto-create type baru:", catVal, createTypeErr);
+							}
+						}
+					}
 				}
+
+				const category_ids = resolvedCategoryIds;
+				const type_id = category_ids[0] || null;
+
+				// Variant Arrays
+				const variant_motif_names = formData.getAll("variant_motif_name") as string[];
+				const variant_image_files = formData.getAll("variant_image_file") as File[];
+				const variant_image_urls = formData.getAll("variant_image_url") as string[];
+				const variant_sizes = formData.getAll("variant_size") as string[];
+				const variant_counters = formData.getAll("variant_counter") as string[];
+				const variant_outlets = formData.getAll("variant_outlet") as string[];
+				const variant_fits = formData.getAll("variant_fit") as string[];
+				const variant_sleeves = formData.getAll("variant_sleeve") as string[];
+				const variant_skus = formData.getAll("variant_sku") as string[];
+				const variant_prices = formData.getAll("variant_price") as string[];
+				const variant_stocks = formData.getAll("variant_stock") as string[];
+				const variant_dalamans = formData.getAll("variant_dalaman") as string[];
+
+				const selectedType = hierarchicalTypes.find((t: any) => t.id === type_id) || types.find((t: any) => t.id === type_id);
+				let jenisProduk = "umum";
+				if (selectedType && selectedType.name) {
+					jenisProduk = selectedType.name
+						.toLowerCase()
+						.replace(/[^a-z0-9]+/g, "-")
+						.replace(/(^-|-$)+/g, "");
+				} else if (name) {
+					const firstWord = name.toString().trim().split(/\s+/)[0].toLowerCase();
+					if (firstWord) {
+						jenisProduk = firstWord.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
+					}
+				}
+				if (!jenisProduk) jenisProduk = "umum";
+
+				// Fetch logo buffer & font base64 for watermarking
+				let logoBuffer: Buffer | null = null;
+				let fontBase64 = "";
+				try {
+					logoBuffer = getWatermarkLogoBuffer();
+					fontBase64 = getWatermarkFontBase64();
+				} catch (e) {
+					console.error("Failed to load assets for watermark", e);
+				}
+
+				// -------------------------------------------------------------
+				// DEDUPLICATE IMAGES BY MOTIF & SLEEVE
+				// -------------------------------------------------------------
+				const motifImagesMap = new Map<string, { file: File | null, existingUrl: string }>();
+
+				variant_motif_names.forEach((motif, idx) => {
+					const file = variant_image_files[idx];
+					const rawExistingUrl = (variant_image_urls[idx] || "").trim();
+					const existingUrl = (rawExistingUrl && !rawExistingUrl.startsWith("blob:") && (rawExistingUrl.startsWith("http://") || rawExistingUrl.startsWith("https://"))) ? rawExistingUrl : "";
+					const sleeve = variant_sleeves[idx];
+					const cleanMotif = (motif || `Motif-${idx}`).trim();
+					const cleanKey = (sleeve && sleeve !== "-") ? `${cleanMotif}___${sleeve}` : cleanMotif;
+
+					if (!motifImagesMap.has(cleanKey)) {
+						motifImagesMap.set(cleanKey, {
+							file: (file && file.size > 0) ? file : null,
+							existingUrl
+						});
+					} else {
+						const current = motifImagesMap.get(cleanKey)!;
+						if (!current.file && file && file.size > 0) {
+							motifImagesMap.set(cleanKey, { file, existingUrl: current.existingUrl || existingUrl });
+						}
+					}
+				});
+
+				let images: string[] = [];
+				let raw_images: string[] = [];
+				let motifIdx = 0;
+				const motifFinalUrlMap = new Map<string, string>();
+
+				for (const [motifKey, imgData] of motifImagesMap.entries()) {
+					motifIdx++;
+					let finalMotifUrl = "";
+
+					if (imgData.file && imgData.file.size > 0) {
+						const file = imgData.file;
+						const actualCode = (item_code || code || "PRODUK").toString().trim().replace(/[^a-zA-Z0-9_\-]/g, '') || "PRODUK";
+						const cleanMotifTag = motifKey.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') || `motif-${motifIdx}`;
+						const timestamp = Date.now();
+
+						// 1. Process & Compress Raw Image to WebP (No Watermark) and Upload to Firebase
+						let rawWebpBuffer: Buffer;
+						try {
+							rawWebpBuffer = await sharp(Buffer.from(await file.arrayBuffer()))
+								.webp({ quality: 85 })
+								.toBuffer();
+						} catch (e) {
+							console.error("Raw WebP compression error:", e);
+							rawWebpBuffer = Buffer.from(await file.arrayBuffer());
+						}
+
+						const rawCustomName = `${actualCode}_${cleanMotifTag}_raw_${timestamp}_${motifIdx}.webp`;
+						const rawFileToUpload = new File([new Uint8Array(rawWebpBuffer)], rawCustomName, { type: "image/webp" });
+
+						let rawPublicUrl = "";
+						const fbPathRaw = `products/${jenisProduk}/${actualCode}/${cleanMotifTag}/raw/${rawCustomName}`;
+						try {
+							rawPublicUrl = await uploadToFirebase(rawFileToUpload, fbPathRaw);
+							console.log(`[Firebase Raw] Upload success -> ${rawPublicUrl}`);
+						} catch (fbErr) {
+							console.warn("[Firebase Raw] Fallback to Laravel:", fbErr);
+							rawPublicUrl = await uploadToLaravel(rawFileToUpload, `products/${jenisProduk}/${actualCode}/${cleanMotifTag}/raw`).catch(() => "");
+						}
+
+						if (rawPublicUrl) {
+							raw_images.push(rawPublicUrl);
+						}
+
+						// 2. Process Watermarked & WebP Compressed Image (Logo + Code Text)
+						let webpBuffer: Buffer;
+						try {
+							const imgBuffer = Buffer.from(await file.arrayBuffer());
+							const imgSharp = sharp(imgBuffer);
+							const metadata = await imgSharp.metadata();
+							const width = metadata.width || 1000;
+							const height = metadata.height || 1000;
+
+							const compositeArr: any[] = [];
+
+							if (logoBuffer) {
+								const logoWidth = Math.round(width * 0.18);
+								const resizedLogo = await sharp(logoBuffer)
+									.resize({ width: logoWidth, withoutEnlargement: true })
+									.toBuffer();
+								const resizedMeta = await sharp(resizedLogo).metadata();
+								const actualLogoW = resizedMeta.width || logoWidth;
+								const logoMargin = Math.round(width * 0.04);
+
+								compositeArr.push({
+									input: resizedLogo,
+									top: logoMargin,
+									left: width - actualLogoW - logoMargin,
+									blend: "over",
+								});
+							}
+
+							const textCode = (item_code || code || "")
+								.toString()
+								.replace(/[\r\n\t\f\v\u00A0\uFEFF]/g, '')
+								.replace(/[^a-zA-Z0-9_\-\s]/g, '')
+								.trim();
+							if (textCode) {
+								const fontSize = Math.max(Math.round(height * 0.022), 14);
+								const textMarginRight = Math.round(width * 0.04);
+								const textY = height - Math.round(height * 0.05);
+								const svgText = `
+									<svg width="${width}" height="${height}">
+										<style>
+											@font-face {
+												font-family: 'Roboto';
+												src: url('data:font/ttf;base64,${fontBase64}');
+											}
+											.title { fill: white; font-size: ${fontSize}px; font-weight: bold; font-family: 'Roboto', sans-serif; }
+											.shadow { fill: black; font-size: ${fontSize}px; font-weight: bold; font-family: 'Roboto', sans-serif; }
+										</style>
+										<text x="${width - textMarginRight + 2}" y="${textY + 2}" text-anchor="end" class="shadow">${textCode}</text>
+										<text x="${width - textMarginRight}" y="${textY}" text-anchor="end" class="title">${textCode}</text>
+									</svg>
+								`;
+								compositeArr.push({
+									input: Buffer.from(svgText),
+									top: 0,
+									left: 0,
+								});
+							}
+
+							if (compositeArr.length > 0) {
+								webpBuffer = await imgSharp
+									.composite(compositeArr)
+									.webp({ quality: 80 })
+									.toBuffer();
+							} else {
+								webpBuffer = await imgSharp
+									.webp({ quality: 80 })
+									.toBuffer();
+							}
+						} catch (e) {
+							console.error("Sharp WebP & Watermark error:", e);
+							webpBuffer = Buffer.from(await file.arrayBuffer());
+						}
+
+						const webpCustomName = `${actualCode}_${cleanMotifTag}_${timestamp}_${motifIdx}.webp`;
+						const webpFileToUpload = new File([new Uint8Array(webpBuffer)], webpCustomName, { type: "image/webp" });
+
+						let publicUrl = "";
+						const fbPathWebp = `products/${jenisProduk}/${actualCode}/${cleanMotifTag}/katalog/${webpCustomName}`;
+						try {
+							publicUrl = await uploadToFirebase(webpFileToUpload, fbPathWebp);
+							console.log(`[Firebase WebP] Upload success -> ${publicUrl}`);
+						} catch (fbErr) {
+							console.warn("[Firebase WebP] Fallback to Laravel:", fbErr);
+							publicUrl = await uploadToLaravel(webpFileToUpload, `products/${jenisProduk}/${actualCode}/${cleanMotifTag}/katalog`).catch(() => "");
+						}
+
+						if (publicUrl) {
+							images.push(publicUrl);
+							finalMotifUrl = publicUrl;
+						}
+					} else if (imgData.existingUrl) {
+						images.push(imgData.existingUrl);
+						raw_images.push(imgData.existingUrl);
+						finalMotifUrl = imgData.existingUrl;
+					}
+
+					if (finalMotifUrl) {
+						motifFinalUrlMap.set(motifKey, finalMotifUrl);
+					}
+				}
+
+				// Final deduplication & primary image
+				images = [...new Set(images.filter(Boolean))];
+				raw_images = [...new Set(raw_images.filter(Boolean))];
+
+				// Fallback to existing product images if empty
+				if (images.length === 0 && Array.isArray(product.images) && product.images.length > 0) {
+					images = [...product.images];
+				}
+				if (raw_images.length === 0 && Array.isArray(product.raw_images) && product.raw_images.length > 0) {
+					raw_images = [...product.raw_images];
+				} else if (raw_images.length === 0 && images.length > 0) {
+					raw_images = [...images];
+				}
+				if (images.length === 0 && raw_images.length > 0) {
+					images = [...raw_images];
+				}
+
+				const image_url = images[0] || product.image_url || null;
+				const raw_image_url = raw_images[0] || image_url || product.raw_image_url || null;
+
+				// -------------------------------------------------------------
+				// UPDATE AI_FOTO KE NOIR API JIKA TERHUBUNG KE POS
+				// -------------------------------------------------------------
+				const variant_praproduk_ids = formData.getAll("variant_praproduk_id") as string[];
+				const main_praproduk_id = formData.get("main_praproduk_id") as string;
+				const NOIR_API_BASE = "https://noir.grace.gracianna.web.id/api/v1";
+
+				const updateTasks: Promise<any>[] = [];
+
+				for (let i = 0; i < variant_praproduk_ids.length; i++) {
+					const detailId = variant_praproduk_ids[i];
+					const motifName = (variant_motif_names[i] || `Motif-${i}`).trim();
+					const photoUrlForMotif = motifFinalUrlMap.get(motifName) || image_url;
+
+					if (detailId && photoUrlForMotif) {
+						updateTasks.push(
+							fetch(`${NOIR_API_BASE}/beli1/${detailId}/ai-foto`, {
+								method: "PUT",
+								headers: {
+									"Content-Type": "application/json",
+									"Accept": "application/json"
+								},
+								body: JSON.stringify({
+									AI_foto: photoUrlForMotif
+								})
+							}).catch(err => {
+								console.error(`[Noir API] Gagal update AI_foto detail #${detailId}:`, err);
+							})
+						);
+					}
+				}
+
+				if (main_praproduk_id && image_url) {
+					updateTasks.push(
+						fetch(`${NOIR_API_BASE}/beli1/${main_praproduk_id}/ai-foto`, {
+							method: "PUT",
+							headers: {
+								"Content-Type": "application/json",
+								"Accept": "application/json"
+							},
+							body: JSON.stringify({
+								AI_foto: image_url
+							})
+						}).catch(err => {
+							console.error(`[Noir API] Gagal update AI_foto parent #${main_praproduk_id}:`, err);
+						})
+					);
+				}
+
+				if (updateTasks.length > 0) {
+					await Promise.allSettled(updateTasks);
+					console.log(`[Noir API] Berhasil memproses update ${updateTasks.length} foto pra-produk secara paralel.`);
+				}
+
+				// Build variants array from Counter schema
+				const variants = variant_sizes.map((size, index) => {
+					const motif = variant_motif_names[index] || "";
+					const counter = variant_counters[index] || variant_skus[index] || "";
+					const outlet = variant_outlets[index] || "Gudang";
+					const fit = variant_fits[index] || (size.includes("SF") ? "SF" : "REG");
+					const sleeve = variant_sleeves[index] && variant_sleeves[index] !== "-" ? variant_sleeves[index] : null;
+					const cleanKey = (sleeve && sleeve !== "-") ? `${motif}___${sleeve}` : motif;
+					const rawMotifImg = motifFinalUrlMap.get(cleanKey) || motifFinalUrlMap.get(motif) || variant_image_urls[index] || "";
+					const motifImageUrl = (rawMotifImg && !rawMotifImg.startsWith("blob:")) ? rawMotifImg : "";
+
+					return {
+						size_name: size,
+						sku: variant_skus[index] || counter || null,
+						counter: counter || null,
+						outlet: outlet || null,
+						motif: motif || null,
+						fit: fit || null,
+						sleeve: sleeve || null,
+						image_url: motifImageUrl || null,
+						price: parseFloat(variant_prices[index] || price?.toString() || "0"),
+						stock: parseInt(variant_stocks[index] || "0", 10),
+						dalaman: variant_dalamans[index] || null,
+					};
+				});
+
+				const productPayload = {
+					name,
+					price,
+					type_id,
+					category_ids,
+					category_chain,
+					motif_ids,
+					colors,
+					description,
+					code,
+					original_price,
+					item_code,
+					image_url,
+					images,
+					raw_image_url,
+					raw_images,
+					tokopedia_url,
+					variants,
+					is_active,
+				};
+
+				console.log(`[Product Update] Mengirim PUT products/${id}...`);
+				await apiFetch(`products/${id}`, {
+					method: "PUT",
+					body: JSON.stringify(productPayload),
+				});
+
+				return Astro.redirect("/buka-toko?success=status");
 			}
-			if (newImages.length > 0) {
-				updatedImages = newImages;
-				primaryImageUrl = newImages[0];
-			}
+		} catch (e: any) {
+			isError = true;
+			message = "Gagal memperbarui produk: " + e.message;
 		}
-
-		const variant_sizes = formData.getAll("variant_size") as string[];
-		const variant_prices = formData.getAll("variant_price") as string[];
-		const variant_stocks = formData.getAll("variant_stock") as string[];
-		const variant_dalamans = formData.getAll("variant_dalaman") as string[];
-		const variants = variant_sizes.map((size, index) => ({
-			size_name: size,
-			price: parseFloat(variant_prices[index] || price?.toString() || "0"),
-			stock: parseInt(variant_stocks[index] || "0", 10),
-			dalaman: variant_dalamans[index] || null
-		}));
-
-		console.log("DEBUG PUT variants payload:", JSON.stringify(variants, null, 2));
-
-		await apiFetch(`products/${id}`, {
-			method: "PUT",
-			body: JSON.stringify({
-				name,
-				price,
-				type_id: formData.getAll("category_ids")[0] || null,
-				category_ids: formData.getAll("category_ids"),
-				category_chain: formData.getAll("category_chain"), // Pass dynamic cascade array
-				motif_ids,
-				colors,
-				image_url: primaryImageUrl,
-				images: updatedImages,
-				tokopedia_url,
-				description,
-				code,
-				original_price: formData.get("original_price"),
-				item_code: formData.get("item_code"),
-				is_active,
-				variants,
-			}),
-		});
-
-		return Astro.redirect("/buka-toko?success=status"); // Redirect to admin with success
-	} catch (e: any) {
-		isError = true;
-		message = "Gagal memperbarui produk: " + e.message;
 	}
 }
+
 ---
 
-<Layout title={`Edit Produk - ${product.name}`}>
-	<section style="padding: 130px 0 var(--spacing-2xl) 0; background: #fdfcfb; min-height: 100vh;">
-		<div class="container" style="max-width: 1000px;">
-			<div style="margin-bottom: var(--spacing-xl);">
-				<h1 class="text-uppercase" style="font-size: 1.5rem; margin: 0; font-weight: 600;">Edit Produk</h1>
-				<p style="font-size: 0.8rem; opacity: 0.5;">Ubah detail produk</p>
+<Layout title={`Edit Produk (Skema Counter) - ${product.name}`}>
+	<section style="padding: 130px 0 var(--spacing-2xl) 0; background: #f8fafc; min-height: 100vh;">
+		<div class="container" style="max-width: 1100px;">
+			
+			<!-- Header -->
+			<div style="margin-bottom: var(--spacing-xl); display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 1rem;">
+				<div>
+					<div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+						<h1 style="font-family: var(--font-serif); font-size: 2.2rem; margin: 0; font-weight: 400; color: #0f172a;">
+							Edit Produk <span style="font-style: italic; color: #b45309;">Skema Counter</span>
+						</h1>
+						<span style="background: #e0f2fe; color: #0369a1; font-size: 0.7rem; font-weight: 800; padding: 0.25rem 0.75rem; border-radius: 20px; border: 1px solid #bae6fd;">
+							Format Pra-Produk & Multi-Motif
+						</span>
+					</div>
+					<p style="color: #64748b; margin-top: 0.5rem; font-size: 0.9rem;">
+						Kelola detail produk, foto per motif, serta tabel varian counter yang terhubung langsung dengan sistem stok & katalog.
+					</p>
+				</div>
+
+				<div style="display: flex; align-items: center; gap: 0.75rem;">
+					<a
+						href="/buka-toko"
+						style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; text-decoration: none; padding: 0.6rem 1.2rem; border: 1px solid #cbd5e1; border-radius: var(--radius-sm); color: #1e293b; background: white; transition: 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"
+						onmouseover="this.style.background='#f1f5f9'; this.style.borderColor='#94a3b8';"
+						onmouseout="this.style.background='white'; this.style.borderColor='#cbd5e1';"
+					>
+						&larr; Kembali ke Dashboard
+					</a>
+				</div>
 			</div>
 
-			{
-				message && (
-					<div
-						class="animate-fade-in"
-						style={`padding: 1rem; margin-bottom: 2rem; border-radius: var(--radius-sm); border: 1px solid ${
-							isError ? "#ff4d4d" : "#03ac0e"
-						}; background: ${
-							isError ? "#fff5f5" : "#f5fff5"
-						}; color: ${
-							isError ? "#ff4d4d" : "#03ac0e"
-						}; text-align: center; font-size: 0.9rem; font-weight: 500;`}
-					>
-						{message}
-					</div>
-				)
-			}
+			{message && (
+				<div class="animate-fade-in" style={`padding: 1rem; margin-bottom: 2rem; border-radius: var(--radius-sm); border: 1px solid ${isError ? "#ff4d4d" : "#03ac0e"}; background: ${isError ? "#fff5f5" : "#f5fff5"}; color: ${isError ? "#ff4d4d" : "#03ac0e"}; text-align: center; font-size: 0.9rem; font-weight: 500;`}>
+					{message}
+				</div>
+			)}
 
-			<div
-				style="background: white; border: 1px solid var(--color-border); padding: var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);"
-			>
-				<form
-					method="POST"
-					enctype="multipart/form-data"
-					style="display: flex; flex-direction: column; gap: var(--spacing-lg);"
-				>
+			<!-- POS DATA VERIFICATION BADGE (MASTER POS) -->
+			<div id="pos-reference-badge-card" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white; padding: 1.25rem 1.5rem; border-radius: 12px; margin-bottom: 1.5rem; border: 1px solid #334155; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);">
+				<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+					<div style="display: flex; align-items: center; gap: 0.5rem;">
+						<span style="font-size: 1.25rem;">📦</span>
+						<strong style="font-size: 0.95rem; letter-spacing: 0.5px; text-transform: uppercase;">DATA REFERENSI MASTER POS (ASLI)</strong>
+					</div>
+					<div style="display: flex; align-items: center; gap: 0.6rem;">
+						<button type="button" id="btn-sync-pos-live" style="font-size: 0.75rem; font-weight: 700; background: #0284c7; color: white; border: none; padding: 4px 10px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s;" onmouseover="this.style.background='#0369a1'" onmouseout="this.style.background='#0284c7'">
+							<span>⚡ Tarik Ulang Data POS</span>
+						</button>
+						<span id="ref-pos-id-badge" style="font-size: 0.75rem; font-family: monospace; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1;">
+							ID: #{product.id ? String(product.id).substring(0, 8) : '-'}
+						</span>
+					</div>
+				</div>
+				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; font-size: 0.82rem;">
 					<div>
-						<label
-							class="text-uppercase opacity-50"
-							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-							>Nama Produk</label
-						>
-						<input
-							name="name"
-							id="product_name_input"
-							type="text"
-							required
-							value={product.name}
-							style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
-						/>
+						<span style="color: #94a3b8; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; display: block; margin-bottom: 2px;">📌 Kode Barcode POS (Lengkap)</span>
+						<strong id="ref-pos-code-val" style="font-family: monospace; font-size: 0.95rem; color: #fbbf24; letter-spacing: 1px;">{product.code || "-"}</strong>
 					</div>
+					<div>
+						<span style="color: #94a3b8; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; display: block; margin-bottom: 2px;">🏷️ Kode Barang (Model)</span>
+						<strong id="ref-pos-itemcode-val" style="font-family: monospace; font-size: 0.95rem; color: #38bdf8;">{product.item_code || "-"}</strong>
+					</div>
+					<div style="grid-column: 1 / -1;">
+						<span style="color: #94a3b8; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; display: block; margin-bottom: 2px;">📦 Nama Produk POS</span>
+						<strong id="ref-pos-name-val" style="font-size: 0.95rem; color: #f8fafc;">{product.name || "-"}</strong>
+					</div>
+					<div style="grid-column: 1 / -1; background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
+						<span style="color: #38bdf8; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; display: block; margin-bottom: 2px;">✨ Uraian Tipe Terdeteksi (API Noir POS)</span>
+						<span id="ref-pos-type-val" style="font-size: 0.85rem; color: #e2e8f0; font-weight: 600;">-</span>
+					</div>
+				</div>
+			</div>
 
-					<div
-						style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg);"
-					>
+			<!-- Live POS Notification Banner (Hidden initially) -->
+			<div id="pos-sync-alert-box" style="display: none; background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+				<div>
+					<h4 style="font-size: 0.9rem; font-weight: 700; color: #065f46; margin: 0 0 0.25rem 0;">Data Live POS Berhasil Ditarik!</h4>
+					<p id="pos-sync-alert-text" style="font-size: 0.8rem; color: #047857; margin: 0;"></p>
+				</div>
+				<button type="button" id="btn-apply-pos-sync" style="background: #059669; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.8rem; font-weight: 700; cursor: pointer;">
+					Terapkan ke Form & Tabel Varian
+				</button>
+			</div>
+
+			<!-- Main Product Form Container -->
+			<div style="background: white; border: 1px solid #e2e8f0; padding: var(--spacing-lg); border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05);">
+				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-lg); flex-wrap: wrap; gap: 0.75rem;">
+					<h2 style="font-size: 1rem; margin: 0; font-weight: 700; color: #1e293b;" class="text-uppercase">
+						Form Edit Produk (Skema Counter)
+					</h2>
+					<span style="font-size: 0.75rem; color: #64748b; font-weight: 600;">
+						ID Produk: <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px;">{product.id}</code>
+					</span>
+				</div>
+
+				<form method="POST" enctype="multipart/form-data" id="counterProductForm" style="display: flex; flex-direction: column; gap: var(--spacing-md);">
+					<input type="hidden" id="setting_logo_url" value={settings?.logo_url || ""} />
+					<input type="hidden" name="action" value="edit_product" />
+					<input type="hidden" name="main_praproduk_id" id="main_praproduk_id_input" value="" />
+
+					<!-- Main Inputs -->
+					<div style="display: flex; flex-direction: column; gap: var(--spacing-md); width: 100%;">
 						<div>
-							<label
-								class="text-uppercase opacity-50"
-								style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-								>Kode SKU</label
-							>
-							<input
-								name="code"
-								id="product_sku_input"
-								type="text"
-								value={product.code}
-								style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
-							/>
-						</div>
-						<div>
-							<label
-								class="text-uppercase opacity-50"
-								style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-								>Kode Barang (Auto-Name)</label
-							>
-							<input
-								name="item_code"
-								id="product_item_code_input"
-								type="text"
-								value={product.item_code}
-								style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
-							/>
-						</div>
-						<div>
-							<label
-								class="text-uppercase opacity-50"
-								style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-								>Harga (Rp)</label
-							>
-							<input
-								type="text"
-								class="currency-mask"
-								data-hidden-id="product_price_input"
-								required
-								id="product_price_input_display"
-								value={product.price}
-								style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
-							/>
-							<input type="hidden" name="price" id="product_price_input" value={product.price} />
-							<div
-								id="price_markup_preview"
-								style="font-size: 0.65rem; color: #10b981; margin-top: 0.4rem; font-weight: 600; display: ${product.original_price ? 'block' : 'none'};"
-							>
-								Harga Coret: Rp <span id="markup_val"
-									>{
-										product.original_price
-											? Number(
-													product.original_price,
-												).toLocaleString("id-ID")
-											: "0"
-									}</span
-								> (Hemat Rp <span id="markup_pct">{product.original_price ? Number(product.original_price - product.price).toLocaleString("id-ID") : "0"}</span>)
+							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+								<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; margin: 0;">Nama Produk</label>
+								<span style="font-size: 0.65rem; color: #0284c7; font-weight: 700; letter-spacing: 0.3px;">AUTO-NAME & DAPAT DIUBAH</span>
 							</div>
-							<input
-								type="hidden"
-								name="original_price"
-								id="original_price_input"
-								value={product.original_price || ""}
-							/>
+							<input name="name" id="product_name_input" type="text" value={product.name || ""} required placeholder="Contoh: Kemeja Katun Printing Krem I327" style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; font-size: 0.95rem;" />
+						</div>
+
+						<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+							<div>
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+									<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; margin: 0;">Kode Barcode POS (Lengkap)</label>
+									<span style="font-size: 0.62rem; color: #b45309; font-weight: 700;">AKUNTANSI / POS</span>
+								</div>
+								<input name="pos_code" id="product_pos_code_input" type="text" value={product.code || ""} placeholder="WI0SP0JED99020311" style="width: 100%; padding: 0.7rem; border: 1.5px solid #fde047; border-radius: 6px; font-family: monospace; font-weight: 700; color: #854d0e; background: #fefce8;" />
+							</div>
+							<div>
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+									<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; margin: 0;">Kode Barang / Model</label>
+									<span style="font-size: 0.62rem; color: #0284c7; font-weight: 700;">AUTO-NAME</span>
+								</div>
+								<input name="item_code" id="product_item_code_input" type="text" value={product.item_code || ""} placeholder="D021" style="width: 100%; padding: 0.7rem; border: 1.5px solid #bae6fd; border-radius: 6px; font-family: monospace; font-weight: 700; color: #0369a1; background: #f0f9ff;" />
+							</div>
+						</div>
+
+						<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+							<div>
+								<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">Kode SKU / Counter Utama</label>
+								<input name="code" id="product_sku_input" type="text" value={product.code || ""} placeholder="01930798" style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; font-family: monospace; font-weight: 600;" />
+							</div>
+							<div>
+								<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">Harga Utama (Rp)</label>
+								<input type="text" class="currency-mask" data-hidden-id="product_price_input" required id="product_price_input_display" value={Number(product.price || 0).toLocaleString("id-ID")} placeholder="450.000" style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 700; font-size: 0.95rem;" />
+								<input type="hidden" name="price" id="product_price_input" value={product.price || ""} />
+								<div id="price_markup_preview" style="font-size: 0.65rem; color: #10b981; margin-top: 0.4rem; font-weight: 600; display: none;">
+									Harga Coret: Rp <span id="markup_val">0</span> (Hemat Rp <span id="markup_pct">0</span>)
+								</div>
+								<input type="hidden" name="original_price" id="original_price_input" value={product.original_price || ""} />
+							</div>
+						</div>
+
+						<!-- Detected Type Info Row -->
+						<div id="detected-type-info-row" style="display: none; align-items: center; gap: 8px; padding: 8px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 0.78rem; color: #166534;">
+							<span>✨</span>
+							<span id="detected-type-info-text"></span>
 						</div>
 					</div>
 
-					<div
-						style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg);"
-					>
-						<div class="filter-group">
-							<div id="category-chain-container" style="display:none;"></div>
-							<label
-								class="text-uppercase opacity-50"
-								style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-								>Kategori Produk</label
-							>
-							<div
-								class="searchable-select"
-								data-ss-type="product-l1"
-							>
-								<input
-									type="hidden"
-									name="category_ids"
-									id="l1_category_input"
-									value={currentL1CatId}
-								/>
-								<input
-									type="text"
-									class="ss-input"
-									placeholder="Cari & Pilih Kategori Utama..."
-									readonly
-									value={types.find(
-										(t) => t.id === currentL1CatId,
-									)?.name || ""}
-									style="background: #ffffff; border-style: solid;"
-								/>
-								<div class="ss-dropdown">
-									<div class="ss-search-container">
-										<svg
-											class="ss-search-icon"
-											width="14"
-											height="14"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2.5"
-											><circle cx="11" cy="11" r="8"
-											></circle><path
-												d="M21 21l-4.35-4.35"
-											></path></svg
-										>
-										<input
-											type="text"
-											class="ss-search"
-											placeholder="Cari kategori..."
-										/>
+					<!-- Categories Section -->
+					<div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.9rem 1.1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
+						<div id="category-chain-container" style="display:none;"></div>
+						<div style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem;">
+							<span style="font-size: 1rem;">📁</span>
+							<label class="text-uppercase" style="font-size: 0.72rem; font-weight: 800; color: #1e293b; letter-spacing: 0.5px; margin: 0;">
+								Kategori Produk (L1)
+							</label>
+						</div>
+						<div class="searchable-select" data-ss-type="product-l1">
+							<input type="hidden" name="category_ids" id="l1_category_input" />
+							<input type="text" class="ss-input" placeholder="Cari & Pilih Kategori Utama..." readonly style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; color: #0f172a;" />
+							<div class="ss-dropdown">
+								<div class="ss-search-container">
+									<svg class="ss-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg>
+									<input type="text" class="ss-search" placeholder="Cari kategori..." />
+								</div>
+								<div class="ss-options">
+									{hierarchicalTypes.filter((t: any) => t.parent_id === null).map((t: any) => (
+										<div class="ss-option" data-value={t.id}>
+											<span>{t.name}</span>
+											<span class="lvl-badge lvl-1">Utama</span>
+										</div>
+									))}
+								</div>
+							</div>
+						</div>
+
+						<!-- Sub Categories (Level 2 & 3) -->
+						<div id="sub-category-checkboxes" style="display: none;"></div>
+					</div>
+
+					<!-- Motifs & Colors Selection -->
+					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+						<!-- Motifs -->
+						<div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.9rem 1.1rem;">
+							<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.4rem;">
+								<label class="text-uppercase" style="font-size: 0.72rem; font-weight: 800; color: #1e293b; margin: 0;">Motif Batik</label>
+								<button type="button" id="btnDeselectAllMotifs" style="font-size: 0.65rem; color: #64748b; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; cursor: pointer;">Reset Pilihan</button>
+							</div>
+							<div class="pill-badge-container" id="motif-grid" style="max-height: 200px; overflow-y: auto;">
+								{motifs.map((m: any) => (
+									<label class="motif-pill-label" title={m.name}>
+										<input type="checkbox" name="motif_ids" value={m.id} data-name={m.name} />
+										<span class="motif-icon">🎨</span>
+										<span class="motif-name">{m.name}</span>
+										<span class="check-icon">✓</span>
+									</label>
+								))}
+							</div>
+						</div>
+
+						<!-- Colors -->
+						<div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.9rem 1.1rem;">
+							<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.4rem;">
+								<label class="text-uppercase" style="font-size: 0.72rem; font-weight: 800; color: #1e293b; margin: 0;">Palet Warna</label>
+								<button type="button" id="btnDeselectAllColors" style="font-size: 0.65rem; color: #64748b; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; cursor: pointer;">Reset Warna</button>
+							</div>
+							<div class="color-pill-container" id="color-grid" style="max-height: 200px; overflow-y: auto;">
+								{colorsData.map((c: any) => {
+									const colName = typeof c === "object" ? c.name : c;
+									const hex = getColorHex(c);
+									return (
+										<label class="color-pill-label" title={formatColorTitle(colName)}>
+											<input type="checkbox" name="colors" value={colName} />
+											<span class="color-swatch" style={`background: ${hex};`}></span>
+											<span class="color-name">{formatColorTitle(colName)}</span>
+											<span class="check-icon">✓</span>
+										</label>
+									);
+								})}
+							</div>
+						</div>
+					</div>
+
+					<!-- ========================================================================= -->
+					<!-- SPECIAL COUNTER VARIANT TABLE (FOTO LANGSUNG PER COUNTER & AUTO-DEDUP)     -->
+					<!-- ========================================================================= -->
+					<div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 1.25rem; margin-top: 0.5rem;">
+						<!-- Header & Main Batch Bar -->
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.75rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.75rem;">
+							<div>
+								<div style="display: flex; align-items: center; gap: 0.5rem;">
+									<span style="font-size: 1.1rem;">⚡</span>
+									<h3 style="font-size: 0.95rem; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">
+										Daftar Varian Counter & Stok
+									</h3>
+								</div>
+								<p style="font-size: 0.75rem; color: #64748b; margin: 0.2rem 0 0 0;">
+									Kelola ukuran, stok, dan harga masing-masing counter.
+								</p>
+							</div>
+
+							<!-- Batch Selection Buttons -->
+							<div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+								<span id="selectedCounterCountBadge" style="font-size: 0.72rem; color: #16a34a; background: #dcfce7; padding: 4px 8px; border-radius: 6px; font-weight: 700; border: 1px solid #bbf7d0;">
+									✓ 0 Varian Dipilih
+								</span>
+								<button type="button" id="btnSelectAllCounters" style="font-size: 0.7rem; font-weight: 700; padding: 5px 10px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; color: #334155;">Pilih Semua</button>
+								<button type="button" id="btnUnselectAllCounters" style="font-size: 0.7rem; font-weight: 700; padding: 5px 10px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; color: #334155;">Batal Semua</button>
+								<button type="button" id="btnBatchPrice" style="font-size: 0.7rem; font-weight: 700; padding: 5px 10px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 6px; cursor: pointer;" title="Terapkan harga pada varian yang dicentang [✓]">Set Harga (Terpilih)</button>
+								<button type="button" id="btnBatchFuring" style="font-size: 0.7rem; font-weight: 700; padding: 5px 10px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 6px; cursor: pointer;" title="Terapkan furing pada varian yang dicentang [✓]">Set Furing (Terpilih)</button>
+							</div>
+						</div>
+
+						<!-- Smart Multi-Batch Action Bar -->
+						<div style="background: white; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.85rem 1rem; margin-bottom: 0.85rem; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+							<!-- Top Label & Helper -->
+							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.5rem; border-bottom: 1px dashed #e2e8f0; padding-bottom: 0.45rem;">
+								<div style="display: flex; align-items: center; gap: 0.4rem;">
+									<span style="font-size: 0.78rem; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">🛠️ Aksi Cepat / Set Serentak</span>
+								</div>
+								<span style="font-size: 0.7rem; color: #0284c7; background: #e0f2fe; padding: 2px 7px; border-radius: 4px; font-weight: 600; border: 1px solid #bae6fd;">
+									✓ Diterapkan hanya pada baris yang dicentang
+								</span>
+							</div>
+
+							<!-- Grid 4 Kolom Rapi -->
+							<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.65rem;">
+								<!-- Batch Motif -->
+								<div style="display: flex; flex-direction: column; gap: 0.25rem;">
+									<label style="font-size: 0.7rem; font-weight: 700; color: #475569; display: flex; align-items: center; gap: 0.25rem;">
+										<span>🎯</span> Motif
+									</label>
+									<div style="display: flex; gap: 0.3rem;">
+										<select id="globalBatchMotifSelect" style="flex: 1; min-width: 0; padding: 0.35rem 0.5rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
+											{Array.from({ length: 26 }, (_, i) => "Motif " + String.fromCharCode(65 + i)).map((m) => (
+												<option value={m}>{m}</option>
+											))}
+										</select>
+										<button type="button" id="btnApplySameMotif" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #0f172a; color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='#0f172a'" title="Terapkan motif ini ke varian yang dicentang [✓]">
+											Set
+										</button>
 									</div>
-									<div class="ss-options">
-										{
-											hierarchicalTypes
-												.filter(
-													(t) => t.parent_id === null,
-												)
-												.map((t) => (
-													<div
-														class="ss-option"
-														data-value={t.id}
-													>
-														<span>{t.name}</span>
-														<span class="lvl-badge lvl-1">
-															Root
-														</span>
-													</div>
-												))
-										}
+								</div>
+
+								<!-- Batch Size -->
+								<div style="display: flex; flex-direction: column; gap: 0.25rem;">
+									<label style="font-size: 0.7rem; font-weight: 700; color: #475569; display: flex; align-items: center; gap: 0.25rem;">
+										<span>📏</span> Ukuran
+									</label>
+									<div style="display: flex; gap: 0.3rem;">
+										<select id="globalBatchSizeSelect" style="flex: 1; min-width: 0; padding: 0.35rem 0.5rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
+											{["ALL SIZE", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL", "2L", "3L", "4L", "5L", "6L", "7L"].map((sz) => (
+												<option value={sz}>{sz}</option>
+											))}
+										</select>
+										<button type="button" id="btnApplySameSize" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #0f172a; color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='#0f172a'" title="Terapkan ukuran ini ke varian yang dicentang [✓]">
+											Set
+										</button>
+									</div>
+								</div>
+
+								<!-- Batch Sleeve -->
+								<div style="display: flex; flex-direction: column; gap: 0.25rem;">
+									<label style="font-size: 0.7rem; font-weight: 700; color: #475569; display: flex; align-items: center; gap: 0.25rem;">
+										<span>👔</span> Lengan
+									</label>
+									<div style="display: flex; gap: 0.3rem;">
+										<select id="globalBatchSleeveSelect" style="flex: 1; min-width: 0; padding: 0.35rem 0.5rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
+											<option value="Panjang">Lengan Panjang</option>
+											<option value="Pendek">Lengan Pendek</option>
+											<option value="3/4">Lengan 3/4</option>
+											<option value="-">- (Tanpa Lengan)</option>
+										</select>
+										<button type="button" id="btnApplySameSleeve" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #0f172a; color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='#0f172a'" title="Terapkan model lengan ke varian yang dicentang [✓]">
+											Set
+										</button>
+									</div>
+								</div>
+
+								<!-- Batch Fit -->
+								<div style="display: flex; flex-direction: column; gap: 0.25rem;">
+									<label style="font-size: 0.7rem; font-weight: 700; color: #475569; display: flex; align-items: center; gap: 0.25rem;">
+										<span>✂️</span> Model Fit
+									</label>
+									<div style="display: flex; gap: 0.3rem;">
+										<select id="globalBatchFitSelect" style="flex: 1; min-width: 0; padding: 0.35rem 0.5rem; font-size: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; background: #f8fafc; color: #0f172a;">
+											<option value="REG">Regular Fit</option>
+											<option value="SF">Slim Fit (SF)</option>
+										</select>
+										<button type="button" id="btnApplySameFit" style="padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 700; background: #0f172a; color: white; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: background 0.15s;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='#0f172a'" title="Terapkan model fit ke varian yang dicentang [✓]">
+											Set
+										</button>
 									</div>
 								</div>
 							</div>
+						</div>
 
-							<div
-								id="sub-category-checkboxes"
-								class="cascading-container"
-							>
+						<!-- 2-Tier Compact Card Container -->
+						<div id="counterVariantsListContainer" style="display: flex; flex-direction: column; gap: 0.65rem; min-height: 80px;">
+							<!-- Varian counter rows injected dynamically -->
+						</div>
+
+						<div style="margin-top: 0.75rem; display: flex; gap: 8px;">
+							<button type="button" id="btnAddManualCounterRow" style="font-size: 0.75rem; background: white; color: #334155; border: 1px dashed #94a3b8; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-weight: 700; width: 100%; transition: all 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='white'">
+								+ Tambah Baris Counter Manual
+							</button>
+						</div>
+					</div>
+
+					<!-- FOTO MULTI-MOTIF (FOTO PER MOTIF & SINKRON KE KATALOG) -->
+					<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 10px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+							<div>
+								<div style="display: flex; align-items: center; gap: 0.4rem;">
+									<span style="font-size: 1.1rem;">📸</span>
+									<h3 style="font-size: 0.95rem; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">
+										Unggah & Kelola Foto per Motif
+									</h3>
+								</div>
+								<p style="font-size: 0.75rem; color: #64748b; margin: 0.2rem 0 0 0;">
+									Setiap motif (Motif A, Motif B, dst.) memiliki 1 foto utama. Unggah gambar, Drag & Drop, atau tekan <kbd style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 3px; padding: 1px 4px; font-size: 0.7rem;">Ctrl+V</kbd> untuk Paste foto langsung.
+								</p>
 							</div>
 						</div>
+
+						<div id="motifPhotoCardsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.85rem;">
+							<!-- Dynamic Motif Cards -->
+						</div>
+					</div>
+
+					<!-- URL Tokopedia & Deskripsi -->
+					<div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 1rem 1.25rem;">
+						<div style="margin-bottom: var(--spacing-md);">
+							<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">
+								Link Produk Tokopedia (Opsional)
+							</label>
+							<input name="tokopedia_url" id="product_tokopedia_url_input" type="url" value={product.tokopedia_url || ""} placeholder="https://tokopedia.com/..." style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem;" />
+						</div>
+
 						<div>
-							<label
-								class="text-uppercase opacity-50"
-								style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-								>Status Katalog</label
-							>
-							<label
-								style="display: flex; align-items: center; gap: 0.5rem; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm); cursor: pointer; background: #fcfcfc;"
-							>
-								<input
-									type="checkbox"
-									name="is_active"
-									checked={product.is_active}
-								/>
-								<span style="font-size: 0.85rem;"
-									>Tampilkan di Toko (In Stock)</span
-								>
+							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+								<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; margin: 0;">Deskripsi Produk</label>
+								<button type="button" id="btn_generate_desc" style="font-size: 0.7rem; font-weight: 700; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; padding: 3px 8px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+									<span>✨ Tulis dengan Gemini</span>
+								</button>
+							</div>
+							<textarea name="description" id="description_input" rows="4" placeholder="Deskripsi lengkap tentang bahan batik, furing, dan detail perawatan..." style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; line-height: 1.5;">{product.description || ""}</textarea>
+						</div>
+
+						<!-- Status Aktif / Tampil -->
+						<div style="margin-top: 1rem; display: flex; align-items: center; gap: 8px;">
+							<input type="checkbox" name="is_active" id="is_active_cb" checked={product.is_active} style="width: 18px; height: 18px; cursor: pointer; accent-color: #03ac0e;" />
+							<label for="is_active_cb" style="font-size: 0.85rem; font-weight: 600; color: #334155; cursor: pointer;">
+								Tampilkan produk ini di katalog toko (Aktif)
 							</label>
 						</div>
 					</div>
 
-					<div>
-						<label
-							class="text-uppercase opacity-50"
-							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-							>Motif Batik (Bisa Pilih Banyak)</label
-						>
-						<div class="motif-style-container" id="motif-grid">
-							{
-								motifs?.map((m) => (
-									<label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
-										<input
-											type="checkbox"
-											name="motif_ids"
-											value={m.id}
-											checked={selectedMotifIds.includes(
-												m.id,
-											)}
-										/>
-										{m.name}
-									</label>
-								))
-							}
-						</div>
-						<div class="custom-entry-row" style="margin-top: 8px; display: flex; gap: 8px;">
-							<input type="text" id="new-motif-input" placeholder="Tambah Motif Baru..." style="flex: 1; font-size: 0.75rem; padding: 6px 10px; border: 1px dashed #ccc; border-radius: 6px;" />
-							<button type="button" id="add-motif-btn" style="font-size: 0.7rem; background: #0f172a; color: #fff; border: none; padding: 0 12px; border-radius: 6px; cursor: pointer; font-weight: 600;">+ BUAT</button>
-						</div>
-					</div>
-
-					<div>
-						<label
-							class="text-uppercase opacity-50"
-							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-							>Warna Utama (Multi-select)</label
-						>
-						<div class="motif-style-container" id="color-grid">
-							{
-								colorsData?.map((c) => (
-									<label class="motif-style-label" style="gap: 0.5rem !important; align-items: center;">
-										<input
-											type="checkbox"
-											name="colors"
-											value={c.name}
-											checked={selectedColors.includes(c.name)}
-										/>
-										<span style={`display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${c.hex || '#cccccc'}; border: 1px solid rgba(0,0,0,0.15); flex-shrink:0;`}></span>
-										{c.name}
-									</label>
-								))
-							}
-							{
-								/* Persistent Custom Render: Display colors that are associated but NOT in colorsData */
-								selectedColors.filter(sc => !colorsData.some(ac => ac.name === sc)).map((sc) => (
-									<label class="motif-style-label" style="gap: 0.5rem !important; align-items: center; border: 1px dashed #94a3b8;">
-										<input
-											type="checkbox"
-											name="colors"
-											value={sc}
-											checked={true}
-										/>
-										<span style={`display:inline-block; width:12px; height:12px; border-radius:50%; background-color:#cccccc; border: 1px solid rgba(0,0,0,0.15); flex-shrink:0;`}></span>
-										{sc}
-									</label>
-								))
-							}
-						</div>
-						<div class="custom-entry-row" style="margin-top: 8px; display: flex; gap: 8px;">
-							<input type="text" id="new-color-input" placeholder="Tambah Warna Kustom..." style="flex: 1; font-size: 0.75rem; padding: 6px 10px; border: 1px dashed #ccc; border-radius: 6px;" />
-							<button type="button" id="add-color-btn" style="font-size: 0.7rem; background: #0f172a; color: #fff; border: none; padding: 0 12px; border-radius: 6px; cursor: pointer; font-weight: 600;">+ BUAT</button>
-						</div>
-					</div>
-
-					<div>
-							<label
-								class="text-uppercase opacity-50"
-								style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-								>Ukuran & Variasi Harga</label
-							>
-							<p style="font-size: 0.7rem; color: var(--color-muted); margin-bottom: 1rem;">Centang ukuran yang tersedia, lalu isi harga khususnya jika berbeda.</p>
-
-							{(() => {
-								const sleeveKeywords = ['kemeja', 'baju', 'hem', 'atasan', 'blouse', 'tunik', 'koko', 'pdh', 'jaket'];
-								const nonSleeveKeywords = ['dress', 'gaun', 'gamis', 'rok', 'celana', 'kain', 'sarung', 'jas', 'syal'];
-								const categoryNames = (product.categories || product.product_categories || []).map((pc:any) => (pc.name || pc.types?.name || '').toLowerCase()) || [];
-								if (product.types?.name) categoryNames.push(product.types?.name?.toLowerCase());
-								const jenisStr = categoryNames.join(" ");
-								const isNonSleeve = nonSleeveKeywords.some(kw => jenisStr.includes(kw));
-								const needsSleeve = !isNonSleeve && sleeveKeywords.some(kw => jenisStr.includes(kw));
-								
-								const hasLengan = (product.variants || product.product_variants || [])?.some((v:any) => v.size_name?.includes('Lengan Pendek') || v.size_name?.includes('Lengan Panjang'));
-								
-								const showWrapper = hasLengan || needsSleeve;
-
-								return (
-									<label id="sleeve_toggle_wrapper" style={`display: ${showWrapper ? 'flex' : 'none'}; align-items: center; gap: 0.5rem; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm); cursor: pointer; background: #fcfcfc; margin-bottom: 1rem;`}>
-										<input type="checkbox" id="toggle_sleeve_options" checked={hasLengan} />
-										<span style="font-size: 0.85rem; font-weight: 500;">Aktifkan Pilihan Lengan (Pendek & Panjang)</span>
-									</label>
-								);
-							})()}
-
-							<div
-								style="display: flex; flex-direction: column; gap: 0.5rem; background: #fcfcfc; padding: 1rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
-							>
-								{
-									sizesData.map((s) => {
-										const hasLengan = (product.variants || product.product_variants || [])?.some((v:any) => v.size_name?.includes('Lengan Pendek') || v.size_name?.includes('Lengan Panjang'));
-										// Standard size mapping
-										const existingVarStd = (product.variants || product.product_variants || [])?.find((v:any) => v.size_name === s.name);
-										const isCheckedStd = !!existingVarStd;
-										const vPriceStd = isCheckedStd ? existingVarStd.price : product.price;
-										const vStockStd = isCheckedStd ? existingVarStd.stock : 0;
-										const vDalamanStd = isCheckedStd ? existingVarStd.dalaman || "" : "";
-
-										// Lengan split mapping
-										const vPendek = `${s.name} - Lengan Pendek`;
-										const existingVarPendek = (product.variants || product.product_variants || [])?.find((v:any) => v.size_name === vPendek);
-										const isCheckedPendek = !!existingVarPendek;
-										const vPricePendek = isCheckedPendek ? existingVarPendek.price : product.price;
-										const vStockPendek = isCheckedPendek ? existingVarPendek.stock : 0;
-										const vDalamanPendek = isCheckedPendek ? existingVarPendek.dalaman || "" : "";
-
-										const vPanjang = `${s.name} - Lengan Panjang`;
-										const existingVarPanjang = (product.variants || product.product_variants || [])?.find((v:any) => v.size_name === vPanjang);
-										const isCheckedPanjang = !!existingVarPanjang;
-										const vPricePanjang = isCheckedPanjang ? existingVarPanjang.price : product.price;
-										const vStockPanjang = isCheckedPanjang ? existingVarPanjang.stock : 0;
-										const vDalamanPanjang = isCheckedPanjang ? existingVarPanjang.dalaman || "" : "";
-
-										return (
-										<>
-										<div class="variant-item variant-standard" style={`display: ${hasLengan ? 'none' : 'flex'}; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee;`}>
-											<label style="display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 60px;">
-												<input type="checkbox" class="variant-cb" value={s.name} checked={isCheckedStd} style="margin-top: 2px;" />
-												<span style="display: flex; flex-direction: column;">
-													<strong style="font-weight: 500;">{s.name}</strong>
-												</span>
-											</label>
-											<input type="hidden" name="variant_size" value={s.name} disabled={!isCheckedStd} class="v-size-input" />
-											<div class="v-details" style={`flex: 1; gap: 0.5rem; display: ${isCheckedStd ? 'flex' : 'none'};`}>
-												<div style="flex: 1;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
-													<input type="text" value={vPriceStd} placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedStd} class="v-price-input currency-mask" />
-													<input type="hidden" name="variant_price" value={vPriceStd} disabled={!isCheckedStd} class="v-price-hidden-input" />
-												</div>
-												<div style="width: 80px;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
-													<input type="number" name="variant_stock" value={vStockStd} placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedStd} class="v-stock-input" />
-												</div>
-												<div style="width: 120px;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Dalaman</span>
-													<select name="variant_dalaman" disabled={!isCheckedStd} class="v-dalaman-input" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px; background: white url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23777%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m6 9 6 6 6-6%22/></svg>') no-repeat right 0.6rem center; background-size: 10px; padding-right: 1.5rem; appearance: none; -webkit-appearance: none; -moz-appearance: none; cursor: pointer;">
-														<option value="" selected={vDalamanStd === ""}>Tanpa Dalaman</option>
-														<option value="F" selected={vDalamanStd === "F"}>Furing (F)</option>
-														<option value="TF" selected={vDalamanStd === "TF"}>Tanpa Furing (TF)</option>
-													</select>
-												</div>
-											</div>
-										</div>
-
-										<div class="variant-item variant-sleeve-split" style={`display: ${hasLengan ? 'flex' : 'none'}; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee; padding-left: 1.5rem;`}>
-											<label style="display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 120px;">
-												<input type="checkbox" class="variant-cb" value={vPendek} checked={isCheckedPendek} style="margin-top: 2px;" />
-												<span style="display: flex; flex-direction: column;">
-													<strong style="font-weight: 500;">{s.name}</strong>
-													<span style="font-size: 0.7rem; opacity: 0.6;">Lengan Pendek</span>
-												</span>
-											</label>
-											<input type="hidden" name="variant_size" value={vPendek} disabled={!isCheckedPendek} class="v-size-input" />
-											<div class="v-details" style={`flex: 1; gap: 0.5rem; display: ${isCheckedPendek ? 'flex' : 'none'};`}>
-												<div style="flex: 1;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
-													<input type="text" value={vPricePendek} placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedPendek} class="v-price-input currency-mask" />
-													<input type="hidden" name="variant_price" value={vPricePendek} disabled={!isCheckedPendek} class="v-price-hidden-input" />
-												</div>
-												<div style="width: 80px;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
-													<input type="number" name="variant_stock" value={vStockPendek} placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedPendek} class="v-stock-input" />
-												</div>
-												<div style="width: 120px;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Dalaman</span>
-													<select name="variant_dalaman" disabled={!isCheckedPendek} class="v-dalaman-input" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px; background: white url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23777%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m6 9 6 6 6-6%22/></svg>') no-repeat right 0.6rem center; background-size: 10px; padding-right: 1.5rem; appearance: none; -webkit-appearance: none; -moz-appearance: none; cursor: pointer;">
-														<option value="" selected={vDalamanPendek === ""}>Tanpa Dalaman</option>
-														<option value="F" selected={vDalamanPendek === "F"}>Furing (F)</option>
-														<option value="TF" selected={vDalamanPendek === "TF"}>Tanpa Furing (TF)</option>
-													</select>
-												</div>
-											</div>
-										</div>
-
-										<div class="variant-item variant-sleeve-split" style={`display: ${hasLengan ? 'flex' : 'none'}; align-items: center; gap: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee; padding-left: 1.5rem;`}>
-											<label style="display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 120px;">
-												<input type="checkbox" class="variant-cb" value={vPanjang} checked={isCheckedPanjang} style="margin-top: 2px;" />
-												<span style="display: flex; flex-direction: column;">
-													<strong style="font-weight: 500;">{s.name}</strong>
-													<span style="font-size: 0.7rem; opacity: 0.6;">Lengan Panjang</span>
-												</span>
-											</label>
-											<input type="hidden" name="variant_size" value={vPanjang} disabled={!isCheckedPanjang} class="v-size-input" />
-											<div class="v-details" style={`flex: 1; gap: 0.5rem; display: ${isCheckedPanjang ? 'flex' : 'none'};`}>
-												<div style="flex: 1;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
-													<input type="text" value={vPricePanjang} placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedPanjang} class="v-price-input currency-mask" />
-													<input type="hidden" name="variant_price" value={vPricePanjang} disabled={!isCheckedPanjang} class="v-price-hidden-input" />
-												</div>
-												<div style="width: 80px;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
-													<input type="number" name="variant_stock" value={vStockPanjang} placeholder="Stok" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled={!isCheckedPanjang} class="v-stock-input" />
-												</div>
-												<div style="width: 120px;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Dalaman</span>
-													<select name="variant_dalaman" disabled={!isCheckedPanjang} class="v-dalaman-input" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px; background: white url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23777%22 stroke-width=%222.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22m6 9 6 6 6-6%22/></svg>') no-repeat right 0.6rem center; background-size: 10px; padding-right: 1.5rem; appearance: none; -webkit-appearance: none; -moz-appearance: none; cursor: pointer;">
-														<option value="" selected={vDalamanPanjang === ""}>Tanpa Dalaman</option>
-														<option value="F" selected={vDalamanPanjang === "F"}>Furing (F)</option>
-														<option value="TF" selected={vDalamanPanjang === "TF"}>Tanpa Furing (TF)</option>
-													</select>
-												</div>
-											</div>
-										</div>
-										</>
-										)
-									})
-							}
-							{
-								sizesData.length === 0 && (
-									<p style="font-size: 0.85rem; opacity: 0.5;">
-										Belum ada data ukuran.
-									</p>
-								)
-							}
-							{
-								/* --- ORPHAN CUSTOM SIZES HYDRATOR --- 
-								Find any existing variant names that aren't standard, to render them properly.
-								*/
-								(() => {
-									const existingVars = product.variants || product.product_variants || [];
-									const knownNamesSet = new Set();
-									sizesData.forEach(s => {
-										knownNamesSet.add(s.name);
-										knownNamesSet.add(`${s.name} - Lengan Pendek`);
-										knownNamesSet.add(`${s.name} - Lengan Panjang`);
-									});
-									const orphans = existingVars.filter((v:any) => v.size_name && !knownNamesSet.has(v.size_name));
-									return orphans.map((v:any) => (
-										<div class="variant-item variant-standard" style="display: flex; align-items: center; gap: 1rem; padding: 0.65rem 0.75rem; border: 1px dashed #cbd5e1; border-radius: 6px; background: #ffffff; margin-bottom: 4px;">
-											<label style="display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 180px; margin: 0;">
-												<input type="checkbox" class="variant-cb" value={v.size_name} checked={true} style="margin: 0;" />
-												<span style="display: flex; flex-direction: column;">
-													<strong style="font-weight: 600; line-height: 1.2;">{v.size_name}</strong>
-													<span style="font-size: 0.55rem; font-weight: 700; text-transform: uppercase; color: #b91c1c; margin-top: 2px;">+ KUSTOM</span>
-												</span>
-											</label>
-											<input type="hidden" name="variant_size" value={v.size_name} class="v-size-input" />
-											<div class="v-details" style="flex: 1; gap: 0.5rem; display: flex;">
-												<div style="flex: 1;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
-													<input type="text" value={v.price} style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" class="v-price-input currency-mask" />
-													<input type="hidden" name="variant_price" value={v.price} class="v-price-hidden-input" />
-												</div>
-												<div style="width: 70px;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
-													<input type="number" name="variant_stock" value={v.stock} style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" class="v-stock-input" />
-												</div>
-												<div style="width: 110px;">
-													<span style="font-size: 0.6rem; opacity: 0.5;">Dalaman</span>
-													<select name="variant_dalaman" class="v-dalaman-input" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px; appearance: none; background:#fff;">
-														<option value="" selected={!v.dalaman}>Tanpa</option>
-														<option value="F" selected={v.dalaman === "F"}>Furing</option>
-														<option value="TF" selected={v.dalaman === "TF"}>Non Furing</option>
-													</select>
-												</div>
-											</div>
-										</div>
-									));
-								})()
-							}
-							<div id="custom-sizes-list-container" style="display:flex; flex-direction:column; gap: 0.5rem; border-top: 1px solid #e2e8f0; padding-top: 0.5rem; margin-top: 0.5rem;"></div>
-						</div>
-						<div class="custom-size-adder-row" style="display:flex; gap:8px; margin-top: 8px;">
-							<input type="text" id="inp-custom-size" placeholder="+ Tambah Ukuran Kustom Lainnya..." style="flex:1; font-size: 0.75rem; border: 1px dashed #ccc; padding: 6px 10px; border-radius: 6px;" />
-							<button type="button" id="btn-add-custom-size" style="font-size: 0.7rem; background: #475569; color: #fff; border: none; border-radius: 6px; padding: 0 12px; cursor: pointer; font-weight:600;">+ UKURAN</button>
-						</div>
-					</div>
-
-					<div>
-						<label
-							class="text-uppercase opacity-50"
-							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-							>Update Foto (Kosongkan jika tidak ingin mengubah)</label
-						>
-						<div
-							style="display: flex; gap: 1rem; margin-bottom: 1rem; overflow-x: auto; padding-bottom: 0.5rem;"
-						>
-							{
-								product.images?.map((img: string) => (
-									<div style="width: 80px; height: 80px; border-radius: 4px; overflow: hidden; border: 1px solid #eee; flex-shrink: 0;">
-										<img
-											src={img}
-											style="width: 100%; height: 100%; object-fit: cover;"
-											alt=""
-										/>
-									</div>
-								))
-							}
-						</div>
-						<input
-							name="image_file"
-							type="file"
-							accept="image/*"
-							multiple
-							style="width: 100%; padding: 0.6rem; border: 1px solid #ddd; border-radius: var(--radius-sm); background: #fcfcfc; font-size: 0.8rem;"
-						/>
-						<div
-							id="image_upload_preview"
-							style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;"
-						>
-						</div>
-						<p
-							style="font-size: 0.65rem; opacity: 0.5; margin-top: 0.4rem;"
-						>
-							*Mengunggah foto baru akan menggantikan seluruh foto
-							lama dengan foto baru tersebut.
-						</p>
-					</div>
-
-					<div>
-						<label
-							class="text-uppercase opacity-50"
-							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-							>Link Tokopedia (Opsional)</label
-						>
-						<input
-							name="tokopedia_url"
-							type="url"
-							value={product.tokopedia_url}
-							style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
-						/>
-					</div>
-
-					<div>
-						<label
-							class="text-uppercase opacity-50"
-							style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;"
-							>Deskripsi Produk</label
-						>
-						<textarea
-							name="description"
-							rows="4"
-							style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: var(--radius-sm);"
-							>{product.description}</textarea
-						>
-					</div>
-
-					<div
-						style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--spacing-lg); margin-top: var(--spacing-md);"
-					>
-						<a
-							href="/buka-toko"
-							style="text-align: center; padding: 1rem; border: 1px solid #ddd; color: var(--color-muted); text-transform: uppercase; letter-spacing: 2px; font-weight: 600; font-size: 0.75rem; border-radius: var(--radius-sm);"
-							>Batal</a
-						>
-						<button
-							type="submit"
-							style="background: var(--color-text); color: white; padding: 1rem; border: none; text-transform: uppercase; letter-spacing: 2px; font-weight: 600; font-size: 0.75rem; border-radius: var(--radius-sm); cursor: pointer; transition: 0.3s;"
-							>Simpan Perubahan</button
-						>
+					<!-- Tombol Simpan & Hapus -->
+					<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 1rem;">
 						<button
 							type="button"
-							onclick={`const f = document.getElementById('deleteForm'); showDeleteConfirm(f, 'Apakah Anda yakin ingin menghapus produk ini secara permanen?')`}
-							style="background: #fff5f5; color: #ff4d4d; border: 1px solid #ff4d4d; padding: 1rem; text-transform: uppercase; letter-spacing: 2px; font-weight: 600; font-size: 0.75rem; border-radius: var(--radius-sm); cursor: pointer; transition: 0.3s;"
-							onmouseover="this.style.background='#ff4d4d'; this.style.color='white'"
-							onmouseout="this.style.background='#fff5f5'; this.style.color='#ff4d4d'"
-							>Hapus Produk</button
+							id="btnDeleteProductTrigger"
+							style="padding: 0.85rem 1.5rem; background: #fff1f2; color: #e11d48; border: 1.5px solid #fecdd3; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; transition: all 0.2s;"
+							onmouseover="this.style.background='#ffe4e6'"
+							onmouseout="this.style.background='#fff1f2'"
 						>
+							🗑️ Hapus Produk
+						</button>
+
+						<button
+							type="submit"
+							id="btnSubmitProduct"
+							style="padding: 0.9rem 2.5rem; background: #0f172a; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);"
+							onmouseover="this.style.background='#1e293b'"
+							onmouseout="this.style.background='#0f172a'"
+						>
+							💾 Simpan Perubahan Produk
+						</button>
 					</div>
 				</form>
 
-				<!-- Hidden Delete Form -->
-				<form id="deleteForm" method="POST" style="display: none;">
+				<!-- Form tersembunyi untuk delete -->
+				<form id="deleteProductForm" method="POST" style="display: none;">
 					<input type="hidden" name="action" value="delete_product" />
 				</form>
 			</div>
 		</div>
 	</section>
-	<DeleteConfirmModal />
-	<ImageCropModal />
-</Layout>
 
-<style is:global>
-	input[type="checkbox"] {
-		width: 16px;
-		height: 16px;
-		accent-color: var(--color-accent);
-	}
+	<!-- MODAL KONFIRMASI SIMPAN -->
+	<div id="confirmSaveModal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); z-index: 99999; align-items: center; justify-content: center; padding: 1rem;">
+		<div style="background: white; border-radius: 12px; max-width: 480px; width: 100%; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2); border: 1px solid #e2e8f0;">
+			<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem;">
+				<h3 style="font-size: 1.1rem; font-weight: 800; color: #0f172a; margin: 0;">Konfirmasi Simpan Perubahan</h3>
+				<button type="button" id="btnCancelConfirmModalTop" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #94a3b8;">&times;</button>
+			</div>
+			<div style="font-size: 0.85rem; color: #475569; display: flex; flex-direction: column; gap: 0.75rem;">
+				<p style="margin: 0;">Apakah Anda yakin ingin menyimpan pembaruan untuk produk ini?</p>
+				<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem;">
+					<strong id="confirmModalProductName" style="display: block; color: #0f172a; font-size: 0.9rem; margin-bottom: 4px;">-</strong>
+					<div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;">
+						<span style="background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.72rem;">
+							⚡ <span id="confirmModalActiveCount">0</span> Varian Disimpan
+						</span>
+						<span id="confirmModalTotalCounterStr" style="color: #64748b; font-size: 0.72rem; align-self: center;">
+							-
+						</span>
+					</div>
+					<div id="confirmModalMotifsBreakdown" style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;"></div>
+				</div>
+				<div id="confirmModalUncheckedWarning" style="display: none; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 8px; font-size: 0.75rem; color: #b45309;">
+					⚠️ Perhatian: Ada <span id="confirmModalUncheckedCount" style="font-weight: 800;">0</span> counter yang tidak dicentang dan tidak akan disimpan dalam varian aktif katalog.
+				</div>
+			</div>
+			<div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; border-top: 1px solid #f1f5f9; padding-top: 0.75rem;">
+				<button type="button" id="btnCancelConfirmModal" style="padding: 0.5rem 1rem; border: 1px solid #cbd5e1; border-radius: 6px; background: white; font-weight: 700; font-size: 0.8rem; cursor: pointer; color: #475569;">Batal</button>
+				<button type="button" id="btnProceedSubmitProduct" style="padding: 0.5rem 1.25rem; background: #0f172a; color: white; border: none; border-radius: 6px; font-weight: 700; font-size: 0.8rem; cursor: pointer;">Ya, Simpan Perubahan</button>
+			</div>
+		</div>
+	</div>
 
-	input:focus,
-	select:focus,
-	textarea:focus {
-		border-color: var(--color-accent) !important;
-		outline: none;
-	}
+	<!-- LOADING OVERLAY SAAT KOMPRESI & PROSES FIREBASE -->
+	<div id="loadingOverlay" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); z-index: 999999; align-items: center; justify-content: center; flex-direction: column; color: white;">
+		<div style="width: 50px; height: 50px; border: 4px solid rgba(255,255,255,0.2); border-top-color: #38bdf8; border-radius: 50%; animation: spinOverlay 0.8s linear infinite; margin-bottom: 1.25rem;"></div>
+		<h3 style="font-size: 1.2rem; font-weight: 700; margin: 0 0 0.4rem 0;">Sedang Memperbarui Produk...</h3>
+		<p style="font-size: 0.85rem; color: #cbd5e1; margin: 0; max-width: 320px; text-align: center;">
+			Memproses kompresi WebP, watermark logo emas, dan menyimpan data katalog. Mohon tunggu sejenak.
+		</p>
+	</div>
 
-	/* Searchable Select Styles */
-	.searchable-select {
-		position: relative;
-		width: 100%;
-	}
-	.ss-input {
-		width: 100%;
-		padding: 0.8rem;
-		border: 1px solid #ddd;
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-		background: white;
-	}
-	.ss-dropdown {
-		position: absolute;
-		top: 100%;
-		left: 0;
-		right: 0;
-		background: white;
-		border: 1px solid #ddd;
-		border-radius: var(--radius-sm);
-		margin-top: 5px;
-		display: none;
-		z-index: 100;
-		box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-	}
-	.ss-dropdown.show {
-		display: block;
-	}
-	.ss-search-container {
-		padding: 10px;
-		border-bottom: 1px solid #eee;
-		position: relative;
-	}
-	.ss-search {
-		width: 100%;
-		padding: 8px 30px 8px 10px;
-		border: 1px solid #eee;
-		border-radius: 4px;
-		outline: none;
-	}
-	.ss-search-icon {
-		position: absolute;
-		right: 20px;
-		top: 50%;
-		transform: translateY(-50%);
-		opacity: 0.3;
-	}
-	.ss-options {
-		max-height: 200px;
-		overflow-y: auto;
-	}
-	.ss-option {
-		padding: 10px;
-		cursor: pointer;
-		transition: background 0.2s;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-	.ss-option:hover {
-		background: #f9f9f9;
-	}
-	.ss-option.selected {
-		background: #f0f0f0;
-		font-weight: 600;
-	}
+	<!-- DATA AWAL DARI SERVER -->
+	<script is:inline id="initial-product-data" type="application/json" set:html={JSON.stringify(product)}></script>
 
-	.lvl-badge {
-		font-size: 0.6rem;
-		padding: 2px 6px;
-		border-radius: 3px;
-		text-transform: uppercase;
-		font-weight: 700;
-	}
-	.lvl-1 {
-		background: #111;
-		color: #fff;
-	}
+	<style is:global>
+		@keyframes spinOverlay {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
 
-	/* Cascading Checkboxes Styles */
-	.motif-style-container {
-		display: grid !important;
-		grid-template-columns: repeat(
-			auto-fill,
-			minmax(160px, 1fr)
-		) !important;
-		gap: 0.75rem 1rem !important;
-		background: #fdfdfd !important;
-		padding: 1.2rem !important;
-		border: 1px solid #e2e8f0 !important;
-		border-radius: 12px !important;
-		max-height: 250px !important;
-		overflow-y: auto !important;
-	}
-	.motif-style-label {
-		display: flex !important;
-		align-items: center !important;
-		gap: 0.6rem !important;
-		padding: 0.4rem 0.6rem !important;
-		color: #334155 !important;
-		border-radius: 6px !important;
-		transition:
-			background 0.2s,
-			color 0.2s !important;
-		white-space: normal !important;
-		line-height: 1.3 !important;
-		width: auto !important;
-		font-size: 0.85rem !important;
-		cursor: pointer !important;
-	}
-	.motif-style-label:hover {
-		background: #f1f5f9 !important;
-	}
-	.motif-style-label input[type="checkbox"] {
-		width: 16px !important;
-		height: 16px !important;
-		cursor: pointer !important;
-		margin: 0 !important;
-		accent-color: #000 !important;
-	}
-</style>
+		.searchable-select { position: relative; width: 100%; }
+		.ss-input { width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+		.ss-dropdown { display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #cbd5e1; border-radius: 6px; max-height: 220px; overflow-y: auto; z-index: 50; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+		.ss-search-container { position: sticky; top: 0; background: white; padding: 0.4rem; border-bottom: 1px solid #eee; display: flex; align-items: center; }
+		.ss-search-icon { position: absolute; left: 0.8rem; color: #999; }
+		.ss-search { width: 100%; padding: 0.4rem 0.4rem 0.4rem 2rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.8rem; }
+		.ss-option { padding: 0.5rem 0.8rem; cursor: pointer; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; }
+		.ss-option:hover { background: #f5f5f5; color: var(--color-accent); }
+		.lvl-badge { font-size: 0.6rem; padding: 2px 6px; border-radius: 4px; background: #eee; font-weight: 600; }
+		
+		/* Pill Badges Grid */
+		.pill-badge-container,
+		.color-pill-container {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+			gap: 0.5rem;
+			padding: 0.75rem;
+			background: #f8fafc;
+			border: 1px solid #e2e8f0;
+			border-radius: 8px;
+		}
+		.motif-pill-label,
+		.color-pill-label,
+		.cat-pill-label {
+			display: flex;
+			align-items: center;
+			gap: 0.45rem;
+			font-size: 0.78rem;
+			font-weight: 600;
+			color: #334155;
+			padding: 0.45rem 0.7rem;
+			background: #ffffff;
+			border: 1.5px solid #cbd5e1;
+			border-radius: 8px;
+			cursor: pointer;
+			user-select: none;
+			transition: all 0.15s ease-in-out;
+			box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+			position: relative;
+			width: 100%;
+			box-sizing: border-box;
+			min-height: 38px;
+		}
+		.motif-pill-label:hover,
+		.color-pill-label:hover,
+		.cat-pill-label:hover {
+			border-color: #94a3b8;
+			background: #f1f5f9;
+			transform: translateY(-1px);
+			box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+		}
+		.motif-pill-label input[type="checkbox"],
+		.color-pill-label input[type="checkbox"],
+		.cat-pill-label input[type="checkbox"] {
+			position: absolute;
+			opacity: 0;
+			width: 0;
+			height: 0;
+			pointer-events: none;
+		}
+		.motif-pill-label:has(input:checked),
+		.color-pill-label:has(input:checked),
+		.cat-pill-label:has(input:checked) {
+			background: #fefce8;
+			border-color: #d97706;
+			color: #92400e;
+			font-weight: 700;
+			box-shadow: 0 2px 5px rgba(217, 119, 6, 0.15);
+		}
+		.motif-pill-label .motif-icon,
+		.cat-pill-label .cat-icon {
+			font-size: 0.75rem;
+			opacity: 0.75;
+			flex-shrink: 0;
+		}
+		.motif-pill-label .motif-name,
+		.color-pill-label .color-name,
+		.cat-pill-label .cat-name {
+			flex: 1;
+			min-width: 0;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+		.motif-pill-label .check-icon,
+		.color-pill-label .check-icon,
+		.cat-pill-label .check-icon {
+			display: none;
+			font-size: 0.75rem;
+			font-weight: 800;
+			color: #d97706;
+			margin-left: auto;
+			flex-shrink: 0;
+		}
+		.motif-pill-label:has(input:checked) .check-icon,
+		.color-pill-label:has(input:checked) .check-icon,
+		.cat-pill-label:has(input:checked) .check-icon {
+			display: inline-block;
+		}
+		.color-pill-label .color-swatch {
+			display: inline-block;
+			width: 14px;
+			height: 14px;
+			border-radius: 50%;
+			box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+			flex-shrink: 0;
+		}
 
-<script is:inline define:vars={{ hierarchicalTypes, currentCategoryIds, selectedColors }}>
-	// Price Markup Logic (15% Discount Markup)
-	const priceInputHidden = document.getElementById("product_price_input");
-	const markupPreview = document.getElementById("price_markup_preview");
-	const markupVal = document.getElementById("markup_val");
-	const originalPriceInput = document.getElementById(
-		"original_price_input",
-	);
+		/* Row styling */
+		.counter-table-row {
+			border-bottom: 1px solid #e2e8f0;
+			transition: background-color 0.15s;
+		}
+		.counter-table-row:hover {
+			background-color: #f8fafc;
+		}
 
-	if (priceInputHidden) {
-		priceInputHidden.addEventListener("input", (e) => {
-			const val = parseFloat(e.target.value);
-			if (!isNaN(val) && val > 0) {
-				let originalPrice = Math.round(val / 0.85);
-				originalPrice = Math.ceil(originalPrice / 10000) * 10000;
-				const pct = (originalPrice - val).toLocaleString("id-ID");
-				markupVal.innerText = originalPrice.toLocaleString("id-ID");
-				originalPriceInput.value = originalPrice;
-				const markupPctEl = document.getElementById("markup_pct");
-				if(markupPctEl) markupPctEl.innerText = pct;
-				markupPreview.style.display = "block";
-			} else {
-				markupPreview.style.display = "none";
-				originalPriceInput.value = "";
+		/* Motif card styling */
+		.motif-photo-card {
+			border: 1.5px solid #e2e8f0;
+			border-radius: 8px;
+			padding: 0.75rem;
+			background: #f8fafc;
+			display: flex;
+			align-items: center;
+			gap: 0.75rem;
+			transition: all 0.2s;
+		}
+		.motif-photo-card:hover {
+			border-color: #cbd5e1;
+			background: #ffffff;
+			box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+		}
+	</style>
+
+	<script is:inline define:vars={{ publicApiUrl, typesListServer: hierarchicalTypes, motifsListServer: motifs, sizesListServer: sizesData, colorsListServer: colorsData }}>
+		const BASE_PHOTO_URL = "https://noir.grace.gracianna.web.id/foto/";
+		const BASE_PHOTO_URL_FALLBACK = "https://noir.grace.gracianna.web.id/storage/";
+		const BASE_PHOTO_URL_IMAGES = "https://noir.grace.gracianna.web.id/images/";
+
+		const hierarchicalTypes = typesListServer || [];
+		const motifsMasterList = Array.from({ length: 26 }, (_, i) => "Motif " + String.fromCharCode(65 + i));
+
+		const standardSizesList = [
+			"ALL SIZE", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL",
+			"2L", "3L", "4L", "5L", "6L", "7L"
+		];
+
+		// Global store for uploaded files & previews per motif: motifName -> { file: File|null, previewUrl: string, isCustom: boolean }
+		const motifPhotoStore = new Map();
+		let activeTargetMotif = null;
+
+		function cleanSize(rawSize, rawKode) {
+			if (rawKode && rawKode.length >= 3) {
+				const char3 = rawKode.charAt(2).toUpperCase();
+				const sizeCodeMap = {
+					'0': 'ALL SIZE', 'S': 'S', 'M': 'M', 'L': 'L', 'X': 'XL', 'Y': 'XXL',
+					'2': '2L', '3': '3L', '4': '4L', '5': '5L', '6': '6L', '7': '7L'
+				};
+				if (sizeCodeMap[char3]) return sizeCodeMap[char3];
 			}
-		});
-	}
-
-	let categoryModeL1 = "standard"; // 'standard' or 'custom'
-
-	function initSearchableSelect() {
-		const selectContainers = document.querySelectorAll(".searchable-select");
-		selectContainers.forEach((container) => {
-			const input = container.querySelector(".ss-input");
-			const hiddenInput = container.querySelector('input[type="hidden"]');
-			const dropdown = container.querySelector(".ss-dropdown");
-			const searchInput = container.querySelector(".ss-search");
-			const options = container.querySelectorAll(".ss-option");
-			const optionsContainer = container.querySelector(".ss-options");
-			const ssType = container.getAttribute("data-ss-type");
-
-			input.addEventListener("click", (e) => {
-				e.stopPropagation();
-				dropdown.classList.toggle("show");
-				if (dropdown.classList.contains("show")) {
-					searchInput.focus();
+			if (!rawSize) return "ALL SIZE";
+			let s = String(rawSize).trim().toUpperCase();
+			if (s === "00" || s === "0" || s === "ALL" || s === "ALLSIZE" || s === "ALL SIZE" || s === "-") {
+				return "ALL SIZE";
+			}
+			s = s.replace(/\bSF\b/g, "").replace(/\bSLIM FIT\b/g, "").replace(/\bSLIM\b/g, "").trim();
+			if (s.includes("-")) {
+				const parts = s.split("-").map(p => p.trim());
+				for (const p of parts) {
+					if (standardSizesList.includes(p)) return p;
 				}
+			}
+			if (standardSizesList.includes(s)) {
+				return s;
+			}
+			for (const sz of ["7L", "6L", "5L", "4L", "3L", "2L", "5XL", "4XL", "3XL", "XXL", "XL", "XS", "L", "M", "S"]) {
+				const regex = new RegExp(`\\b${sz}\\b`, 'i');
+				if (regex.test(s)) return sz;
+			}
+			return s || "ALL SIZE";
+		}
+
+		const NOIR_TIPE_MAP = {
+			t1: {
+				L: "LADYS", M: "MAN", A: "ASESORIS", T: "TAS", J: "JAM", K: "KOSMETIK",
+				S: "SEPATU", D: "SANDAL", E: "DOMPET", W: "WANITA", Y: "YUAN-YUAN",
+				X: "KONSI", I: "KAIN", R: "SARIMBIT", G: "GULUNGAN", C: "METERAN", P: "KPJ"
+			},
+			t2: {
+				K: { name: "KEMEJA", targetL1: "Kemeja", isAccessory: false },
+				B: { name: "BLUES", targetL1: "Blues", isAccessory: false },
+				P: { name: "DRESS", targetL1: "Dress", isAccessory: false },
+				G: { name: "GAUN", targetL1: "Gaun", isAccessory: false },
+				X: { name: "GAMIS", targetL1: "Gamis", isAccessory: false },
+				R: { name: "ROK", targetL1: "Rok", isAccessory: false },
+				C: { name: "CELANA", targetL1: "Celana", isAccessory: false },
+				E: { name: "LEGGING", targetL1: "Legging", isAccessory: false },
+				F: { name: "SARUNG", targetL1: "Sarung", isAccessory: false },
+				O: { name: "OUTER", targetL1: "Outer", isAccessory: false },
+				J: { name: "JAKET", targetL1: "Jaket", isAccessory: false },
+				A: { name: "JAS", targetL1: "Jas", isAccessory: false },
+				V: { name: "KEBAYA", targetL1: "Kebaya", isAccessory: false },
+				S: { name: "STELAN", targetL1: "Setelan", isAccessory: false },
+				U: { name: "JUMPSUIT", targetL1: "Jumpsuit", isAccessory: false },
+				T: { name: "T - SHIRT", targetL1: "T - Shirt", isAccessory: false },
+				N: { name: "TANK TOP", targetL1: "Tank Top", isAccessory: false },
+				M: { name: "SARIMBIT", targetL1: "Sarimbit", isAccessory: false },
+				L: { name: "SYAL", targetL1: "Accessories", isAccessory: true, subName: "Syal" },
+				H: { name: "SELENDANG", targetL1: "Accessories", isAccessory: true, subName: "Selendang" },
+				Q: { name: "KLG/ANTG", targetL1: "Accessories", isAccessory: true, subName: "Kalung / Anting" },
+				W: { name: "BROS", targetL1: "Accessories", isAccessory: true, subName: "Bros" },
+				I: { name: "TOPI", targetL1: "Accessories", isAccessory: true, subName: "Topi" },
+				D: { name: "SABUK", targetL1: "Accessories", isAccessory: true, subName: "Sabuk" }
+			},
+			t3: {
+				T: { name: "KATUN", targetL2: "Katun" },
+				G: { name: "SUTRA", targetL2: "Sutra" },
+				M: { name: "TENUN", targetL2: "Tenun" },
+				S: { name: "SATEN", targetL2: "Saten" },
+				D: { name: "DOBY", targetL2: "Dobby" },
+				A: { name: "BROKLAT", targetL2: "Broklat" },
+				F: { name: "SIFONE", targetL2: "Sifone" },
+				E: { name: "PARIS", targetL2: "Paris" },
+				H: { name: "PARIS", targetL2: "Paris" },
+				V: { name: "VISCOS", targetL2: "Viscos" },
+				J: { name: "JEANS", targetL2: "Jeans" },
+				K: { name: "KAOS", targetL2: "Kaos" },
+				P: { name: "PARASIT", targetL2: "Parasit" },
+				N: { name: "NILON", targetL2: "Nilon" },
+				B: { name: "BENANG", targetL2: "Benang" },
+				L: { name: "KALDORE", targetL2: "Kaldore" },
+				U: { name: "KULIT", targetL2: "Kulit" },
+				R: { name: "BLUDRU", targetL2: "Bludru" },
+				C: { name: "JERUK", targetL2: "Jeruk" },
+				I: { name: "BABY", targetL2: "Baby" },
+				W: { name: "SILKY", targetL2: "Silky" },
+				X: { name: "KREP", targetL2: "Krep" }
+			},
+			t4: {
+				B: "BIRU", K: "KUNING", H: "HITAM", I: "HIJAU", A: "ABU-ABU",
+				C: "COKLAT", J: "JINGGA", M: "MERAH", N: "PINK", O: "ORANGE",
+				P: "PUTIH", S: "SILVER", U: "UNGU", R: "KREM", W: "WARNAWARNI"
+			},
+			t5: {
+				S: "S", M: "M", L: "L", X: "XL", Y: "XXL",
+				'2': "2L", '3': "3L", '4': "4L", '5': "5L", '6': "6L", '7': "7L", '0': "ALL SIZE"
+			},
+			t6: {
+				C: { name: "CAP", targetL3: "Cap" },
+				P: { name: "PRINT", targetL3: "Printing" },
+				T: { name: "TULIS", targetL3: "Tulis" },
+				R: { name: "PERADA", targetL3: "Prada" },
+				S: { name: "TULISP", targetL3: "Tulis" },
+				Q: { name: "PERADAP", targetL3: "Prada" }
+			}
+		};
+
+		function decodePosItemInfo(item) {
+			const rawCode = (item.kode || item.code || item.sku || "").toUpperCase().trim();
+			const rawName = (item.nama || item.name || "").toUpperCase().trim();
+
+			let divisi = "";
+			let kategori = "";
+			let bahan = "";
+			let proses = "";
+			let warna = "";
+			let ukuran = "";
+
+			if (rawCode.length >= 1) {
+				const char1 = rawCode.charAt(0);
+				if (NOIR_TIPE_MAP.t1[char1]) divisi = NOIR_TIPE_MAP.t1[char1];
+			}
+			if (rawCode.length >= 2) {
+				const char2 = rawCode.charAt(1);
+				if (NOIR_TIPE_MAP.t2[char2]) kategori = NOIR_TIPE_MAP.t2[char2].name;
+			}
+			if (rawCode.length >= 3) {
+				const char3 = rawCode.charAt(2);
+				if (NOIR_TIPE_MAP.t5[char3]) ukuran = NOIR_TIPE_MAP.t5[char3];
+			}
+			if (rawCode.length >= 4) {
+				const char4 = rawCode.charAt(3);
+				if (NOIR_TIPE_MAP.t3[char4]) bahan = NOIR_TIPE_MAP.t3[char4].name;
+			}
+			if (rawCode.length >= 5) {
+				const char5 = rawCode.charAt(4);
+				if (NOIR_TIPE_MAP.t6[char5]) proses = NOIR_TIPE_MAP.t6[char5].name;
+			}
+			if (rawCode.length >= 6) {
+				const char6 = rawCode.charAt(5);
+				if (NOIR_TIPE_MAP.t4[char6]) warna = NOIR_TIPE_MAP.t4[char6];
+			}
+
+			const summaryParts = [];
+			if (divisi) summaryParts.push(divisi);
+			if (kategori) summaryParts.push(kategori);
+			if (bahan) summaryParts.push(bahan);
+			if (proses) summaryParts.push(proses);
+			if (warna) summaryParts.push(warna);
+			if (ukuran) summaryParts.push(`(Size: ${ukuran})`);
+
+			return {
+				divisi, kategori, bahan, proses, warna, ukuran,
+				summary: summaryParts.length > 0 ? summaryParts.join(" • ") : (rawName || "Produk Batik")
+			};
+		}
+
+		function getMotifLetter(idx) {
+			return "Motif " + String.fromCharCode(65 + (idx % 26));
+		}
+
+		function getRowPhotoGroupKey(row) {
+			const motifSelect = row.querySelector(".v-motif-select");
+			const motif = motifSelect?.value || "Motif A";
+			const sleeveSelect = row.querySelector(".v-sleeve-select");
+			const sleeve = sleeveSelect?.value || "-";
+			return (sleeve && sleeve !== "-") ? `${motif}___${sleeve}` : motif;
+		}
+
+		// --- WATERMARK & CANVAS GENERATOR ---
+		function createWatermarkedDataUrl(file, callback) {
+			const reader = new FileReader();
+			reader.onload = (e) => {
+				const img = new Image();
+				img.onload = () => {
+					const canvas = document.createElement("canvas");
+					const ctx = canvas.getContext("2d");
+					const maxDim = 1200;
+					let w = img.width;
+					let h = img.height;
+					if (w > maxDim || h > maxDim) {
+						if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+						else { w = Math.round((w * maxDim) / h); h = maxDim; }
+					}
+					canvas.width = w;
+					canvas.height = h;
+					ctx.drawImage(img, 0, 0, w, h);
+
+					const logoUrl = document.getElementById("setting_logo_url")?.value;
+					const itemCode = document.getElementById("product_item_code_input")?.value || document.getElementById("product_sku_input")?.value || "";
+
+					const finalize = () => {
+						const dataUrl = canvas.toDataURL("image/webp", 0.85);
+						canvas.toBlob((blob) => {
+							const processedFile = blob ? new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".webp", { type: "image/webp" }) : file;
+							callback(dataUrl, processedFile);
+						}, "image/webp", 0.85);
+					};
+
+					const drawTextBadge = () => {
+						if (itemCode) {
+							const fontSize = Math.max(Math.round(h * 0.022), 14);
+							ctx.font = `bold ${fontSize}px sans-serif`;
+							ctx.textAlign = "right";
+							ctx.fillStyle = "rgba(0,0,0,0.6)";
+							ctx.fillText(itemCode, w - Math.round(w * 0.04) + 1, h - Math.round(h * 0.05) + 1);
+							ctx.fillStyle = "white";
+							ctx.fillText(itemCode, w - Math.round(w * 0.04), h - Math.round(h * 0.05));
+						}
+						finalize();
+					};
+
+					if (logoUrl) {
+						const logo = new Image();
+						logo.crossOrigin = "anonymous";
+						logo.onload = () => {
+							const logoW = Math.round(w * 0.18);
+							const logoH = Math.round((logo.height * logoW) / logo.width);
+							const margin = Math.round(w * 0.04);
+							ctx.drawImage(logo, w - logoW - margin, margin, logoW, logoH);
+							drawTextBadge();
+						};
+						logo.onerror = drawTextBadge;
+						logo.src = logoUrl;
+					} else {
+						drawTextBadge();
+					}
+				};
+				img.src = e.target.result;
+			};
+			reader.readAsDataURL(file);
+		}
+
+		function showFullscreenImageModal(src) {
+			let modal = document.getElementById("fullscreenImageModal");
+			if (!modal) {
+				modal = document.createElement("div");
+				modal.id = "fullscreenImageModal";
+				modal.style.cssText = "display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9999999; align-items: center; justify-content: center; padding: 2rem;";
+				modal.innerHTML = `
+					<div style="position: relative; max-width: 90vw; max-height: 90vh;">
+						<img id="fullscreenImageSrc" style="max-width: 100%; max-height: 90vh; border-radius: 8px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);" />
+						<button type="button" id="btnCloseFullscreenImage" style="position: absolute; top: -14px; right: -14px; background: white; border: none; border-radius: 50%; width: 32px; height: 32px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">&times;</button>
+					</div>
+				`;
+				document.body.appendChild(modal);
+				modal.querySelector("#btnCloseFullscreenImage")?.addEventListener("click", () => { modal.style.display = "none"; });
+				modal.addEventListener("click", (e) => { if (e.target === modal) modal.style.display = "none"; });
+			}
+			const imgEl = modal.querySelector("#fullscreenImageSrc");
+			if (imgEl) imgEl.src = src;
+			modal.style.display = "flex";
+		}
+
+		// --- RENDER MOTIF PHOTO CARDS ---
+		function renderMotifPhotoCards() {
+			const container = document.getElementById("motifPhotoCardsContainer");
+			if (!container) return;
+
+			const activeRows = Array.from(document.querySelectorAll(".counter-table-row")).filter(r => r.querySelector(".v-counter-cb")?.checked);
+			const groupKeys = new Set();
+			activeRows.forEach(row => {
+				groupKeys.add(getRowPhotoGroupKey(row));
 			});
 
-			searchInput.addEventListener("input", (e) => {
-				const term = e.target.value.toLowerCase();
-				let hasResults = false;
-				options.forEach((opt) => {
-					const text = opt.textContent.toLowerCase();
-					if (text.includes(term)) {
-						opt.style.display = "block";
-						hasResults = true;
-					} else {
-						opt.style.display = "none";
-					}
+			if (groupKeys.size === 0) {
+				groupKeys.add("Motif A");
+			}
+
+			container.innerHTML = "";
+
+			Array.from(groupKeys).sort().forEach(key => {
+				const parts = key.split("___");
+				const motifName = parts[0];
+				const sleeveName = parts[1] || "";
+
+				const store = motifPhotoStore.get(key) || motifPhotoStore.get(motifName);
+				const previewUrl = store ? store.previewUrl : "";
+
+				const card = document.createElement("div");
+				card.className = "motif-photo-card";
+				card.dataset.key = key;
+				card.dataset.motif = motifName;
+
+				card.innerHTML = `
+					<div class="m-card-thumb" style="width: 80px; height: 80px; border-radius: 8px; overflow: hidden; background: #e2e8f0; border: 1px solid #cbd5e1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+						${previewUrl ? `
+							<img src="${previewUrl}" style="width: 100%; height: 100%; object-fit: cover;" />
+						` : `
+							<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: #94a3b8;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+						`}
+					</div>
+					<div style="flex: 1; min-width: 0;">
+						<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+							<strong style="font-size: 0.85rem; color: #0f172a;">${motifName}</strong>
+							${sleeveName ? `<span style="font-size: 0.65rem; background: #e0f2fe; color: #0369a1; padding: 1px 5px; border-radius: 4px; font-weight: 700;">${sleeveName}</span>` : ""}
+						</div>
+						<div style="display: flex; gap: 6px; align-items: center; margin-top: 6px;">
+							<button type="button" class="btn-change-photo" style="font-size: 0.72rem; font-weight: 700; background: #0f172a; color: white; border: none; padding: 4px 8px; border-radius: 5px; cursor: pointer;">
+								${previewUrl ? "Ganti Foto" : "Unggah Foto"}
+							</button>
+							<input type="file" accept="image/*" class="m-card-file-input" style="display: none;" />
+						</div>
+					</div>
+				`;
+
+				container.appendChild(card);
+
+				const thumb = card.querySelector(".m-card-thumb");
+				const uploadBtn = card.querySelector(".btn-change-photo");
+				const fileInp = card.querySelector(".m-card-file-input");
+
+				thumb?.addEventListener("click", () => {
+					if (previewUrl) showFullscreenImageModal(previewUrl);
+					else fileInp?.click();
 				});
 
-				// Dynamic Add New Item logic: Show instant create tag in list
-				let customOpt = optionsContainer.querySelector(".ss-custom-add");
-				if (term.length > 0) {
-					if (!customOpt) {
-						customOpt = document.createElement("div");
-						customOpt.className = "ss-option ss-custom-add";
-						customOpt.style.cssText = "background:#f8fafc; color:#2563eb; font-weight:600; border-top:1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center;";
-						optionsContainer.appendChild(customOpt);
-						customOpt.addEventListener("click", (e) => {
-							e.stopPropagation();
-							const rawVal = customOpt.getAttribute("data-raw");
-							hiddenInput.value = rawVal;
-							input.value = rawVal;
-							dropdown.classList.remove("show");
-							searchInput.value = "";
-							
-							options.forEach((o) => (o.style.display = "block"));
-							options.forEach((o) => o.classList.remove("selected"));
-							
-							if (ssType === "product-l1") {
-								categoryModeL1 = "custom"; // Switch mode
-								renderSubCategoriesFromList(["_CUSTOM_L1_"]); // Render custom chain cascade
-							}
-							updateName();
+				uploadBtn?.addEventListener("click", () => {
+					activeTargetMotif = key;
+					fileInp?.click();
+				});
+
+				fileInp?.addEventListener("change", (e) => {
+					const file = e.target.files?.[0];
+					if (!file) return;
+
+					if (typeof window.openImageCropper === 'function') {
+						window.openImageCropper([file], (croppedFiles) => {
+							if (!croppedFiles || croppedFiles.length === 0) return;
+							const targetFile = croppedFiles[0];
+							createWatermarkedDataUrl(targetFile, (watermarkedUrl, processedFile) => {
+								syncPhotosForGroup(key, watermarkedUrl || "", processedFile || targetFile);
+							});
+						});
+					} else {
+						createWatermarkedDataUrl(file, (watermarkedUrl, processedFile) => {
+							syncPhotosForGroup(key, watermarkedUrl || "", processedFile || file);
 						});
 					}
-					customOpt.innerHTML = `<span>➕ Pakai "${e.target.value}"...</span><span class="lvl-badge" style="background:#dbeafe;color:#1e40af;font-size:0.55rem;padding:2px 5px;border-radius:4px;font-weight:bold;text-transform:uppercase;">BARU</span>`;
-					customOpt.setAttribute("data-raw", e.target.value);
-					customOpt.style.display = "flex";
-				} else if (customOpt) {
-					customOpt.style.display = "none";
-				}
+				});
 
-				const noRes = optionsContainer.querySelector(".ss-no-results");
-				if (!hasResults && term.length === 0) {
-					if (!noRes) {
-						const div = document.createElement("div");
-						div.className = "ss-no-results";
-						div.textContent = "Kategori tidak ditemukan";
-						optionsContainer.appendChild(div);
+				// Drag and Drop
+				card.addEventListener("dragover", (e) => { e.preventDefault(); card.style.borderColor = "#0284c7"; card.style.background = "#f0f9ff"; });
+				card.addEventListener("dragleave", () => { card.style.borderColor = "#e2e8f0"; card.style.background = "#f8fafc"; });
+				card.addEventListener("drop", (e) => {
+					e.preventDefault();
+					card.style.borderColor = "#e2e8f0";
+					card.style.background = "#f8fafc";
+					const file = e.dataTransfer.files?.[0];
+					if (file && file.type.startsWith("image/")) {
+						if (typeof window.openImageCropper === 'function') {
+							window.openImageCropper([file], (croppedFiles) => {
+								if (!croppedFiles || croppedFiles.length === 0) return;
+								const targetFile = croppedFiles[0];
+								createWatermarkedDataUrl(targetFile, (watermarkedUrl, processedFile) => {
+									syncPhotosForGroup(key, watermarkedUrl || "", processedFile || targetFile);
+								});
+							});
+						} else {
+							createWatermarkedDataUrl(file, (watermarkedUrl, processedFile) => {
+								syncPhotosForGroup(key, watermarkedUrl || "", processedFile || file);
+							});
+						}
 					}
-				} else if (noRes) {
-					noRes.remove();
-				}
+				});
+			});
+		}
+
+		function syncPhotosForGroup(groupKey, dataUrl, file) {
+			motifPhotoStore.set(groupKey, {
+				file: file || null,
+				previewUrl: dataUrl,
+				isCustom: !!file
 			});
 
-			options.forEach((opt) => {
-				opt.addEventListener("click", (e) => {
-					e.stopPropagation();
-					const val = opt.getAttribute("data-value");
-					const text = opt.querySelector("span")?.textContent.trim() || opt.textContent.trim();
+			renderMotifPhotoCards();
 
-					hiddenInput.value = val;
-					input.value = text;
-					options.forEach((o) => o.classList.remove("selected"));
-					opt.classList.add("selected");
-					dropdown.classList.remove("show");
-					searchInput.value = "";
-					options.forEach((o) => (o.style.display = "block"));
+			document.querySelectorAll(".counter-table-row").forEach(row => {
+				const rowKey = getRowPhotoGroupKey(row);
+				if (rowKey === groupKey) {
+					const img = row.querySelector(".v-preview-img");
+					const svg = row.querySelector(".v-placeholder-svg");
+					const photoHidden = row.querySelector(".v-photo-url-hidden");
+					const fileInp = row.querySelector(".v-row-file-input");
 
-					if (ssType === "product-l1") {
-						categoryModeL1 = "standard"; // Reset to standard filtering
-						renderSubCategoriesFromList([val]);
+					if (img) {
+						img.src = dataUrl;
+						img.style.display = dataUrl ? "block" : "none";
 					}
-					updateName();
+					if (svg) svg.style.display = dataUrl ? "none" : "block";
+					if (photoHidden) {
+						if (dataUrl && dataUrl.startsWith("http") && !dataUrl.startsWith("blob:")) {
+							photoHidden.value = dataUrl;
+						} else {
+							photoHidden.value = "";
+						}
+					}
+					if (file && fileInp && window.DataTransfer) {
+						try {
+							const dt = new DataTransfer();
+							dt.items.add(file);
+							fileInp.files = dt.files;
+						} catch(e) {}
+					}
+				}
+			});
+		}
+
+		// Global paste handler for images
+		window.addEventListener("paste", (e) => {
+			const activeEl = document.activeElement;
+			const isTextInput = activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA") && activeEl.type === "text";
+			if (isTextInput) return;
+
+			const items = e.clipboardData?.items;
+			if (!items) return;
+
+			let imageFile = null;
+			for (let i = 0; i < items.length; i++) {
+				if (items[i].type.indexOf("image") !== -1) {
+					imageFile = items[i].getAsFile();
+					break;
+				}
+			}
+
+			if (imageFile) {
+				const targetGroup = activeTargetMotif || (motifPhotoStore.keys().next().value || "Motif A");
+				if (targetGroup) {
+					e.preventDefault();
+					if (typeof window.openImageCropper === 'function') {
+						window.openImageCropper([imageFile], (croppedFiles) => {
+							if (!croppedFiles || croppedFiles.length === 0) return;
+							const targetFile = croppedFiles[0];
+							createWatermarkedDataUrl(targetFile, (watermarkedUrl, processedFile) => {
+								syncPhotosForGroup(targetGroup, watermarkedUrl || "", processedFile || targetFile);
+							});
+						});
+					} else {
+						createWatermarkedDataUrl(imageFile, (watermarkedUrl, processedFile) => {
+							syncPhotosForGroup(targetGroup, watermarkedUrl || "", processedFile || imageFile);
+						});
+					}
+				}
+			}
+		});
+
+		// --- RENDER COUNTER ROWS ---
+		function renderCounterRows(details, mainItem) {
+			const container = document.getElementById("counterVariantsListContainer");
+			if (!container) return;
+			container.innerHTML = "";
+
+			const mainCodeFirst = (mainItem.kode || mainItem.code || mainItem.item_code || "").toUpperCase();
+			const isNonAtasanGlobal = mainCodeFirst.startsWith("I") || mainCodeFirst.startsWith("G") || mainCodeFirst.startsWith("C") || mainCodeFirst.startsWith("R");
+
+			const batchSleeveWrapper = document.getElementById("globalBatchSleeveSelect")?.closest("div");
+			const batchFitWrapper = document.getElementById("globalBatchFitSelect")?.closest("div");
+			if (batchSleeveWrapper) batchSleeveWrapper.style.display = isNonAtasanGlobal ? "none" : "flex";
+			if (batchFitWrapper) batchFitWrapper.style.display = isNonAtasanGlobal ? "none" : "flex";
+
+			details.forEach((d, idx) => {
+				const motifLetter = d.motif || getMotifLetter(idx);
+				const counterCode = d.counter || d.kode || d.sku || `CTR-${idx+1}`;
+				const outletName = d.outlet || "Gudang";
+				const sizeVal = cleanSize(d.size_name || d.size, d.kode || d.sku || mainItem.kode);
+				const rawSizeStr = String(d.size_name || d.size || "").toUpperCase();
+				const rawKodeStr = String(d.kode || d.sku || mainItem.kode || "").toUpperCase();
+				const isSlimFit = d.fit === "SF" || rawSizeStr.includes("SF") || rawSizeStr.includes("SLIM") || rawKodeStr.includes("SF");
+
+				let initialSleeve = d.sleeve || (isNonAtasanGlobal ? "-" : "Panjang");
+				if (!d.sleeve && !isNonAtasanGlobal) {
+					const combined = ((mainItem.nama || mainItem.name || "") + " " + rawKodeStr).toUpperCase();
+					if (combined.includes("PENDEK") || combined.includes(" PD") || combined.includes("-PD")) initialSleeve = "Pendek";
+					else if (combined.includes("3/4") || combined.includes("TIGA PEREMPAT")) initialSleeve = "3/4";
+				}
+
+				let stockVal = parseInt(d.stock ?? d.stok ?? 1, 10);
+				if (isNaN(stockVal)) stockVal = 1;
+
+				let priceVal = parseInt(d.price ?? d.hjual ?? mainItem.price ?? 0, 10);
+				if (isNaN(priceVal)) priceVal = 0;
+
+				const dalamanVal = d.dalaman || "";
+				const skuVal = d.sku || d.kode || counterCode;
+
+				// Photo URL
+				let photoUrl = d.image_url || "";
+				if (!photoUrl && (d.foto || d.img1)) {
+					const pFile = d.foto || d.img1;
+					photoUrl = pFile.startsWith("http") ? pFile : (BASE_PHOTO_URL + pFile);
+				}
+				if (!photoUrl && mainItem.image_url) {
+					photoUrl = mainItem.image_url;
+				}
+
+				const photoGroupKey = (initialSleeve && initialSleeve !== "-") ? `${motifLetter}___${initialSleeve}` : motifLetter;
+
+				if (!motifPhotoStore.has(photoGroupKey) && photoUrl) {
+					motifPhotoStore.set(photoGroupKey, {
+						file: null,
+						previewUrl: photoUrl,
+						isCustom: false
+					});
+				}
+				if (!motifPhotoStore.has(motifLetter) && photoUrl) {
+					motifPhotoStore.set(motifLetter, {
+						file: null,
+						previewUrl: photoUrl,
+						isCustom: false
+					});
+				}
+
+				const currentPhoto = motifPhotoStore.get(photoGroupKey)?.previewUrl || motifPhotoStore.get(motifLetter)?.previewUrl || photoUrl;
+
+				const row = document.createElement("div");
+				row.className = "counter-table-row";
+				row.dataset.index = idx;
+				row.dataset.counter = counterCode;
+				row.dataset.outlet = outletName;
+				row.style.cssText = "display: flex; align-items: center; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; gap: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.03);";
+
+				row.innerHTML = `
+					<!-- Kolom 1: Checkbox & Foto Thumbnail -->
+					<div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
+						<input type="checkbox" class="v-counter-cb" checked style="width: 20px; height: 20px; cursor: pointer; accent-color: #0f172a;" title="Pilih varian ini" />
+						<div class="v-thumb-box" style="width: 68px; height: 68px; border-radius: 8px; overflow: hidden; background: #f8fafc; border: 1.5px solid #cbd5e1; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.06); cursor: pointer;">
+							${currentPhoto ? `
+								<img class="v-preview-img" src="${currentPhoto}" style="width: 100%; height: 100%; object-fit: cover;" />
+							` : `
+								<img class="v-preview-img" style="display: none; width: 100%; height: 100%; object-fit: cover;" />
+								<svg class="v-placeholder-svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: #94a3b8;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+							`}
+						</div>
+						<input type="file" name="variant_image_file" accept="image/*" class="v-row-file-input" style="display: none;" />
+						<input type="hidden" name="variant_image_url" value="${photoUrl}" class="v-photo-url-hidden" />
+					</div>
+
+					<!-- Kolom 2: Area 2 Baris Presisi -->
+					<div style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0;">
+						<!-- BARIS 1: Counter/Outlet + Motif + Ukuran + Furing + Hapus -->
+						<div style="display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;">
+							<!-- Counter / Outlet -->
+							<div style="width: 175px;">
+								<span style="display: block; font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">Counter / Outlet</span>
+								<div style="font-size: 0.78rem; font-weight: 800; color: #0369a1; background: #e0f2fe; padding: 5px 8px; border-radius: 6px; border: 1px solid #bae6fd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${counterCode} (${outletName})">
+									🏷️ ${counterCode} <span style="font-weight: 600; font-size: 0.68rem; color: #0284c7;">(${outletName})</span>
+								</div>
+							</div>
+
+							<!-- Motif -->
+							<div style="flex: 1; min-width: 130px;">
+								<span style="display: block; font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">Motif</span>
+								<select class="v-motif-select" style="width: 100%; padding: 5px 8px; font-size: 0.78rem; border: 1.5px solid #cbd5e1; border-radius: 6px; background: #fff; font-weight: 700; color: #0f172a;">
+									${motifsMasterList.map((m) => `<option value="${m}" ${m === motifLetter ? 'selected' : ''}>${m}</option>`).join('')}
+								</select>
+							</div>
+
+							<!-- Ukuran -->
+							<div style="width: 110px;">
+								<span style="display: block; font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">Ukuran</span>
+								<select class="v-size-select" style="width: 100%; padding: 5px 8px; font-size: 0.78rem; border: 1.5px solid #cbd5e1; border-radius: 6px; background: #fff; font-weight: 700; color: #0f172a;">
+									${standardSizesList.map(sz => `<option value="${sz}" ${sz === sizeVal ? 'selected' : ''}>${sz}</option>`).join('')}
+								</select>
+							</div>
+
+							<!-- Furing / Lapisan -->
+							<div style="width: 155px;">
+								<span style="display: block; font-size: 0.65rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">Furing / Lapisan</span>
+								<select name="variant_dalaman" class="v-dalaman-select" style="width: 100%; padding: 5px 8px; font-size: 0.78rem; border: 1.5px solid #cbd5e1; border-radius: 6px; background: #fff; font-weight: 600; color: #334155;">
+									<option value="" ${!dalamanVal ? 'selected' : ''}>Tanpa Dalaman</option>
+									<option value="F" ${dalamanVal === 'F' ? 'selected' : ''}>Furing (F)</option>
+									<option value="TF" ${dalamanVal === 'TF' ? 'selected' : ''}>Non Furing (TF)</option>
+								</select>
+							</div>
+
+							<!-- Hapus Button -->
+							<div style="margin-left: auto;">
+								<button type="button" class="btn-delete-row" style="background: #fff; border: 1px solid #fecaca; color: #dc2626; font-size: 0.75rem; font-weight: 700; cursor: pointer; padding: 5px 10px; border-radius: 6px; transition: all 0.15s; display: inline-flex; align-items: center; gap: 3px;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fff'" title="Hapus varian ini">
+									✕ Hapus
+								</button>
+							</div>
+						</div>
+
+						<!-- BARIS 2: Lengan + Fit + Harga + Stok -->
+						<div style="display: flex; align-items: flex-end; gap: 10px; background: #f8fafc; padding: 7px 10px; border-radius: 6px; border: 1px solid #f1f5f9; flex-wrap: wrap;">
+							${!isNonAtasanGlobal ? `
+								<!-- Tipe Lengan -->
+								<div style="width: 175px;">
+									<span style="display: block; font-size: 0.65rem; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">👔 Tipe Lengan</span>
+									<select name="variant_sleeve" class="v-sleeve-select" style="width: 100%; padding: 5px 8px; font-size: 0.78rem; border: 1.5px solid #cbd5e1; border-radius: 6px; background: #fff; font-weight: 700; color: #0f172a;">
+										<option value="Panjang" ${initialSleeve === 'Panjang' ? 'selected' : ''}>Lengan Panjang</option>
+										<option value="Pendek" ${initialSleeve === 'Pendek' ? 'selected' : ''}>Lengan Pendek</option>
+										<option value="3/4" ${initialSleeve === '3/4' ? 'selected' : ''}>Lengan 3/4</option>
+									</select>
+								</div>
+
+								<!-- Model Fit -->
+								<div style="width: 160px;">
+									<span style="display: block; font-size: 0.65rem; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">✂️ Model Fit</span>
+									<select name="variant_fit" class="v-fit-select" style="width: 100%; padding: 5px 8px; font-size: 0.78rem; border: 1.5px solid #cbd5e1; border-radius: 6px; background: #fff; font-weight: 700; color: #0f172a;">
+										<option value="REG" ${!isSlimFit ? 'selected' : ''}>Regular Fit</option>
+										<option value="SF" ${isSlimFit ? 'selected' : ''}>Slim Fit (SF)</option>
+									</select>
+								</div>
+							` : `
+								<input type="hidden" name="variant_sleeve" value="-" class="v-sleeve-select" />
+								<input type="hidden" name="variant_fit" value="REG" class="v-fit-select" />
+							`}
+
+							<!-- Harga Satuan -->
+							<div style="flex: 1; min-width: 160px;">
+								<span style="display: block; font-size: 0.65rem; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">💰 Harga Satuan (Rp)</span>
+								<div style="display: flex; align-items: center; gap: 3px;">
+									<span style="font-size: 0.75rem; font-weight: 700; color: #64748b;">Rp</span>
+									<input type="text" value="${priceVal.toLocaleString('id-ID')}" class="v-price-display" style="width: 100%; padding: 5px 8px; font-size: 0.78rem; border: 1.5px solid #cbd5e1; border-radius: 6px; font-weight: 700; color: #0f172a; background: #fff;" />
+									<input type="hidden" name="variant_price" value="${priceVal}" class="v-price-hidden" />
+								</div>
+							</div>
+
+							<!-- Stok -->
+							<div style="width: 100px;">
+								<span style="display: block; font-size: 0.65rem; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">📦 Stok</span>
+								<input type="number" name="variant_stock" value="${stockVal}" min="0" class="v-stock-input" style="width: 100%; padding: 5px 6px; font-size: 0.78rem; border: 1.5px solid #cbd5e1; border-radius: 6px; text-align: center; font-weight: 800; color: #0f172a; background: #fff;" required />
+							</div>
+						</div>
+					</div>
+
+					<!-- Hidden inputs -->
+					<input type="hidden" name="variant_counter" value="${counterCode}" class="v-counter-hidden" />
+					<input type="hidden" name="variant_outlet" value="${outletName}" class="v-outlet-hidden" />
+					<input type="hidden" name="variant_sku" value="${skuVal}" class="v-sku-hidden" />
+					<input type="hidden" name="variant_praproduk_id" value="${d.id || ''}" class="v-praproduk-id-hidden" />
+					<input type="hidden" name="variant_size" value="${sizeVal || 'ALL SIZE'}" class="v-size-hidden" />
+					<input type="hidden" name="variant_motif_name" value="${motifLetter}" class="v-motif-hidden" />
+				`;
+
+				container.appendChild(row);
+
+				// Connect Events
+				const cb = row.querySelector(".v-counter-cb");
+				const counterHidden = row.querySelector(".v-counter-hidden");
+				const outletHidden = row.querySelector(".v-outlet-hidden");
+				const sizeHidden = row.querySelector(".v-size-hidden");
+				const skuHidden = row.querySelector(".v-sku-hidden");
+				const sizeSelect = row.querySelector(".v-size-select");
+				const sleeveSelect = row.querySelector(".v-sleeve-select");
+				const fitSelect = row.querySelector(".v-fit-select");
+				const priceDisp = row.querySelector(".v-price-display");
+				const priceHidden = row.querySelector(".v-price-hidden");
+				const stockInput = row.querySelector(".v-stock-input");
+				const dalamanSelect = row.querySelector(".v-dalaman-select");
+				const motifSelect = row.querySelector(".v-motif-select");
+				const motifHidden = row.querySelector(".v-motif-hidden");
+				const deleteBtn = row.querySelector(".btn-delete-row");
+				const thumbBox = row.querySelector(".v-thumb-box");
+				const fileInp = row.querySelector(".v-row-file-input");
+
+				if (thumbBox) {
+					thumbBox.addEventListener("click", () => {
+						const groupKey = getRowPhotoGroupKey(row);
+						const store = motifPhotoStore.get(groupKey) || motifPhotoStore.get(motifSelect?.value);
+						if (store && store.previewUrl) {
+							showFullscreenImageModal(store.previewUrl);
+						} else {
+							activeTargetMotif = groupKey;
+							const card = document.querySelector(`.motif-photo-card[data-key="${groupKey}"]`) || document.querySelector(`.motif-photo-card[data-motif="${motifSelect?.value}"]`);
+							if (card) {
+								card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+								const cardFileInp = card.querySelector(".m-card-file-input");
+								if (cardFileInp) cardFileInp.click();
+							}
+						}
+					});
+				}
+
+				cb.addEventListener("change", () => {
+					const active = cb.checked;
+					row.style.opacity = active ? "1" : "0.45";
+					counterHidden.disabled = !active;
+					outletHidden.disabled = !active;
+					sizeHidden.disabled = !active;
+					skuHidden.disabled = !active;
+					sizeSelect.disabled = !active;
+					if (sleeveSelect) sleeveSelect.disabled = !active;
+					if (fitSelect) fitSelect.disabled = !active;
+					priceDisp.disabled = !active;
+					priceHidden.disabled = !active;
+					stockInput.disabled = !active;
+					dalamanSelect.disabled = !active;
+					motifSelect.disabled = !active;
+					motifHidden.disabled = !active;
+					if (fileInp) fileInp.disabled = !active;
+					updateSelectedCounterBadge();
+					renderMotifPhotoCards();
+				});
+
+				motifSelect.addEventListener("change", () => {
+					motifHidden.value = motifSelect.value;
+					renderMotifPhotoCards();
+				});
+
+				if (sleeveSelect) {
+					sleeveSelect.addEventListener("change", () => {
+						renderMotifPhotoCards();
+					});
+				}
+
+				sizeSelect.addEventListener("change", () => {
+					sizeHidden.value = sizeSelect.value;
+				});
+
+				priceDisp.addEventListener("input", (e) => {
+					const num = e.target.value.replace(/\D/g, "");
+					priceHidden.value = num || "0";
+					priceDisp.value = num ? parseInt(num, 10).toLocaleString("id-ID") : "";
+				});
+
+				deleteBtn.addEventListener("click", () => {
+					row.remove();
+					updateSelectedCounterBadge();
+					renderMotifPhotoCards();
 				});
 			});
 
-			document.addEventListener("click", (e) => {
-				if (!container.contains(e.target)) dropdown.classList.remove("show");
-			});
-		});
-	}
-
-	function renderSubCategoriesFromList(parentIds) {
-		const container = document.getElementById("sub-category-checkboxes");
-		if (!container) return;
-
-		const isCustomMode = categoryModeL1 === "custom";
-		const hasExistingParents = parentIds && parentIds.length > 0 && parentIds[0] !== "";
-
-		if (!isCustomMode && !hasExistingParents) {
-			container.innerHTML = "";
-			container.style.display = "none";
-			return;
+			updateSelectedCounterBadge();
+			renderMotifPhotoCards();
 		}
 
-		container.innerHTML = `
-			<div style="margin-top: 1rem;">
-				<label class="text-uppercase opacity-50" style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;">Jenis Produk (Level 2)</label>
-				<div class="motif-style-container" id="l2-selection-row"></div>
-				<div class="custom-entry-row" style="margin-top: 8px; display: flex; gap: 8px;">
-					<input type="text" id="new-l2-input" placeholder="Tambah Jenis L2 Baru..." style="flex: 1; font-size: 0.75rem; padding: 6px 10px; border: 1px dashed #ccc; border-radius: 6px;" />
-					<button type="button" id="add-l2-btn" style="font-size: 0.7rem; background: #0f172a; color: #fff; border: none; padding: 0 12px; border-radius: 6px; cursor: pointer; font-weight: 600;">+ BUAT</button>
-				</div>
-			</div>
-			<div id="l3-selection-area" style="display: none; margin-top: 1.5rem;">
-				<label class="text-uppercase opacity-50" style="font-size: 0.65rem; display: block; margin-bottom: 0.5rem; font-weight: 600;">Pilihan Detail (Level 3)</label>
-				<div class="motif-style-container" id="l3-grid"></div>
-				<div class="custom-entry-row" style="margin-top: 8px; display: flex; gap: 8px;">
-					<input type="text" id="new-l3-input" placeholder="Tambah Detail L3 Baru..." style="flex: 1; font-size: 0.75rem; padding: 6px 10px; border: 1px dashed #ccc; border-radius: 6px;" />
-					<button type="button" id="add-l3-btn" style="font-size: 0.7rem; background: #0f172a; color: #fff; border: none; padding: 0 12px; border-radius: 6px; cursor: pointer; font-weight: 600;">+ BUAT</button>
-				</div>
-			</div>
-		`;
-		container.style.display = "block";
-
-		const l2Row = container.querySelector("#l2-selection-row");
-		const l3Area = container.querySelector("#l3-selection-area");
-		const l3Grid = container.querySelector("#l3-grid");
-
-		// --- Helper: Creates styled dynamic checkbox and checks preset values from Edit view hydration
-		function createCatCheckbox(name, id, isL2, parentId, isCustom = false) {
-			const label = document.createElement("label");
-			label.className = "motif-style-label";
-			if (isCustom) label.style.border = "1px dashed #94a3b8";
-			const cleanVal = isCustom ? name : id;
-			
-			let isCheckedStr = '';
-			if (isCustom) {
-				isCheckedStr = 'checked';
-			} else if (currentCategoryIds && currentCategoryIds.includes(id)) {
-				isCheckedStr = 'checked';
-			}
-
-			label.innerHTML = `
-				<input type="checkbox" name="category_ids" value="${cleanVal}" data-id="${id}" data-parent="${parentId}" data-name="${name}" ${isCheckedStr} ${isCustom ? 'data-custom="true"' : ''} />
-				${name} ${isCustom ? '<span style="font-size:0.5rem; color:blue; margin-left:4px;">NEW</span>' : ''}
-			`;
-			
-			const cb = label.querySelector("input");
-			cb.addEventListener("change", (e) => {
-				if (isL2 && cb.checked) {
-					l2Row.querySelectorAll("input:checked").forEach(o => { if(o !== cb) o.checked = false; });
+		function updateSelectedCounterBadge() {
+			const total = document.querySelectorAll(".counter-table-row").length;
+			const checked = document.querySelectorAll(".counter-table-row .v-counter-cb:checked").length;
+			const badge = document.getElementById("selectedCounterCountBadge");
+			if (badge) {
+				badge.textContent = `✓ ${checked} dari ${total} Varian Dipilih`;
+				if (checked === 0) {
+					badge.style.color = "#dc2626";
+					badge.style.background = "#fee2e2";
+					badge.style.borderColor = "#fecaca";
+				} else {
+					badge.style.color = "#16a34a";
+					badge.style.background = "#dcfce7";
+					badge.style.borderColor = "#bbf7d0";
 				}
-				if (isL2) updateL3Selection();
-				updateName();
-			});
-			return label;
+			}
 		}
 
-		function updateL3Selection() {
-			const checkedL2s = Array.from(l2Row.querySelectorAll("input:checked"));
-			l3Grid.innerHTML = ""; // Clear items before re-render
-			
-			if (checkedL2s.length === 0) {
-				l3Area.style.display = "none";
-				updateName();
+		// --- CATEGORY CASCADING LOGIC ---
+		function renderSubCategoriesFromList(parentIds, selectedSubIds = []) {
+			const container = document.getElementById("sub-category-checkboxes");
+			if (!container) return;
+
+			const hasExistingParents = parentIds && parentIds.length > 0 && parentIds[0] !== "";
+			if (!hasExistingParents) {
+				container.innerHTML = "";
+				container.style.display = "none";
 				return;
 			}
-			
-			l3Area.style.display = "block";
-			checkedL2s.forEach(l2 => {
-				const l2Id = l2.getAttribute("data-id");
-				const isCustomL2 = l2.dataset.custom === "true";
-				if (!isCustomL2) {
-					const dbL3s = hierarchicalTypes.filter(t => String(t.parent_id) === String(l2Id));
-					dbL3s.forEach(c => {
-						l3Grid.appendChild(createCatCheckbox(c.name, c.id, false, l2Id, false));
+
+			const l2Children = hierarchicalTypes.filter(t => parentIds.includes(t.parent_id));
+
+			container.innerHTML = `
+				<div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.9rem 1.1rem; margin-top: 0.75rem; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
+					<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.4rem;">
+						<div style="display: flex; align-items: center; gap: 0.4rem;">
+							<span style="font-size: 1rem;">👗</span>
+							<label class="text-uppercase" style="font-size: 0.72rem; font-weight: 800; color: #1e293b; letter-spacing: 0.5px; margin: 0;">
+								Jenis / Bahan Produk (Level 2)
+							</label>
+							<span style="font-size: 0.65rem; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 600;">
+								Pilih 1
+							</span>
+						</div>
+					</div>
+					<div class="pill-badge-container" id="l2-selection-row"></div>
+				</div>
+
+				<div id="l3-selection-area" style="display: none; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0.9rem 1.1rem; margin-top: 0.75rem; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
+					<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.65rem; flex-wrap: wrap; gap: 0.4rem;">
+						<div style="display: flex; align-items: center; gap: 0.4rem;">
+							<span style="font-size: 1rem;">✨</span>
+							<label class="text-uppercase" style="font-size: 0.72rem; font-weight: 800; color: #1e293b; letter-spacing: 0.5px; margin: 0;">
+								Pilihan Detail (Level 3)
+							</label>
+						</div>
+					</div>
+					<div class="pill-badge-container" id="l3-grid"></div>
+				</div>
+			`;
+			container.style.display = "block";
+
+			const l2Row = container.querySelector("#l2-selection-row");
+			const l3Area = container.querySelector("#l3-selection-area");
+			const l3Grid = container.querySelector("#l3-grid");
+
+			function createCatPill(name, id, isL2, parentId) {
+				const label = document.createElement("label");
+				label.className = "cat-pill-label";
+				label.title = name;
+
+				const formattedName = name
+					.split(" ")
+					.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+					.join(" ");
+
+				const isChecked = selectedSubIds.includes(String(id));
+
+				label.innerHTML = `
+					<input type="checkbox" name="category_ids" value="${id}" data-id="${id}" data-parent="${parentId}" data-name="${name}" ${isChecked ? 'checked' : ''} />
+					<span class="cat-icon">${isL2 ? "👗" : "✨"}</span>
+					<span class="cat-name">${formattedName}</span>
+					<span class="check-icon">✓</span>
+				`;
+
+				const cb = label.querySelector("input");
+				cb.addEventListener("change", () => {
+					if (isL2 && cb.checked) {
+						l2Row.querySelectorAll("input:checked").forEach(o => {
+							if (o !== cb) o.checked = false;
+						});
+					}
+					if (isL2) updateL3Selection();
+					updateName();
+				});
+
+				return label;
+			}
+
+			function updateL3Selection() {
+				const checkedL2 = Array.from(l2Row.querySelectorAll("input:checked")).map(i => i.dataset.id);
+				if (checkedL2.length === 0) {
+					l3Area.style.display = "none";
+					l3Grid.innerHTML = "";
+					return;
+				}
+				const l3Children = hierarchicalTypes.filter(t => checkedL2.includes(String(t.parent_id)));
+				if (l3Children.length === 0) {
+					l3Area.style.display = "none";
+					l3Grid.innerHTML = "";
+					return;
+				}
+				l3Grid.innerHTML = "";
+				l3Children.forEach(child => {
+					l3Grid.appendChild(createCatPill(child.name, child.id, false, child.parent_id));
+				});
+				l3Area.style.display = "block";
+			}
+
+			if (l2Children.length > 0) {
+				l2Children.forEach(child => {
+					l2Row.appendChild(createCatPill(child.name, child.id, true, child.parent_id));
+				});
+			}
+
+			updateL3Selection();
+		}
+
+		function setupCategoryDropdown() {
+			document.querySelectorAll('.searchable-select').forEach(container => {
+				const input = container.querySelector(".ss-input");
+				const dropdown = container.querySelector(".ss-dropdown");
+				const search = container.querySelector(".ss-search");
+				const options = container.querySelectorAll(".ss-option");
+				const hidden = container.querySelector("input[type='hidden']");
+
+				input?.addEventListener("click", (e) => {
+					e.stopPropagation();
+					document.querySelectorAll(".ss-dropdown").forEach(d => { if (d !== dropdown) d.style.display = "none"; });
+					dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+					if (dropdown.style.display === "block") search?.focus();
+				});
+
+				search?.addEventListener("input", (e) => {
+					const term = e.target.value.toLowerCase();
+					options.forEach(opt => {
+						const text = opt.textContent.toLowerCase();
+						opt.style.display = text.includes(term) ? "flex" : "none";
+					});
+				});
+
+				options.forEach(opt => {
+					opt.addEventListener("click", () => {
+						const val = opt.dataset.value;
+						const text = opt.querySelector("span:first-child").textContent;
+						if (hidden) hidden.value = val;
+						if (input) input.value = text;
+						dropdown.style.display = "none";
+
+						renderSubCategoriesFromList([val]);
+						updateName();
+					});
+				});
+			});
+
+			document.addEventListener("click", () => {
+				document.querySelectorAll(".ss-dropdown").forEach(d => d.style.display = "none");
+			});
+		}
+
+		function autoDetectAndSelectCategories(localProduct) {
+			if (!localProduct) return;
+			const catIds = (localProduct.categories || localProduct.product_categories || []).map(c => String(c.id || c.category_id));
+			if (catIds.length === 0 && localProduct.type_id) {
+				catIds.push(String(localProduct.type_id));
+			}
+
+			const l1Cat = hierarchicalTypes.find(t => catIds.includes(String(t.id)) && t.parent_id === null);
+			if (l1Cat) {
+				const container = document.querySelector('.searchable-select[data-ss-type="product-l1"]');
+				if (container) {
+					const input = container.querySelector(".ss-input");
+					const hidden = document.getElementById("l1_category_input");
+					if (hidden) hidden.value = l1Cat.id;
+					if (input) input.value = l1Cat.name;
+				}
+				renderSubCategoriesFromList([l1Cat.id], catIds);
+			}
+		}
+
+		// --- AUTO-NAME ENGINE ---
+		function updateName() {
+			// Optional real-time naming hook
+		}
+
+		function setupPriceMasking() {
+			document.querySelectorAll(".currency-mask").forEach(input => {
+				input.addEventListener("input", (e) => {
+					const hiddenId = input.dataset.hiddenId;
+					const hidden = document.getElementById(hiddenId);
+					const rawVal = e.target.value.replace(/\D/g, "");
+					if (hidden) hidden.value = rawVal;
+					input.value = rawVal ? parseInt(rawVal, 10).toLocaleString("id-ID") : "";
+				});
+			});
+		}
+
+		function setupBatchControls() {
+			// Select All / Deselect All Buttons
+			document.getElementById("btnSelectAllCounters")?.addEventListener("click", () => {
+				document.querySelectorAll(".v-counter-cb").forEach(cb => {
+					if (!cb.checked) { cb.checked = true; cb.dispatchEvent(new Event("change")); }
+				});
+				updateSelectedCounterBadge();
+			});
+
+			document.getElementById("btnUnselectAllCounters")?.addEventListener("click", () => {
+				document.querySelectorAll(".v-counter-cb").forEach(cb => {
+					if (cb.checked) { cb.checked = false; cb.dispatchEvent(new Event("change")); }
+				});
+				updateSelectedCounterBadge();
+			});
+
+			const selectAll = document.getElementById("selectAllCountersCb");
+			selectAll?.addEventListener("change", () => {
+				const isChecked = selectAll.checked;
+				document.querySelectorAll(".counter-table-row").forEach(row => {
+					const cb = row.querySelector(".v-counter-cb");
+					if (cb && cb.checked !== isChecked) {
+						cb.checked = isChecked;
+						cb.dispatchEvent(new Event("change"));
+					}
+				});
+				updateSelectedCounterBadge();
+			});
+
+			// Batch Motif
+			const handleBatchMotif = () => {
+				const val = document.getElementById("globalBatchMotifSelect")?.value;
+				if (!val) return;
+				const checkedRows = Array.from(document.querySelectorAll(".counter-table-row")).filter(r => r.querySelector(".v-counter-cb")?.checked);
+				if (checkedRows.length === 0) {
+					alert("Silakan centang [✓] varian counter yang ingin diubah terlebih dahulu.");
+					return;
+				}
+				checkedRows.forEach(row => {
+					const sel = row.querySelector(".v-motif-select");
+					const hidden = row.querySelector(".v-motif-hidden");
+					if (sel) {
+						sel.value = val;
+						if (hidden) hidden.value = val;
+						sel.dispatchEvent(new Event("change"));
+					}
+				});
+				renderMotifPhotoCards();
+			};
+			document.getElementById("btnApplySameMotif")?.addEventListener("click", handleBatchMotif);
+			document.getElementById("btnApplyBatchMotif")?.addEventListener("click", handleBatchMotif);
+
+			// Batch Size
+			const handleBatchSize = () => {
+				const val = document.getElementById("globalBatchSizeSelect")?.value;
+				if (!val) return;
+				const checkedRows = Array.from(document.querySelectorAll(".counter-table-row")).filter(r => r.querySelector(".v-counter-cb")?.checked);
+				if (checkedRows.length === 0) {
+					alert("Silakan centang [✓] varian counter yang ingin diubah terlebih dahulu.");
+					return;
+				}
+				checkedRows.forEach(row => {
+					const sel = row.querySelector(".v-size-select");
+					const hidden = row.querySelector(".v-size-hidden");
+					if (sel) {
+						sel.value = val;
+						if (hidden) hidden.value = val;
+						sel.dispatchEvent(new Event("change"));
+					}
+				});
+			};
+			document.getElementById("btnApplySameSize")?.addEventListener("click", handleBatchSize);
+			document.getElementById("btnApplyBatchSize")?.addEventListener("click", handleBatchSize);
+
+			// Batch Fit
+			const handleBatchFit = () => {
+				const val = document.getElementById("globalBatchFitSelect")?.value;
+				if (!val) return;
+				const checkedRows = Array.from(document.querySelectorAll(".counter-table-row")).filter(r => r.querySelector(".v-counter-cb")?.checked);
+				if (checkedRows.length === 0) {
+					alert("Silakan centang [✓] varian counter yang ingin diubah terlebih dahulu.");
+					return;
+				}
+				checkedRows.forEach(row => {
+					const sel = row.querySelector(".v-fit-select");
+					if (sel) { sel.value = val; sel.dispatchEvent(new Event("change")); }
+				});
+			};
+			document.getElementById("btnApplySameFit")?.addEventListener("click", handleBatchFit);
+			document.getElementById("btnApplyBatchFit")?.addEventListener("click", handleBatchFit);
+
+			// Batch Sleeve
+			const handleBatchSleeve = () => {
+				const val = document.getElementById("globalBatchSleeveSelect")?.value;
+				if (!val) return;
+				const checkedRows = Array.from(document.querySelectorAll(".counter-table-row")).filter(r => r.querySelector(".v-counter-cb")?.checked);
+				if (checkedRows.length === 0) {
+					alert("Silakan centang [✓] varian counter yang ingin diubah terlebih dahulu.");
+					return;
+				}
+				checkedRows.forEach(row => {
+					const sel = row.querySelector(".v-sleeve-select");
+					if (sel) { sel.value = val; sel.dispatchEvent(new Event("change")); }
+				});
+				renderMotifPhotoCards();
+			};
+			document.getElementById("btnApplySameSleeve")?.addEventListener("click", handleBatchSleeve);
+			document.getElementById("btnApplyBatchSleeve")?.addEventListener("click", handleBatchSleeve);
+
+			// Apply Price to Checked Rows
+			document.getElementById("btnBatchPrice")?.addEventListener("click", () => {
+				const checkedRows = Array.from(document.querySelectorAll(".counter-table-row")).filter(r => r.querySelector(".v-counter-cb")?.checked);
+				if (checkedRows.length === 0) {
+					alert("Silakan centang [✓] varian counter yang ingin diatur harganya terlebih dahulu.");
+					return;
+				}
+				const mainPrice = document.getElementById("product_price_input")?.value;
+				const promptVal = prompt(`Masukkan harga jual (Rp) untuk ${checkedRows.length} varian yang dicentang [✓]:`, mainPrice || "");
+				if (promptVal !== null) {
+					const num = parseInt(promptVal.replace(/\D/g, ""), 10) || 0;
+					checkedRows.forEach(row => {
+						const disp = row.querySelector(".v-price-display");
+						const hdn = row.querySelector(".v-price-hidden");
+						if (hdn) hdn.value = num;
+						if (disp) disp.value = num ? num.toLocaleString("id-ID") : "";
 					});
 				}
 			});
-			updateName();
-		}
 
-		// Populate DB children if applicable
-		if (!isCustomMode && hasExistingParents) {
-			const l2Children = hierarchicalTypes.filter(t => parentIds.includes(t.parent_id));
-			l2Children.forEach(c => {
-				l2Row.appendChild(createCatCheckbox(c.name, c.id, true, c.parent_id, false));
+			// Apply Furing to Checked Rows
+			document.getElementById("btnBatchFuring")?.addEventListener("click", () => {
+				const checkedRows = Array.from(document.querySelectorAll(".counter-table-row")).filter(r => r.querySelector(".v-counter-cb")?.checked);
+				if (checkedRows.length === 0) {
+					alert("Silakan centang [✓] varian counter yang ingin diatur furingnya terlebih dahulu.");
+					return;
+				}
+				checkedRows.forEach(row => {
+					const sel = row.querySelector(".v-dalaman-select");
+					if (sel) sel.value = "F";
+				});
 			});
-		}
 
-		// Inline Adder Row Binding
-		const inpL2 = document.getElementById('new-l2-input');
-		const btnL2 = document.getElementById('add-l2-btn');
-		const handleL2Add = () => {
-			const text = inpL2.value.trim();
-			if (!text) return;
-			l2Row.querySelectorAll("input:checked").forEach(o => o.checked = false);
-			const rndId = "custom-l2-" + Math.random().toString(36).substr(2, 5);
-			l2Row.appendChild(createCatCheckbox(text, rndId, true, parentIds[0], true));
-			inpL2.value = '';
-			updateL3Selection();
-		};
-		btnL2?.addEventListener('click', handleL2Add);
-		inpL2?.addEventListener('keypress', (e) => { if(e.key==='Enter'){ e.preventDefault(); handleL2Add(); } });
-
-		const inpL3 = document.getElementById('new-l3-input');
-		const btnL3 = document.getElementById('add-l3-btn');
-		const handleL3Add = () => {
-			const text = inpL3.value.trim();
-			if (!text) return;
-			const activeL2 = l2Row.querySelector("input:checked");
-			const parentId = activeL2 ? activeL2.getAttribute("data-id") : null;
-			const rndId = "custom-l3-" + Math.random().toString(36).substr(2, 5);
-			l3Grid.appendChild(createCatCheckbox(text, rndId, false, parentId, true));
-			inpL3.value = '';
-			updateName();
-		};
-		btnL3?.addEventListener('click', handleL3Add);
-		inpL3?.addEventListener('keypress', (e) => { if(e.key==='Enter'){ e.preventDefault(); handleL3Add(); } });
-
-		// Final Init Pass to build initial UI based on hydration
-		updateL3Selection();
-		updateName();
-	}
-
-	function updateName() {
-		const nameInput = document.getElementById("product_name_input");
-		if (!nameInput) return;
-
-		const itemCodeInput = document.getElementById("product_item_code_input");
-		const l2Container = document.getElementById("l2-selection-row");
-		const l3Container = document.getElementById("l3-grid");
-
-		const standardL1 = document.getElementById("l1_category_input");
-		const visibleL1 = document.querySelector('[data-ss-type="product-l1"] .ss-input');
-		
-		let l1ValToSubmit = standardL1 ? standardL1.value.trim() : "";
-		let l1TextStr = visibleL1 ? visibleL1.value.trim() : "";
-
-		// Passively compute if current value is dynamic/custom non-UUID
-		const isL1Uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(l1ValToSubmit);
-		if (l1ValToSubmit && !isL1Uuid) {
-			categoryModeL1 = "custom";
-		}
-
-		let l2TextStr = "";
-		let l2ValToSubmit = "";
-		if (l2Container) {
-			const checkedL2 = l2Container.querySelector("input:checked");
-			if (checkedL2) {
-				l2TextStr = checkedL2.parentElement.textContent.replace("NEW", "").trim();
-				l2ValToSubmit = checkedL2.dataset.custom === "true" ? l2TextStr : checkedL2.getAttribute("data-id");
-			}
-		}
-
-		const l3Strings = [];
-		const l3ValsToSubmit = [];
-		if (l3Container) {
-			const checkedL3s = Array.from(l3Container.querySelectorAll("input:checked"));
-			checkedL3s.forEach(c => {
-				const txt = c.parentElement.textContent.replace("NEW", "").trim();
-				l3Strings.push(txt);
-				l3ValsToSubmit.push(c.dataset.custom === "true" ? txt : c.getAttribute("data-id"));
-			});
-		}
-
-		const selectedCategories = [];
-		if (l1TextStr && l1TextStr.toLowerCase() !== "root") selectedCategories.push(l1TextStr);
-		if (l2TextStr) selectedCategories.push(l2TextStr);
-		l3Strings.forEach(s => { if(s) selectedCategories.push(s); });
-		const jenis = selectedCategories.join(" ");
-
-		let motifStr = "";
-		const motifGrid = document.getElementById("motif-grid");
-		if (motifGrid) {
-			const checkedMotifs = Array.from(motifGrid.querySelectorAll("input:checked"));
-			motifStr = checkedMotifs.map((m) => m.parentElement.textContent.trim()).join(", ");
-		}
-
-		let colorStr = "";
-		const colorGrid = document.getElementById("color-grid");
-		if (colorGrid) {
-			const checkedColors = Array.from(colorGrid.querySelectorAll("input:checked"));
-			colorStr = checkedColors.map((c) => c.value).join(", ");
-		}
-
-		const itemCode = itemCodeInput?.value.trim() || "";
-
-		const parts = [];
-		if (jenis) parts.push(jenis);
-		if (motifStr) parts.push(motifStr);
-		if (colorStr) parts.push(colorStr);
-
-		// Auto-append "Tanpa Furing" for Kemeja if lining is TF (Tanpa Furing) or "" (Tanpa Dalaman)
-		if (jenis && jenis.toLowerCase().includes("kemeja")) {
-			const activeDalamans = Array.from(document.querySelectorAll('.v-dalaman-input:not(:disabled), .v-dalaman-input-add:not(:disabled)'));
-			const isTanpaFuring = activeDalamans.length > 0 && activeDalamans.some(select => select.value === 'TF' || select.value === '');
-			if (isTanpaFuring) {
-				parts.push("Tanpa Furing");
-			}
-		}
-
-		if (itemCode) parts.push(itemCode);
-
-		nameInput.value = parts.join(" ");
-
-		// Active waterfall construction proxy injection
-		const chainBox = document.getElementById("category-chain-container");
-		if (chainBox) {
-			chainBox.innerHTML = "";
-			if (l1ValToSubmit) {
-				chainBox.innerHTML += `<input type="hidden" name="category_chain[]" value="${l1ValToSubmit}" />`;
-				if (l2ValToSubmit) {
-					chainBox.innerHTML += `<input type="hidden" name="category_chain[]" value="${l2ValToSubmit}" />`;
-					if (l3ValsToSubmit.length > 0) {
-						chainBox.innerHTML += `<input type="hidden" name="category_chain[]" value="${l3ValsToSubmit[0]}" />`;
+			// Batch Dalaman Select
+			document.getElementById("btnApplyBatchDalaman")?.addEventListener("click", () => {
+				const val = document.getElementById("globalBatchDalamanSelect")?.value;
+				document.querySelectorAll(".counter-table-row").forEach(row => {
+					if (row.querySelector(".v-counter-cb")?.checked) {
+						const sel = row.querySelector(".v-dalaman-select");
+						if (sel) { sel.value = val; sel.dispatchEvent(new Event("change")); }
 					}
-				}
-			}
-		}
-
-		const sleeveKeywords = ['kemeja', 'baju', 'hem', 'atasan', 'blouse', 'tunik', 'gamis', 'koko', 'pdh', 'jaket'];
-		const jenisLower = jenis.toLowerCase();
-		const needsSleeve = sleeveKeywords.some(kw => jenisLower.includes(kw));
-		
-		const sleeveWrapper = document.getElementById('sleeve_toggle_wrapper');
-		if (sleeveWrapper) {
-			if (needsSleeve) {
-				sleeveWrapper.style.display = 'flex';
-			} else {
-				const toggleCb = document.getElementById('toggle_sleeve_options');
-				if (toggleCb && !toggleCb.checked) {
-					sleeveWrapper.style.display = 'none';
-				} else if (toggleCb && toggleCb.checked) {
-					sleeveWrapper.style.display = 'flex';
-				}
-			}
-		}
-	}
-
-	function setupCustomEntries() {
-		// 1. Color Logic
-		const colorInput = document.getElementById("new-color-input");
-		const colorBtn = document.getElementById("add-color-btn");
-		const colorGrid = document.getElementById("color-grid");
-		
-		const handleColorAdd = () => {
-			const val = colorInput.value.trim();
-			if(!val) return;
-			const label = document.createElement('label');
-			label.className = "motif-style-label";
-			label.style.cssText = "gap:0.5rem !important; align-items:center; border: 1px dashed #94a3b8;";
-			label.innerHTML = `<input type="checkbox" name="colors" value="${val}" checked />
-							   <span style="display:inline-block; width:12px; height:12px; border-radius:50%; background-color:#cccccc; border: 1px solid rgba(0,0,0,0.15); flex-shrink:0;"></span>
-							   ${val}`;
-			colorGrid.appendChild(label);
-			colorInput.value = "";
-			updateName();
-		};
-		colorBtn?.addEventListener('click', handleColorAdd);
-		colorInput?.addEventListener('keypress', (e) => { if(e.key==='Enter'){ e.preventDefault(); handleColorAdd(); } });
-
-		// 2. Motif Logic
-		const motifInput = document.getElementById("new-motif-input");
-		const motifBtn = document.getElementById("add-motif-btn");
-		const motifGrid = document.getElementById("motif-grid");
-
-		const handleMotifAdd = () => {
-			const val = motifInput.value.trim();
-			if(!val) return;
-			const label = document.createElement('label');
-			label.style.cssText = "display:flex; align-items:center; gap:0.5rem; font-size:0.85rem; cursor:pointer; border: 1px dashed #94a3b8; padding: 0.25rem 0.5rem; border-radius: 6px;";
-			label.innerHTML = `<input type="checkbox" name="motif_ids" value="${val}" checked /> ${val}`;
-			motifGrid.appendChild(label);
-			motifInput.value = "";
-			updateName();
-		};
-		motifBtn?.addEventListener('click', handleMotifAdd);
-		motifInput?.addEventListener('keypress', (e) => { if(e.key==='Enter'){ e.preventDefault(); handleMotifAdd(); } });
-	}
-
-	function setupCustomSizeLogic() {
-		const inpSize = document.getElementById("inp-custom-size");
-		const btnAdd = document.getElementById("btn-add-custom-size");
-		const listCont = document.getElementById("custom-sizes-list-container");
-
-		if(!inpSize || !btnAdd || !listCont) return;
-
-		const handleAddSize = () => {
-			const txt = inpSize.value.trim();
-			if (!txt) return;
-			
-			const row = document.createElement("div");
-			row.className = "variant-item variant-standard";
-			row.style.cssText = "display: flex; align-items: center; gap: 1rem; padding: 0.65rem 0.75rem; border: 1px dashed #cbd5e1; border-radius: 6px; background: #ffffff; margin-bottom: 4px;";
-			row.innerHTML = `
-				<label style="display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; cursor: pointer; min-width: 180px; margin: 0;">
-					<input type="checkbox" class="variant-cb-add" value="${txt}" style="margin: 0;" />
-					<span style="display: flex; flex-direction: column;">
-						<strong style="font-weight: 600; line-height: 1.2;">${txt}</strong>
-						<span style="font-size: 0.55rem; font-weight: 700; text-transform: uppercase; color: #b91c1c; margin-top: 2px;">+ KUSTOM</span>
-					</span>
-				</label>
-				<input type="hidden" name="variant_size" value="${txt}" disabled class="v-size-input-add" />
-				<div class="v-details-add" style="flex: 1; gap: 0.5rem; display: none;">
-					<div style="flex: 1;">
-						<span style="font-size: 0.6rem; opacity: 0.5;">Harga (Rp)</span>
-						<input type="text" placeholder="Harga" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-price-input-add" />
-						<input type="hidden" name="variant_price" disabled class="v-price-hidden-add" />
-					</div>
-					<div style="width: 70px;">
-						<span style="font-size: 0.6rem; opacity: 0.5;">Stok</span>
-						<input type="number" name="variant_stock" value="0" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px;" disabled class="v-stock-input-add" />
-					</div>
-					<div style="width: 110px;">
-						<span style="font-size: 0.6rem; opacity: 0.5;">Dalaman</span>
-						<select name="variant_dalaman" disabled class="v-dalaman-input-add" style="width: 100%; padding: 0.4rem; border: 1px solid #ccc; font-size: 0.8rem; border-radius: 4px; appearance: none; background:#fff;">
-							<option value="">Tanpa</option>
-							<option value="F">Furing</option>
-							<option value="TF">Non Furing</option>
-						</select>
-					</div>
-				</div>
-			`;
-			listCont.appendChild(row);
-			inpSize.value = "";
-
-			const cb = row.querySelector(".variant-cb-add");
-			const hdnPrice = row.querySelector(".v-price-hidden-add");
-			const dispPrice = row.querySelector(".v-price-input-add");
-
-			cb.addEventListener('change', (e) => {
-				const isChecked = e.target.checked;
-				row.querySelector('.v-size-input-add').disabled = !isChecked;
-				dispPrice.disabled = !isChecked;
-				hdnPrice.disabled = !isChecked;
-				row.querySelector('.v-stock-input-add').disabled = !isChecked;
-				row.querySelector('.v-dalaman-input-add').disabled = !isChecked;
-				row.querySelector('.v-details-add').style.display = isChecked ? 'flex' : 'none';
-				
-				if(isChecked && !dispPrice.value) {
-					const mainP = document.getElementById("product_price_input");
-					if(mainP) {
-						hdnPrice.value = mainP.value;
-						dispPrice.value = Number(mainP.value).toLocaleString('id-ID');
-					}
-				}
+				});
 			});
 
-			dispPrice.addEventListener('input', (e) => {
-				let val = e.target.value.replace(/\D/g, '');
-				hdnPrice.value = val;
-				dispPrice.value = val ? Number(val).toLocaleString('id-ID') : "";
-			});
-			
-			cb.click();
-		};
-		btnAdd.addEventListener('click', handleAddSize);
-		inpSize.addEventListener('keypress', (e) => { if(e.key==='Enter') { e.preventDefault(); handleAddSize(); } });
-	}
-
-
-	// Naming Listeners Setup
-	function setupNamingAutomation() {
-		const itemCodeInput = document.getElementById("product_item_code_input");
-		const l1Input = document.getElementById("l1_category_input");
-
-		itemCodeInput?.addEventListener("input", updateName);
-
-		const motifGrid = document.getElementById("motif-grid");
-		motifGrid?.addEventListener("change", updateName);
-
-		const colorGrid = document.getElementById("color-grid");
-		colorGrid?.addEventListener("change", updateName);
-
-		if (l1Input) {
-			const observer = new MutationObserver(updateName);
-			observer.observe(l1Input, { attributes: true });
-		}
-
-		// Trigger updateName when variant lining (dalaman) or variant selection changes
-		document.addEventListener('change', (e) => {
-			if (e.target && (e.target.classList.contains('v-dalaman-input') || e.target.classList.contains('v-dalaman-input-add') || e.target.classList.contains('variant-cb') || e.target.classList.contains('variant-cb-add'))) {
-				updateName();
-			}
-		});
-	}
-
-
-	// Initialize Everything
-	initSearchableSelect();
-	setupCustomEntries();
-	setupCustomSizeLogic();
-	
-	const initialL1Input = document.getElementById("l1_category_input");
-	if (initialL1Input && initialL1Input.value) {
-		const rawVal = initialL1Input.value.trim();
-		const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawVal);
-		if (rawVal && !isUuid) {
-			categoryModeL1 = "custom";
-			renderSubCategoriesFromList(["_CUSTOM_L1_"]);
-		} else {
-			renderSubCategoriesFromList([rawVal]);
-		}
-	}
-	setupNamingAutomation();
-
-	// Variasi UI Logic
-	document.querySelectorAll('.variant-cb').forEach(cb => {
-		cb.addEventListener('change', (e) => {
-			const parent = e.target.closest('.variant-item');
-			const vSize = parent.querySelector('.v-size-input');
-			const vPriceDisp = parent.querySelector('.v-price-input');
-			const vPriceHid = parent.querySelector('.v-price-hidden-input');
-			const vStock = parent.querySelector('.v-stock-input');
-			const vDalaman = parent.querySelector('.v-dalaman-input');
-			const details = parent.querySelector('.v-details');
-			
-			const isChecked = e.target.checked;
-			vSize.disabled = !isChecked;
-			vPriceDisp.disabled = !isChecked;
-			if(vPriceHid) vPriceHid.disabled = !isChecked;
-			vStock.disabled = !isChecked;
-			if(vDalaman) vDalaman.disabled = !isChecked;
-			details.style.display = isChecked ? 'flex' : 'none';
-		});
-	});
-
-	// Currency Formatting Logic
-	function initCurrencyMasks() {
-		document.querySelectorAll('.currency-mask').forEach(input => {
-			const formatPrice = (val) => {
-				let str = val.toString();
-				if (str.indexOf('.') !== -1 && str.indexOf('.') === str.lastIndexOf('.')) {
-					const parts = str.split('.');
-					if (parts[1].length === 2) {
-						str = parts[0];
-					}
-				}
-				const num = str.replace(/\D/g, '');
-				return num ? new Intl.NumberFormat('id-ID').format(num) : '';
-			};
-			const getHidden = () => {
-				if (input.dataset.hiddenId) return document.getElementById(input.dataset.hiddenId);
-				return input.parentElement.querySelector('input[type="hidden"]');
-			};
-
-			const hidden = getHidden();
-			input.addEventListener('input', (e) => {
-				const rawVal = e.target.value.replace(/\D/g, '');
-				e.target.value = formatPrice(e.target.value);
-				if (hidden) {
-					hidden.value = rawVal;
-					hidden.dispatchEvent(new Event('input', { bubbles: true }));
-				}
-			});
-			// Initial set on load
-			if (input.value) { 
-				input.value = formatPrice(input.value); 
-				if(hidden) hidden.value = input.value.replace(/\D/g, '');
-			}
-		});
-	}
-	initCurrencyMasks();
-
-	// Sleeve Mode Toggle Logic
-	const sleeveToggleEdit = document.getElementById('toggle_sleeve_options');
-	if(sleeveToggleEdit) {
-		sleeveToggleEdit.addEventListener('change', (e) => {
-			const isChecked = e.target.checked;
-			document.querySelectorAll('.variant-standard').forEach(el => {
-				el.style.display = isChecked ? 'none' : 'flex';
-				if(isChecked) {
-					const cb = el.querySelector('.variant-cb');
-					if(cb && cb.checked) {
-						cb.checked = false;
-						cb.dispatchEvent(new Event('change'));
-					}
-				}
-			});
-			document.querySelectorAll('.variant-sleeve-split').forEach(el => {
-				el.style.display = isChecked ? 'flex' : 'none';
-				if(!isChecked) {
-					const cb = el.querySelector('.variant-cb');
-					if(cb && cb.checked) {
-						cb.checked = false;
-						cb.dispatchEvent(new Event('change'));
-					}
-				}
-			});
-		});
-	}
-
-	// Client-side image preview with Tag Warna dropdown tagging
-	const imageFileInputEdit = document.querySelector('input[name="image_file"]');
-	const previewContainerEdit = document.getElementById("image_upload_preview");
-
-	if (imageFileInputEdit && previewContainerEdit) {
-		function renderEditPreviews(files) {
-			previewContainerEdit.innerHTML = "";
-			files.forEach((file) => {
-				if (!file.type.startsWith("image/")) return;
-
-				const reader = new FileReader();
-				reader.onload = function (eResult) {
-					const img = new Image();
-					img.onload = function () {
-						const canvas = document.createElement("canvas");
-						const ctx = canvas.getContext("2d");
-						const width = img.width;
-						const height = img.height;
-
-						canvas.width = width;
-						canvas.height = height;
-						canvas.style.width = "110px";
-						canvas.style.height = "auto";
-						canvas.style.borderRadius = "6px";
-						canvas.style.border = "1px solid #ccc";
-
-						ctx.drawImage(img, 0, 0, width, height);
-
-						const cardItem = document.createElement("div");
-						cardItem.className = "preview-card-item";
-						cardItem.style.cssText = "display: flex; flex-direction: column; gap: 6px; align-items: center; background: #ffffff; padding: 6px; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);";
-
-						cardItem.appendChild(canvas);
-
-						const colorSelect = document.createElement("select");
-						colorSelect.name = "image_color_tags";
-						colorSelect.className = "img-color-tag-select-edit";
-						colorSelect.style.cssText = "width: 110px; padding: 4px 6px; font-size: 0.7rem; font-weight: 700; border: 1px solid #cbd5e1; border-radius: 4px; background: #f8fafc; color: #0f172a; cursor: pointer; text-align: center;";
-
-						const updateOptions = () => {
-							const checkedInputs = Array.from(document.querySelectorAll('#color-grid input[name="colors"]:checked'));
-							const checkedColors = checkedInputs.map(cb => cb.value.trim()).filter(Boolean);
-							const currentSelected = colorSelect.value;
-							
-							let optionsHtml = '<option value="">-- Tanpa Warna --</option>';
-							if (checkedColors.length > 0) {
-								optionsHtml += checkedColors.map((c, idx) => {
-									const itemIndex = Array.from(previewContainerEdit.children).indexOf(cardItem);
-									const isDefault = !currentSelected && idx === (itemIndex % checkedColors.length);
-									const isSelected = currentSelected === c || isDefault;
-									return `<option value="${c}" ${isSelected ? 'selected' : ''}>🎨 ${c}</option>`;
-								}).join('');
-							}
-							colorSelect.innerHTML = optionsHtml;
-						};
-
-						updateOptions();
-						cardItem.appendChild(colorSelect);
-
-						previewContainerEdit.appendChild(cardItem);
-					};
-					img.src = eResult.target.result;
+			// Tambah Baris Manual
+			document.getElementById("btnAddManualCounterRow")?.addEventListener("click", () => {
+				const currentRows = document.querySelectorAll(".counter-table-row");
+				const nextIdx = currentRows.length;
+				const mainItem = {
+					name: document.getElementById("product_name_input")?.value,
+					price: document.getElementById("product_price_input")?.value,
+					code: document.getElementById("product_sku_input")?.value,
 				};
-				reader.readAsDataURL(file);
+				const newDetail = {
+					counter: `CTR-${nextIdx + 1}`,
+					outlet: "Gudang",
+					motif: getMotifLetter(nextIdx),
+					size_name: "ALL SIZE",
+					price: mainItem.price || 0,
+					stock: 1,
+					dalaman: "",
+				};
+
+				renderCounterRows([...Array.from(currentRows).map((r, i) => ({
+					counter: r.querySelector(".v-counter-hidden")?.value || `CTR-${i+1}`,
+					outlet: r.querySelector(".v-outlet-hidden")?.value || "Gudang",
+					motif: r.querySelector(".v-motif-select")?.value || getMotifLetter(i),
+					size_name: r.querySelector(".v-size-select")?.value || "ALL SIZE",
+					fit: r.querySelector(".v-fit-select")?.value || "REG",
+					sleeve: r.querySelector(".v-sleeve-select")?.value || "-",
+					price: r.querySelector(".v-price-hidden")?.value || mainItem.price || 0,
+					stock: r.querySelector(".v-stock-input")?.value || 1,
+					dalaman: r.querySelector(".v-dalaman-select")?.value || "",
+					sku: r.querySelector(".v-sku-hidden")?.value || "",
+					image_url: r.querySelector(".v-photo-url-hidden")?.value || "",
+				})), newDetail], mainItem);
 			});
 		}
 
-		imageFileInputEdit.addEventListener("change", function () {
-			const files = Array.from(this.files);
-			if (files.length === 0) return;
+		function setupDescGenerator() {
+			const btn = document.getElementById("btn_generate_desc");
+			const descInput = document.getElementById("description_input");
+			const nameInput = document.getElementById("product_name_input");
 
-			if (files.some(f => !f._isCropped) && typeof window.openImageCropper === 'function') {
-				window.openImageCropper(files, (croppedFiles) => {
-					if (croppedFiles && croppedFiles.length > 0) {
-						croppedFiles.forEach(f => f._isCropped = true);
-						try {
-							const dt = new DataTransfer();
-							croppedFiles.forEach(f => dt.items.add(f));
-							imageFileInputEdit.files = dt.files;
-						} catch (err) {}
-						renderEditPreviews(croppedFiles);
-					} else {
-						imageFileInputEdit.value = "";
-						previewContainerEdit.innerHTML = "";
+			if (btn && descInput) {
+				btn.addEventListener("click", async () => {
+					const title = nameInput?.value.trim();
+					if (!title) {
+						alert("Silakan isi nama produk terlebih dahulu.");
+						return;
+					}
+					btn.disabled = true;
+					btn.innerHTML = "<span>✨ Menulis...</span>";
+
+					try {
+						const res = await fetch(`${publicApiUrl}/generate-description`, {
+							method: "POST",
+							headers: { "Content-Type": "application/json", "Accept": "application/json" },
+							body: JSON.stringify({ name: title })
+						});
+						const json = await res.json();
+						if (json && json.description) {
+							descInput.value = json.description;
+						} else {
+							descInput.value = `Koleksi istimewa ${title}. Dibuat dari material batik berkualitas tinggi dengan pengerjaan teliti dan bahan yang nyaman dipakai. Cocok untuk acara formal maupun kasual.`;
+						}
+					} catch (e) {
+						descInput.value = `Koleksi eksklusif ${title}. Desain motif batik tradisional elegan dengan potongan modern yang nyaman dan pas di tubuh.`;
+					} finally {
+						btn.disabled = false;
+						btn.innerHTML = "<span>✨ Tulis dengan Gemini</span>";
 					}
 				});
-			} else {
-				renderEditPreviews(files);
+			}
+		}
+
+		function setupFormSubmitLoading() {
+			const form = document.getElementById("counterProductForm");
+			const modal = document.getElementById("confirmSaveModal");
+			const btnProceed = document.getElementById("btnProceedSubmitProduct");
+			const btnCancel = document.getElementById("btnCancelConfirmModal");
+			const btnCancelTop = document.getElementById("btnCancelConfirmModalTop");
+
+			let isConfirmed = false;
+			let isSubmitting = false;
+
+			const closeModal = () => { if (modal) modal.style.display = "none"; };
+			btnCancel?.addEventListener("click", closeModal);
+			btnCancelTop?.addEventListener("click", closeModal);
+
+			btnProceed?.addEventListener("click", (e) => {
+				e.preventDefault();
+				if (isSubmitting) return;
+				isSubmitting = true;
+				isConfirmed = true;
+
+				if (btnProceed) {
+					btnProceed.disabled = true;
+					btnProceed.innerHTML = "⏳ Menyimpan...";
+					btnProceed.style.opacity = "0.6";
+				}
+
+				const overlay = document.getElementById("loadingOverlay");
+				if (overlay) overlay.style.display = "flex";
+
+				closeModal();
+				if (form) form.requestSubmit();
+			});
+
+			if (form) {
+				form.addEventListener("submit", (e) => {
+					const activeCheckboxes = Array.from(document.querySelectorAll(".v-counter-cb:checked"));
+					if (activeCheckboxes.length === 0) {
+						e.preventDefault();
+						alert("⚠️ Harap pilih minimal 1 counter/varian untuk disimpan!");
+						return;
+					}
+
+					if (!isConfirmed) {
+						e.preventDefault();
+
+						const allRows = Array.from(document.querySelectorAll(".counter-table-row"));
+						const activeRows = allRows.filter(r => r.querySelector(".v-counter-cb")?.checked);
+						const activeCount = activeRows.length;
+						const totalCount = allRows.length;
+						const uncheckedCount = totalCount - activeCount;
+
+						const nameVal = document.getElementById("product_name_input")?.value || "Produk";
+						const elProdName = document.getElementById("confirmModalProductName");
+						if (elProdName) elProdName.textContent = nameVal;
+
+						const elActiveCount = document.getElementById("confirmModalActiveCount");
+						if (elActiveCount) elActiveCount.textContent = activeCount.toString();
+
+						const elTotalStr = document.getElementById("confirmModalTotalCounterStr");
+						if (elTotalStr) elTotalStr.textContent = `dari ${totalCount} counter`;
+
+						let totalStock = 0;
+						const motifCounts = new Map();
+
+						activeRows.forEach(row => {
+							const stockInp = row.querySelector(".v-stock-input");
+							const stockVal = stockInp ? parseInt(stockInp.value || "1", 10) || 0 : 1;
+							totalStock += stockVal;
+
+							const motifSelect = row.querySelector(".v-motif-select");
+							const motifVal = motifSelect ? motifSelect.value : "Motif A";
+							motifCounts.set(motifVal, (motifCounts.get(motifVal) || 0) + 1);
+						});
+
+						const elBreakdown = document.getElementById("confirmModalMotifsBreakdown");
+						if (elBreakdown) {
+							elBreakdown.innerHTML = Array.from(motifCounts.entries())
+								.map(([mName, mCount]) => `
+									<span style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-weight: 700; padding: 3px 8px; border-radius: 4px; font-size: 0.72rem;">
+										🎨 ${mName}: <strong>${mCount} varian</strong>
+									</span>
+								`).join('');
+						}
+
+						const elWarn = document.getElementById("confirmModalUncheckedWarning");
+						const elUncheckedCount = document.getElementById("confirmModalUncheckedCount");
+						if (elWarn && elUncheckedCount) {
+							if (uncheckedCount > 0) {
+								elUncheckedCount.textContent = uncheckedCount.toString();
+								elWarn.style.display = "block";
+							} else {
+								elWarn.style.display = "none";
+							}
+						}
+
+						if (modal) modal.style.display = "flex";
+						return;
+					}
+
+					// Synchronize files to row inputs before submit
+					document.querySelectorAll(".counter-table-row").forEach(row => {
+						const isChecked = row.querySelector(".v-counter-cb")?.checked;
+						if (!isChecked) return;
+						const key = getRowPhotoGroupKey(row);
+						const motif = row.querySelector(".v-motif-select")?.value;
+						const fileInp = row.querySelector(".v-row-file-input");
+						const photoHidden = row.querySelector(".v-photo-url-hidden");
+
+						const data = (key && motifPhotoStore.has(key)) ? motifPhotoStore.get(key) : (motif && motifPhotoStore.has(motif) ? motifPhotoStore.get(motif) : null);
+						if (data) {
+							if (data.file && fileInp && window.DataTransfer) {
+								try {
+									const dt = new DataTransfer();
+									dt.items.add(data.file);
+									fileInp.files = dt.files;
+								} catch(err) {}
+							}
+							if (photoHidden && data.previewUrl && !photoHidden.value) {
+								photoHidden.value = data.previewUrl;
+							}
+						}
+					});
+
+					const overlay = document.getElementById("loadingOverlay");
+					if (overlay) overlay.style.display = "flex";
+
+					const submitBtn = document.getElementById("btnSubmitProduct");
+					if (submitBtn) {
+						submitBtn.disabled = true;
+						submitBtn.style.opacity = "0.6";
+						submitBtn.textContent = "Sedang Menyimpan...";
+					}
+				});
+			}
+		}
+
+		// Delete button trigger
+		document.getElementById("btnDeleteProductTrigger")?.addEventListener("click", () => {
+			const deleteForm = document.getElementById("deleteProductForm");
+			if (deleteForm && typeof window.showDeleteConfirm === "function") {
+				window.showDeleteConfirm(deleteForm, "Apakah Anda yakin ingin menghapus produk ini secara permanen dari katalog?");
+			} else if (confirm("Apakah Anda yakin ingin menghapus produk ini secara permanen?")) {
+				deleteForm?.submit();
 			}
 		});
 
-		document.addEventListener("change", (e) => {
-			if (e.target && e.target.name === "colors") {
-				const selects = document.querySelectorAll(".img-color-tag-select-edit");
-				const checkedInputs = Array.from(document.querySelectorAll('#color-grid input[name="colors"]:checked'));
-				const checkedColors = checkedInputs.map(cb => cb.value.trim()).filter(Boolean);
+		// Live Sync POS button
+		document.getElementById("btn-sync-pos-live")?.addEventListener("click", async () => {
+			const btn = document.getElementById("btn-sync-pos-live");
+			const itemCode = document.getElementById("product_item_code_input")?.value || document.getElementById("product_sku_input")?.value;
+			if (!itemCode) {
+				alert("Kode item atau SKU belum terisi.");
+				return;
+			}
+			if (btn) {
+				btn.disabled = true;
+				btn.innerHTML = "⏳ Menarik POS...";
+			}
 
-				selects.forEach((sel, itemIndex) => {
-					const currentVal = sel.value;
-					let optionsHtml = '<option value="">-- Tanpa Warna --</option>';
-					if (checkedColors.length > 0) {
-						optionsHtml += checkedColors.map((c, idx) => {
-							const isDefault = !currentVal && idx === (itemIndex % checkedColors.length);
-							const isSelected = currentVal === c || isDefault;
-							return `<option value="${c}" ${isSelected ? 'selected' : ''}>🎨 ${c}</option>`;
-						}).join('');
+			try {
+				// Ambil data produk aktif dari endpoint POS Noir /api/v1/produk
+				let res = await fetch(`https://noir.grace.gracianna.web.id/api/v1/produk?q=${encodeURIComponent(itemCode)}`);
+				let json = await res.json();
+				let list = Array.isArray(json) ? json : (json.data?.data || json.data || []);
+
+				// Fallback ke praProdukV2 jika tidak ditemukan di endpoint produk
+				if (!list || list.length === 0) {
+					res = await fetch(`https://noir.grace.gracianna.web.id/api/v1/praProdukV2?per_page=12&q=${encodeURIComponent(itemCode)}`);
+					json = await res.json();
+					list = Array.isArray(json) ? json : (json.data?.data || json.data || []);
+				}
+
+				const matched = list.find(p => p.kodeitem && p.kodeitem.toUpperCase() === itemCode.toUpperCase()) || list[0];
+
+				if (matched) {
+					const alertBox = document.getElementById("pos-sync-alert-box");
+					const alertText = document.getElementById("pos-sync-alert-text");
+					const detailsCount = Array.isArray(matched.details) ? matched.details.length : 1;
+
+					if (alertBox && alertText) {
+						alertText.textContent = `Ditemukan data produk POS: ${matched.nama || matched.kodeitem} dengan ${detailsCount} counter/outlet.`;
+						alertBox.style.display = "flex";
+
+						document.getElementById("btn-apply-pos-sync")?.addEventListener("click", () => {
+							if (matched.id) {
+								const mainPraInput = document.getElementById("main_praproduk_id_input");
+								if (mainPraInput) mainPraInput.value = matched.id;
+								const idBadge = document.getElementById("master-pos-id");
+								if (idBadge) idBadge.textContent = `#${matched.id}`;
+							}
+							if (matched.kode || matched.counter) {
+								const barcodeBadge = document.getElementById("master-pos-barcode");
+								if (barcodeBadge) barcodeBadge.textContent = matched.kode || matched.counter;
+							}
+							if (matched.kodeitem) {
+								const modelBadge = document.getElementById("master-pos-model");
+								if (modelBadge) modelBadge.textContent = matched.kodeitem;
+							}
+							if (matched.nama) {
+								const namaBadge = document.getElementById("master-pos-nama");
+								if (namaBadge) namaBadge.textContent = matched.nama;
+							}
+
+							if (matched.details && Array.isArray(matched.details) && matched.details.length > 0) {
+								renderCounterRows(matched.details, matched);
+							}
+							alertBox.style.display = "none";
+						}, { once: true });
 					}
-					sel.innerHTML = optionsHtml;
-				});
+				} else {
+					alert(`Tidak ditemukan data barang POS untuk kata kunci '${itemCode}'.`);
+				}
+			} catch (err) {
+				console.error("Gagal sinkron POS:", err);
+				alert("Terjadi kendala koneksi ke API POS Noir.");
+			} finally {
+				if (btn) {
+					btn.disabled = false;
+					btn.innerHTML = "<span>⚡ Tarik Ulang Data POS</span>";
+				}
 			}
 		});
-	}
-</script>
+
+		// --- DOMContentLoaded INITIAL HYDRATION ---
+		document.addEventListener("DOMContentLoaded", () => {
+			setupCategoryDropdown();
+			setupPriceMasking();
+			setupBatchControls();
+			setupDescGenerator();
+			setupFormSubmitLoading();
+
+			// Parse Product Initial Data
+			const rawJson = document.getElementById("initial-product-data")?.textContent;
+			let localProduct = null;
+			if (rawJson) {
+				try {
+					localProduct = JSON.parse(rawJson);
+				} catch (e) {
+					console.error("Error parse initial product data:", e);
+				}
+			}
+
+			if (localProduct) {
+				// Master POS reference badge
+				const posDecoded = decodePosItemInfo(localProduct);
+				const refPosType = document.getElementById("ref-pos-type-val");
+				if (refPosType) refPosType.textContent = posDecoded.summary;
+
+				const detectedRow = document.getElementById("detected-type-info-row");
+				const detectedText = document.getElementById("detected-type-info-text");
+				if (detectedRow && detectedText) {
+					detectedText.innerHTML = `<strong>Tipe Terdeteksi dari Barcode POS:</strong> ${posDecoded.summary}`;
+					detectedRow.style.display = "flex";
+				}
+
+				// Categories
+				autoDetectAndSelectCategories(localProduct);
+
+				// Motifs Checkboxes
+				const selectedMotifIds = (localProduct.motifs || localProduct.product_motifs || []).map(m => String(m.id || m.motif_id));
+				document.querySelectorAll("#motif-grid input[name='motif_ids']").forEach(cb => {
+					if (selectedMotifIds.includes(String(cb.value))) {
+						cb.checked = true;
+					}
+				});
+
+				// Colors Checkboxes
+				const selectedColors = (localProduct.colors || []).map(c => String(c).trim().toLowerCase());
+				document.querySelectorAll("#color-grid input[name='colors']").forEach(cb => {
+					if (selectedColors.includes(String(cb.value).trim().toLowerCase())) {
+						cb.checked = true;
+					}
+				});
+
+				// Pre-populate motifPhotoStore with product images
+				const prodImages = localProduct.images || (localProduct.image_url ? [localProduct.image_url] : []);
+				prodImages.forEach((imgUrl, i) => {
+					const mLetter = getMotifLetter(i);
+					if (imgUrl && !motifPhotoStore.has(mLetter)) {
+						motifPhotoStore.set(mLetter, {
+							file: null,
+							previewUrl: imgUrl,
+							isCustom: false
+						});
+					}
+				});
+
+				// Variants Table
+				const variantsArr = localProduct.variants || localProduct.product_variants || [];
+				if (Array.isArray(variantsArr) && variantsArr.length > 0) {
+					renderCounterRows(variantsArr, localProduct);
+				} else {
+					// Fallback to single row
+					renderCounterRows([{
+						counter: localProduct.code || "01",
+						outlet: "Gudang",
+						motif: "Motif A",
+						size_name: "ALL SIZE",
+						price: localProduct.price || 0,
+						stock: localProduct.total_stock || 1,
+						dalaman: "",
+						image_url: localProduct.image_url || null
+					}], localProduct);
+				}
+			}
+		});
+	</script>
+	<ImageCropModal />
+	<DeleteConfirmModal />
+</Layout>

@@ -197,12 +197,12 @@ if (Astro.request.method === "POST") {
 							if (i === 0) resolvedL1Id = matchedByName.id;
 						} else {
 							try {
-								const parent_id = i === 0 ? null : (resolvedL1Id || null);
-								const newTypeRes = await apiFetch<any>("types", {
+								const parent_id: string | null = i === 0 ? null : (resolvedL1Id || null);
+								const newTypeRes: any = await apiFetch<any>("types", {
 									method: "POST",
 									body: JSON.stringify({ name: catVal, parent_id }),
 								});
-								const newId = newTypeRes?.data?.id || newTypeRes?.id;
+								const newId: any = newTypeRes?.data?.id || newTypeRes?.id;
 								if (newId) {
 									resolvedCategoryIds.push(newId);
 									if (i === 0) resolvedL1Id = newId;
