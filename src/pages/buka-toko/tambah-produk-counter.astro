@@ -898,6 +898,9 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 								<button type="button" id="btnUnselectAllCounters" style="font-size: 0.7rem; font-weight: 700; padding: 5px 10px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; color: #334155;">Batal Semua</button>
 								<button type="button" id="btnBatchPrice" style="font-size: 0.7rem; font-weight: 700; padding: 5px 10px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 6px; cursor: pointer;" title="Terapkan harga pada varian yang dicentang [✓]">Set Harga (Terpilih)</button>
 								<button type="button" id="btnBatchFuring" style="font-size: 0.7rem; font-weight: 700; padding: 5px 10px; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 6px; cursor: pointer;" title="Terapkan furing pada varian yang dicentang [✓]">Set Furing (Terpilih)</button>
+								<span style="font-size: 0.68rem; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;" title="Seret mouse ke bawah/atas pada kotak checkbox untuk memilih banyak sekaligus">
+									<span>💡</span> Seret checkbox atau tahan <code>Shift</code> untuk seleksi cepat
+								</span>
 							</div>
 						</div>
 
@@ -1266,6 +1269,56 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 		}
 		.counter-table-row:hover {
 			background-color: #f8fafc;
+		}
+
+		/* Drag-to-select variants styling */
+		.v-checkbox-zone {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			padding: 4px 6px;
+			border-radius: 6px;
+			cursor: grab;
+			user-select: none;
+			-webkit-user-select: none;
+			transition: background 0.15s ease;
+			touch-action: none;
+		}
+		.v-checkbox-zone:hover {
+			background: #f1f5f9;
+		}
+		.v-checkbox-zone:active {
+			cursor: grabbing;
+		}
+		.v-drag-grip {
+			font-size: 0.85rem;
+			color: #94a3b8;
+			font-weight: 800;
+			letter-spacing: -1.5px;
+			display: inline-flex;
+			align-items: center;
+			cursor: grab;
+			user-select: none;
+			-webkit-user-select: none;
+			opacity: 0.7;
+			transition: opacity 0.15s;
+		}
+		.v-checkbox-zone:hover .v-drag-grip {
+			opacity: 1;
+			color: #475569;
+		}
+		body.is-dragging-variants {
+			user-select: none !important;
+			-webkit-user-select: none !important;
+			cursor: grabbing !important;
+		}
+		body.is-dragging-variants .counter-table-row {
+			user-select: none !important;
+			-webkit-user-select: none !important;
+		}
+		body.is-dragging-variants .v-checkbox-zone,
+		body.is-dragging-variants .v-drag-grip {
+			cursor: grabbing !important;
 		}
 
 		/* Motif card styling */
@@ -2573,7 +2626,10 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				row.innerHTML = `
 					<!-- Kolom 1: Checkbox & Foto Thumbnail (Sedikit Diperbesar & Tanpa Tombol Ganti) -->
 					<div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
-						<input type="checkbox" class="v-counter-cb" checked style="width: 20px; height: 20px; cursor: pointer; accent-color: #0f172a;" title="Pilih varian ini" />
+						<div class="v-checkbox-zone" title="Klik & seret ke bawah/atas untuk memilih varian cepat, atau tahan Shift">
+							<span class="v-drag-grip" title="Tahan klik & seret untuk seleksi varian">⋮⋮</span>
+							<input type="checkbox" class="v-counter-cb" checked style="width: 20px; height: 20px; cursor: pointer; accent-color: #0f172a;" title="Pilih varian ini" />
+						</div>
 						<div class="v-thumb-box" style="width: 68px; height: 68px; border-radius: 8px; overflow: hidden; background: #f8fafc; border: 1.5px solid #cbd5e1; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
 							${currentPhoto ? `
 								<img class="v-preview-img" src="${currentPhoto}" onerror="this.src='${photoFallback}'" style="width: 100%; height: 100%; object-fit: cover;" />
@@ -3243,6 +3299,9 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				updateSelectedCounterBadge();
 			});
 
+			// Setup Drag-to-Select & Shift+Click
+			setupDragToSelectVariants();
+
 			// Apply Price to Checked Rows
 			document.getElementById("btnBatchPrice")?.addEventListener("click", () => {
 				const checkedRows = getCheckedCounterRows();
@@ -3297,7 +3356,10 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 				row.innerHTML = `
 					<!-- Kolom 1: Checkbox & Foto Thumbnail (Sedikit Diperbesar & Tanpa Tombol Ganti) -->
 					<div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
-						<input type="checkbox" class="v-counter-cb" checked style="width: 20px; height: 20px; cursor: pointer; accent-color: #0f172a;" title="Pilih varian ini" />
+						<div class="v-checkbox-zone" title="Klik & seret ke bawah/atas untuk memilih varian cepat, atau tahan Shift">
+							<span class="v-drag-grip" title="Tahan klik & seret untuk seleksi varian">⋮⋮</span>
+							<input type="checkbox" class="v-counter-cb" checked style="width: 20px; height: 20px; cursor: pointer; accent-color: #0f172a;" title="Pilih varian ini" />
+						</div>
 						<div class="v-thumb-box" style="width: 68px; height: 68px; border-radius: 8px; overflow: hidden; background: #f8fafc; border: 1.5px solid #cbd5e1; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
 							<img class="v-preview-img" style="display: none; width: 100%; height: 100%; object-fit: cover;" />
 							<svg class="v-placeholder-svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: #94a3b8;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
@@ -3494,6 +3556,100 @@ if (success === "motif") message = "Motif baru berhasil ditambahkan!";
 
 				updateSelectedCounterBadge();
 			});
+		}
+
+		// Drag-to-select variants & Shift+Click
+		let isDraggingVariants = false;
+		let dragTargetState = null;
+		let lastSelectedRowIndex = null;
+
+		function setupDragToSelectVariants() {
+			const container = document.getElementById("counterVariantsListContainer");
+			if (!container || container.dataset.dragInit === "true") return;
+			container.dataset.dragInit = "true";
+
+			// Pointer down on checkbox or drag zone
+			container.addEventListener("pointerdown", (e) => {
+				if (e.button !== undefined && e.button !== 0) return; // Only left click
+
+				const zone = e.target.closest(".v-checkbox-zone");
+				const isDirectCb = e.target.classList.contains("v-counter-cb");
+				if (!zone && !isDirectCb) return;
+
+				const cb = isDirectCb ? e.target : zone?.querySelector(".v-counter-cb");
+				const row = e.target.closest(".counter-table-row");
+				if (!cb || !row) return;
+
+				const allRows = Array.from(container.querySelectorAll(".counter-table-row"));
+				const currentIndex = allRows.indexOf(row);
+
+				// 1. Shift + Click Range Selection
+				if (e.shiftKey && lastSelectedRowIndex !== null && lastSelectedRowIndex !== -1 && lastSelectedRowIndex !== currentIndex) {
+					e.preventDefault();
+					const start = Math.min(lastSelectedRowIndex, currentIndex);
+					const end = Math.max(lastSelectedRowIndex, currentIndex);
+					const referenceCb = allRows[lastSelectedRowIndex]?.querySelector(".v-counter-cb");
+					const rangeTargetState = referenceCb ? referenceCb.checked : true;
+
+					for (let i = start; i <= end; i++) {
+						const targetCb = allRows[i]?.querySelector(".v-counter-cb");
+						if (targetCb && targetCb.checked !== rangeTargetState) {
+							targetCb.checked = rangeTargetState;
+							targetCb.dispatchEvent(new Event("change"));
+						}
+					}
+					lastSelectedRowIndex = currentIndex;
+					updateSelectedCounterBadge();
+					return;
+				}
+
+				// 2. Start Drag-to-Select
+				e.preventDefault();
+				isDraggingVariants = true;
+				dragTargetState = !cb.checked;
+				cb.checked = dragTargetState;
+				cb.dispatchEvent(new Event("change"));
+				lastSelectedRowIndex = currentIndex;
+				document.body.classList.add("is-dragging-variants");
+			});
+
+			// Pointer move: sweep across rows with interpolation
+			window.addEventListener("pointermove", (e) => {
+				if (!isDraggingVariants || dragTargetState === null) return;
+
+				const el = document.elementFromPoint(e.clientX, e.clientY);
+				const targetRow = el?.closest(".counter-table-row");
+				if (!targetRow || !container.contains(targetRow)) return;
+
+				const allRows = Array.from(container.querySelectorAll(".counter-table-row"));
+				const currentIndex = allRows.indexOf(targetRow);
+				if (currentIndex === -1) return;
+
+				if (lastSelectedRowIndex !== null && lastSelectedRowIndex !== currentIndex) {
+					const start = Math.min(lastSelectedRowIndex, currentIndex);
+					const end = Math.max(lastSelectedRowIndex, currentIndex);
+					for (let i = start; i <= end; i++) {
+						const rowCb = allRows[i]?.querySelector(".v-counter-cb");
+						if (rowCb && rowCb.checked !== dragTargetState) {
+							rowCb.checked = dragTargetState;
+							rowCb.dispatchEvent(new Event("change"));
+						}
+					}
+					lastSelectedRowIndex = currentIndex;
+				}
+			});
+
+			const stopDragging = () => {
+				if (isDraggingVariants) {
+					isDraggingVariants = false;
+					dragTargetState = null;
+					document.body.classList.remove("is-dragging-variants");
+				}
+			};
+
+			window.addEventListener("pointerup", stopDragging);
+			window.addEventListener("pointercancel", stopDragging);
+			window.addEventListener("blur", stopDragging);
 		}
 
 		function setupMotifEngine() {
