@@ -1174,6 +1174,13 @@ try {
 		gap: var(--spacing-lg);
 	}
 
+	@media (max-width: 768px) {
+		.product-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+			gap: 10px !important;
+		}
+	}
+
 	@keyframes spin {
 		to { transform: rotate(360deg); }
 	}

@@ -31,7 +31,6 @@ const sort = searchParams.get("sort") || "newest";
 						Katalog <span style="font-style: italic;">Pilihan</span>
 					</h1>
 
-					<!-- Local Page Search Form with Docking Hand-off Trigger Marker -->
 					<div class="local-search-trigger-marker">
 						<form
 							action="/products"
@@ -147,7 +146,6 @@ const sort = searchParams.get("sort") || "newest";
 				</div>
 			</header>
 
-			<!-- Main Dynamic Hydration Area -->
 			<div id="catalog-container">
 				<CatalogSkeleton />
 			</div>
@@ -251,26 +249,77 @@ const sort = searchParams.get("sort") || "newest";
 		.skeleton-chip,
 		.skeleton-card-image {
 			background: #f1f5f9;
-			background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+			background: linear-gradient(
+				90deg,
+				#f1f5f9 25%,
+				#e2e8f0 50%,
+				#f1f5f9 75%
+			);
 			background-size: 200% 100%;
 			animation: shimmer 1.5s infinite linear;
 			border-radius: 4px;
 		}
 		@keyframes shimmer {
-			0% { background-position: 200% 0; }
-			100% { background-position: -200% 0; }
+			0% {
+				background-position: 200% 0;
+			}
+			100% {
+				background-position: -200% 0;
+			}
 		}
-		.skeleton-title { width: 100px; height: 14px; margin-bottom: 1rem; }
-		.skeleton-box { width: 100%; }
-		.skeleton-text { height: 12px; margin-bottom: 0.8rem; }
-		.skeleton-list { display: flex; flex-direction: column; gap: 0.4rem; }
-		.skeleton-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-		.skeleton-chip { width: 45px; height: 26px; border-radius: 6px; }
-		.skeleton-card { display: flex; flex-direction: column; height: 100%; }
-		.skeleton-card-image { aspect-ratio: 4/5; width: 100%; margin-bottom: 1rem; }
-		.skeleton-card-info { display: flex; flex-direction: column; flex: 1; }
+		.skeleton-title {
+			width: 100px;
+			height: 14px;
+			margin-bottom: 1rem;
+		}
+		.skeleton-box {
+			width: 100%;
+		}
+		.skeleton-text {
+			height: 12px;
+			margin-bottom: 0.8rem;
+		}
+		.skeleton-list {
+			display: flex;
+			flex-direction: column;
+			gap: 0.4rem;
+		}
+		.skeleton-chips {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.5rem;
+		}
+		.skeleton-chip {
+			width: 45px;
+			height: 26px;
+			border-radius: 6px;
+		}
+		.skeleton-card {
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+		}
+		.skeleton-card-image {
+			aspect-ratio: 4/5;
+			width: 100%;
+			margin-bottom: 1rem;
+		}
+		.skeleton-card-info {
+			display: flex;
+			flex-direction: column;
+			flex: 1;
+		}
 		@media (max-width: 900px) {
-			.products-layout-skeleton { grid-template-columns: 1fr; gap: var(--spacing-xl, 1.5rem); }
+			.products-layout-skeleton {
+				grid-template-columns: 1fr;
+				gap: var(--spacing-xl, 1.5rem);
+			}
+		}
+		@media (max-width: 768px) {
+			.product-grid {
+				grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+				gap: 10px !important;
+			}
 		}
 	</style>
 </Layout>
@@ -478,7 +527,7 @@ const sort = searchParams.get("sort") || "newest";
 					const cleanPath = href.split("?")[0].replace(/\/$/, "");
 					const isQueryOnly = href.startsWith("?");
 					const isExactCatalog = cleanPath === "/products";
-					
+
 					if (!isQueryOnly && !isExactCatalog) {
 						return; // Let standard browser lifecycle route into detail sub-pages
 					}
@@ -505,7 +554,8 @@ const sort = searchParams.get("sort") || "newest";
 					e.preventDefault();
 
 					// Strip formatting from price inputs before aggregating payload
-					const priceInputs = form.querySelectorAll(".js-price-input");
+					const priceInputs =
+						form.querySelectorAll(".js-price-input");
 					priceInputs.forEach((input) => {
 						input.value = input.value.replace(/\D/g, "");
 					});
@@ -564,7 +614,8 @@ const sort = searchParams.get("sort") || "newest";
 							`;
 						}
 
-						container.innerHTML = `
+						container.innerHTML =
+							`
 							<div class="products-layout-skeleton">
 								<aside class="filters-sidebar">
 									<div class="filter-group">
@@ -598,7 +649,9 @@ const sort = searchParams.get("sort") || "newest";
 										<div class="skeleton-box" style="width: 170px; height: 35px; border-radius: 8px; margin: 0;"></div>
 									</div>
 									<div class="product-grid" style="margin-top: 0;">
-										` + cardSkeletons + `
+										` +
+							cardSkeletons +
+							`
 									</div>
 								</main>
 							</div>

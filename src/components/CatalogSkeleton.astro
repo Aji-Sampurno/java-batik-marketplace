@@ -185,6 +185,27 @@
 		}
 	}
 
+	@media (max-width: 768px) {
+		.product-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 10px;
+		}
+		.skeleton-card-image {
+			margin-bottom: 0.5rem;
+		}
+		.skeleton-text {
+			margin-bottom: 0.4rem;
+		}
+		.skeleton-chips {
+			gap: 0.25rem;
+			margin-bottom: 0.5rem;
+		}
+		.skeleton-chip {
+			width: 30px;
+			height: 18px;
+		}
+	}
+
 	@media (max-width: 600px) {
 		.filters-sidebar {
 			grid-template-columns: 1fr;

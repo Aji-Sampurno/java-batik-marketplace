@@ -732,7 +732,7 @@ function renderMarkdown(md: string): string {
 									<img src={p.image_url} alt={p.name} loading="lazy" />
 								</a>
 							</div>
-							<div class="product-info" style="padding: 1.5rem;">
+							<div class="product-info related-info">
 								<p class="text-uppercase opacity-50" style="font-size: 0.6rem; margin-bottom: 0.5rem;">
 									{p.types?.name || p.type?.name} • {(p.motifs || p.product_motifs || []).map((pm: any) => pm.name || pm.motifs?.name).filter(Boolean).join(', ') || '-'}
 								</p>
@@ -766,6 +766,22 @@ function renderMarkdown(md: string): string {
 	)}
 
 	<style>
+		.related-info {
+			padding: 1.2rem 1rem;
+		}
+		@media (max-width: 768px) {
+			.related-info {
+				padding: 0.5rem 0.25rem !important;
+			}
+			.related-info h3 {
+				font-size: 0.82rem !important;
+				line-height: 1.25 !important;
+			}
+			.related-info .price-tag {
+				font-size: 0.88rem !important;
+			}
+		}
+
 		.detail-grid {
 			display: grid;
 			grid-template-columns: 1.2fr 1fr;
