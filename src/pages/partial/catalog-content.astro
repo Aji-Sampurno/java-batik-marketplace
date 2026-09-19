@@ -3,9 +3,10 @@ export const prerender = false;
 import { apiFetch } from "../../lib/api";
 import ProductCard from "../../components/ProductCard.astro";
 import { KNOWN_OUTLET_LIST, matchOutlet } from "../../lib/outlet";
+import { buildCategoryTree, getAncestry, resolveCategoryIds } from "../../lib/category";
 
 const { searchParams } = Astro.url;
-const typeFilter = searchParams.get("type");
+const typeFilter = searchParams.get("type") || searchParams.get("type_id");
 const motifFilter = searchParams.get("motif");
 const sizeFilter = searchParams.get("size"); 
 const fitFilter = searchParams.get("fit");
@@ -31,9 +32,19 @@ const hasActiveFilters = Boolean(
 	typeFilter || motifFilter || sizeFilter || fitFilter || colorFilter || outletFilter || searchQuery || minPrice || maxPrice
 );
 
+let activeFilterCount = 0;
+if (typeFilter) activeFilterCount++;
+if (outletFilter) activeFilterCount++;
+if (sizeFilter) activeFilterCount++;
+if (fitFilter) activeFilterCount++;
+if (colorFilter) activeFilterCount++;
+if (motifFilter) activeFilterCount++;
+if (minPrice || maxPrice) activeFilterCount++;
+
 const getClearFilterUrl = (paramToRemove: string) => {
 	const p = new URLSearchParams(searchParams);
 	p.delete(paramToRemove);
+	if (paramToRemove === "type") p.delete("type_id");
 	p.delete("page");
 	return `?${p.toString()}`;
 };
@@ -76,6 +87,7 @@ let colorsData: any[] = [];
 let hierarchicalTypes: any[] = [];
 let activePathIds: any[] = [];
 let targetType: any = null;
+let matchingTypeIds: string[] = [];
 let settings: any = { contact_whatsapp: "628123456789" };
 
 const itemsPerPage = 12;
@@ -84,37 +96,15 @@ const currentPage = Number(searchParams.get("page") || "1");
 let totalItems = 0;
 let totalPages = 1;
 let paginatedProducts: any[] = [];
-
 const productParams = new URLSearchParams();
-productParams.set("page", String(currentPage));
-productParams.set("per_page", String(itemsPerPage));
-if (typeFilter) productParams.set("type", typeFilter);
-if (motifFilter) productParams.set("motif", motifFilter);
-
-let effectiveSizeParam = sizeFilter || "";
-if (fitFilter === "slim_fit" || fitFilter === "sf" || fitFilter === "Slim Fit") {
-	if (sizeFilter) {
-		effectiveSizeParam = `${sizeFilter} SF`;
-	} else {
-		effectiveSizeParam = "%SF%";
-	}
-}
-if (effectiveSizeParam) productParams.set("size", effectiveSizeParam);
-
-if (colorFilter) productParams.set("color", colorFilter);
-if (searchQuery) productParams.set("search", searchQuery);
-if (minPrice) productParams.set("min_price", String(minPrice));
-if (maxPrice) productParams.set("max_price", String(maxPrice));
-productParams.set("sort", sort);
 
 try {
-	const [tRes, mRes, szRes, colRes, sRes, pRes] = await Promise.all([
+	const [tRes, mRes, szRes, colRes, sRes] = await Promise.all([
 		apiFetch<any>("types").catch(() => []),
 		apiFetch<any>("motifs").catch(() => []),
 		apiFetch<any>("sizes").catch(() => []),
 		apiFetch<any>("colors").catch(() => []),
 		apiFetch<any>("settings").catch(() => null),
-		apiFetch<any>(`products?${productParams.toString()}`).catch(() => null),
 	]);
 
 	typesData = tRes?.data || tRes || [];
@@ -124,6 +114,54 @@ try {
 
 	const s = sRes?.data || sRes;
 	if (s) settings = s;
+
+	hierarchicalTypes = buildCategoryTree(typesData);
+
+	let rootType: any = null;
+	if (typeFilter) {
+		const catResolved = resolveCategoryIds(typesData, typeFilter);
+		targetType = catResolved.targetType;
+		rootType = catResolved.rootType;
+		matchingTypeIds = catResolved.matchingTypeIds;
+		activePathIds = getAncestry(typesData, targetType?.id || null);
+	}
+
+	productParams.set("page", String(currentPage));
+	productParams.set("per_page", String(itemsPerPage));
+
+	if (targetType) {
+		if (rootType) {
+			productParams.set("type_id", rootType.id);
+		}
+		// If level 2 or level 3 (has parent_id), filter by specific category ID in categories relation
+		if (targetType.parent_id) {
+			productParams.set("type", targetType.id);
+		}
+	} else if (matchingTypeIds.length === 1) {
+		productParams.set("type_id", matchingTypeIds[0]);
+	} else if (matchingTypeIds.length > 1) {
+		matchingTypeIds.forEach((id) => productParams.append("type_id[]", id));
+	}
+
+	if (motifFilter) productParams.set("motif", motifFilter);
+
+	let effectiveSizeParam = sizeFilter || "";
+	if (fitFilter === "slim_fit" || fitFilter === "sf" || fitFilter === "Slim Fit") {
+		if (sizeFilter) {
+			effectiveSizeParam = `${sizeFilter} SF`;
+		} else {
+			effectiveSizeParam = "%SF%";
+		}
+	}
+	if (effectiveSizeParam) productParams.set("size", effectiveSizeParam);
+
+	if (colorFilter) productParams.set("color", colorFilter);
+	if (searchQuery) productParams.set("search", searchQuery);
+	if (minPrice) productParams.set("min_price", String(minPrice));
+	if (maxPrice) productParams.set("max_price", String(maxPrice));
+	productParams.set("sort", sort);
+
+	const pRes = await apiFetch<any>(`products?${productParams.toString()}`).catch(() => null);
 
 	if (pRes) {
 		let rawProducts = pRes?.data || [];
@@ -156,6 +194,14 @@ try {
 		const realSizeFilter = (sizeFilter && !sizeFilter.includes("%")) ? sizeFilter.trim().toUpperCase() : null;
 
 		const filterProduct = (p: any) => {
+			if (matchingTypeIds.length > 0) {
+				const pTypeId = p.type_id || p.type?.id;
+				const pCategoryIds = (p.categories || []).map((c: any) => c.id);
+				const matchesType = (pTypeId && matchingTypeIds.includes(pTypeId)) ||
+					pCategoryIds.some((cid: string) => matchingTypeIds.includes(cid));
+				if (!matchesType) return false;
+			}
+
 			if (outletFilter) {
 				const pOutlet = (p.outlet || p.outlet_location || "").trim();
 				const variants = p.variants || p.product_variants || [];
@@ -213,7 +259,7 @@ try {
 		}
 
 		paginatedProducts = rawProducts.slice(0, itemsPerPage);
-		if (fitFilter || sizeFilter) {
+		if (fitFilter || sizeFilter || outletFilter || matchingTypeIds.length > 0) {
 			if (fetchPage >= lastPage && rawProducts.length < itemsPerPage) {
 				totalItems = (currentPage - 1) * itemsPerPage + rawProducts.length;
 				totalPages = currentPage;
@@ -226,46 +272,8 @@ try {
 			totalPages = lastPage;
 		}
 	}
-
-	const buildCategoryTree = (
-		list: any[],
-		parentId = null,
-		depth = 0,
-		currentPath = "",
-	): any[] => {
-		let result: any[] = [];
-		list.filter((item) => item.parent_id === parentId).forEach((item) => {
-			const fullPath = currentPath
-				? `${currentPath} > ${item.name}`
-				: item.name;
-			result.push({ ...item, depth, fullPath });
-			const children = buildCategoryTree(
-				list,
-				item.id,
-				depth + 1,
-				fullPath,
-			);
-			result = result.concat(children);
-		});
-		return result;
-	};
-
-	hierarchicalTypes = buildCategoryTree(typesData);
-
-	targetType = hierarchicalTypes.find(
-		(t) => t.fullPath === typeFilter || t.id === typeFilter,
-	);
-	
-	const getAncestry = (list: any[], currentId: any): any[] => {
-		if (!currentId) return [];
-		const item = list.find((t) => t.id === currentId);
-		if (!item) return [];
-		return [item.id, ...getAncestry(list, item.parent_id)];
-	};
-
-	activePathIds = getAncestry(typesData, targetType?.id || null);
 } catch (e: any) {
-	console.error("Parallel API Fetch Error", e.message);
+	console.error("Catalog API Fetch Error", e.message);
 }
 ---
 
@@ -275,28 +283,45 @@ try {
 		<div class="sidebar-mobile-header">
 			<div class="drag-handle"></div>
 			<div class="header-title-row">
-				<h3>Filter & Kategori</h3>
-				<button type="button" class="close-sidebar-btn" id="close-sidebar-btn">&times;</button>
+				<div class="header-title-left">
+					<h3>Filter & Kategori</h3>
+					{activeFilterCount > 0 && (
+						<span class="active-filter-badge">{activeFilterCount}</span>
+					)}
+				</div>
+				<button type="button" class="close-sidebar-btn" id="close-sidebar-btn" aria-label="Tutup filter">
+					<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+						<line x1="18" y1="6" x2="6" y2="18"></line>
+						<line x1="6" y1="6" x2="18" y2="18"></line>
+					</svg>
+				</button>
 			</div>
 		</div>
 
-		<input
-			type="hidden"
-			name="q"
-			value={searchParams.get("q") || ""}
-		/>
+		<!-- Scrollable content area -->
+		<div class="sidebar-scroll-content" id="sidebar-scroll-content">
+			<input
+				type="hidden"
+				name="q"
+				value={searchParams.get("q") || ""}
+			/>
 
 		<div class="filter-group">
-			<h3
-				class="text-uppercase"
-				style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;"
-			>
-				Rentang Harga
-			</h3>
+			<div class="filter-group-header">
+				<h3 class="filter-title">Rentang Harga</h3>
+				{(minPrice || maxPrice) && (
+					<a
+						href={`/products?${new URLSearchParams({ ...Object.fromEntries(Array.from(searchParams.entries()).filter(([k]) => k !== "minP" && k !== "maxP")), page: "1" })}`}
+						class="filter-reset-small"
+					>
+						Hapus
+					</a>
+				)}
+			</div>
 			<form
 				action="/products"
 				method="GET"
-				style="display: flex; flex-direction: column; gap: 0.5rem;"
+				class="price-filter-form"
 			>
 				{
 					Array.from(searchParams.entries()).map(
@@ -313,63 +338,40 @@ try {
 					)
 				}
 
-				<div
-					style="display: flex; flex-direction: column; gap: 0.8rem;"
-				>
-					<div
-						style="display: flex; flex-direction: column; gap: 0.3rem;"
-					>
-						<label
-							style="font-size: 0.6rem; opacity: 0.5; text-transform: uppercase; font-weight: 600;"
-							>Harga Minimum</label
-						>
-						<input
-							type="text"
-							inputmode="numeric"
-							name="minP"
-							value={minPrice
-								? `Rp ${minPrice.toLocaleString("id-ID")}`
-								: ""}
-							placeholder="Rp 0"
-							class="price-input js-price-input"
-							style="width: 100%;"
-						/>
-					</div>
-					<div
-						style="display: flex; flex-direction: column; gap: 0.3rem;"
-					>
-						<label
-							style="font-size: 0.6rem; opacity: 0.5; text-transform: uppercase; font-weight: 600;"
-							>Harga Maksimum</label
-						>
-						<input
-							type="text"
-							inputmode="numeric"
-							name="maxP"
-							value={maxPrice
-								? `Rp ${maxPrice.toLocaleString("id-ID")}`
-								: ""}
-							placeholder="Rp 0"
-							class="price-input js-price-input"
-							style="width: 100%;"
-						/>
-					</div>
+				<div class="price-inputs-row">
+					<input
+						type="text"
+						inputmode="numeric"
+						name="minP"
+						value={minPrice
+							? `Rp ${minPrice.toLocaleString("id-ID")}`
+							: ""}
+						placeholder="Rp Min"
+						class="price-input js-price-input"
+					/>
+					<span class="price-divider">—</span>
+					<input
+						type="text"
+						inputmode="numeric"
+						name="maxP"
+						value={maxPrice
+							? `Rp ${maxPrice.toLocaleString("id-ID")}`
+							: ""}
+						placeholder="Rp Maks"
+						class="price-input js-price-input"
+					/>
+					<button type="submit" class="apply-price-btn" title="Terapkan Harga">
+						<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+							<polyline points="9 18 15 12 9 6"></polyline>
+						</svg>
+					</button>
 				</div>
-				<button type="submit" class="apply-filter-btn"
-					>Terapkan</button
-				>
 			</form>
 		</div>
 
 		<details open class="filter-group">
-			<summary
-				style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; list-style: none; outline: none;"
-			>
-				<span
-					class="text-uppercase"
-					style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;"
-					>Jenis Produk</span
-				>
+			<summary class="filter-group-summary">
+				<span class="filter-title">Jenis Produk</span>
 				<svg
 					class="chevron"
 					width="12"
@@ -380,20 +382,22 @@ try {
 					stroke-width="2.5"
 					stroke-linecap="round"
 					stroke-linejoin="round"
-					style="opacity: 0.5; transition: transform 0.3s ease;"
-					><polyline points="6 9 12 15 18 9"
-					></polyline></svg
 				>
+					<polyline points="6 9 12 15 18 9"></polyline>
+				</svg>
 			</summary>
-			<div
-				style="display: flex; flex-direction: column; gap: 0.2rem; padding: 0.6rem 0 1rem 0;"
-			>
+			<div class="category-tree">
 				<a
 					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: "", page: "1" })}`}
-					class={!typeFilter
-						? "active-filter"
-						: "filter-link"}>Semua Jenis</a
+					class={`cat-node cat-depth-0 ${!typeFilter ? "is-selected" : ""}`}
 				>
+					<span class="cat-label">Semua Jenis</span>
+					{!typeFilter && (
+						<svg class="cat-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+							<polyline points="20 6 9 17 4 12"></polyline>
+						</svg>
+					)}
+				</a>
 				{
 					hierarchicalTypes
 						?.filter((t) => {
@@ -402,53 +406,39 @@ try {
 								activePathIds.includes(t.parent_id)
 							);
 						})
-						.map((t) => (
-							<a
-								href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: t.fullPath, page: "1" })}`}
-								class={
-									typeFilter === t.fullPath ||
-									typeFilter === t.id
-										? "active-filter"
-										: "filter-link"
-								}
-								style={`padding-left: ${t.depth * 1.2 + 0.8}rem; font-size: ${0.85 - t.depth * 0.05}rem; ${t.depth > 0 ? "opacity: 0.8;" : "font-weight: 500;"}`}
-							>
-								{activePathIds.includes(t.id) && (
-									<span style="color: var(--color-accent); margin-right: 4px;">
-										•
-									</span>
-								)}
-								{t.depth > 0 && (
-									<span style="opacity: 0.3; margin-right: 6px;">
-										∟
-									</span>
-								)}
-								<span
-									style={
-										typeFilter === t.fullPath ||
-										typeFilter === t.id
-											? "font-weight: 700; text-decoration: underline;"
-											: ""
-									}
+						.map((t) => {
+							const isSelected = typeFilter === t.fullPath || typeFilter === t.id;
+							const isParentActive = activePathIds.includes(t.id);
+							const hasChildren = hierarchicalTypes.some((c) => c.parent_id === t.id);
+
+							return (
+								<a
+									href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), type: t.fullPath, page: "1" })}`}
+									class={`cat-node cat-depth-${t.depth} ${isSelected ? "is-selected" : ""} ${isParentActive && !isSelected ? "is-parent" : ""}`}
 								>
-									{t.name}
-								</span>
-							</a>
-						))
+									<span class="cat-label">
+										{t.name}
+									</span>
+									{isSelected ? (
+										<svg class="cat-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+											<polyline points="20 6 9 17 4 12"></polyline>
+										</svg>
+									) : hasChildren && isParentActive ? (
+										<svg class="cat-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+											<polyline points="6 9 12 15 18 9"></polyline>
+										</svg>
+									) : null}
+								</a>
+							);
+						})
 				}
 			</div>
 		</details>
 
 		<!-- Lokasi Outlet Filter -->
 		<details open class="filter-group">
-			<summary
-				style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; list-style: none; outline: none;"
-			>
-				<span
-					class="text-uppercase"
-					style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;"
-					>Lokasi Outlet</span
-				>
+			<summary class="filter-group-summary">
+				<span class="filter-title">Lokasi Outlet</span>
 				<svg
 					class="chevron"
 					width="12"
@@ -459,18 +449,14 @@ try {
 					stroke-width="2.5"
 					stroke-linecap="round"
 					stroke-linejoin="round"
-					style="opacity: 0.5; transition: transform 0.3s ease;"
-					><polyline points="6 9 12 15 18 9"
-					></polyline></svg
 				>
+					<polyline points="6 9 12 15 18 9"></polyline>
+				</svg>
 			</summary>
-			<div
-				style="display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0.6rem 0 1rem 0;"
-			>
+			<div class="chips-wrap">
 				<a
 					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), outlet: "", page: "1" })}`}
 					class={!outletFilter ? "active-chip" : "chip"}
-					style="font-size: 0.7rem;"
 				>
 					Semua Outlet
 				</a>
@@ -481,7 +467,6 @@ try {
 							<a
 								href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), outlet: outName, page: "1" })}`}
 								class={isActive ? "active-chip" : "chip"}
-								style="font-size: 0.7rem; display: inline-flex; align-items: center; gap: 0.25rem;"
 							>
 								<span>📍</span> {outName}
 							</a>
@@ -491,24 +476,25 @@ try {
 			</div>
 		</details>
 
-		<div
-			class="filter-group"
-			style="padding-bottom: var(--spacing-sm);"
-		>
-			<h3
-				class="text-uppercase"
-				style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;"
-			>
-				Ukuran
-			</h3>
-			<div
-				style="display: flex; flex-wrap: wrap; gap: 0.6rem;"
-			>
+		<div class="filter-group">
+			<div class="filter-group-header">
+				<h3 class="filter-title">Ukuran</h3>
+				{sizeFilter && (
+					<a
+						href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: "", page: "1" })}`}
+						class="filter-reset-small"
+					>
+						Hapus
+					</a>
+				)}
+			</div>
+			<div class="chips-wrap">
 				<a
 					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: "", page: "1" })}`}
 					class={!sizeFilter ? "active-chip" : "chip"}
-					style="font-size: 0.7rem;">Semua</a
 				>
+					Semua
+				</a>
 				{
 					getCleanBaseSizes(sizesData).map((sName) => {
 						const normFilter = sizeFilter ? sizeFilter.trim().toUpperCase() : "";
@@ -521,7 +507,6 @@ try {
 							<a
 								href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), size: sName, page: "1" })}`}
 								class={isActive ? "active-chip" : "chip"}
-								style="font-size: 0.7rem;"
 							>
 								{sName === "ALL SIZE" ? "All Size" : sName}
 							</a>
@@ -531,55 +516,59 @@ try {
 			</div>
 		</div>
 		
-		<div
-			class="filter-group"
-			style="padding-bottom: var(--spacing-sm);"
-		>
-			<h3
-				class="text-uppercase"
-				style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;"
-			>
-				Potongan Baju
-			</h3>
-			<div
-				style="display: flex; flex-wrap: wrap; gap: 0.6rem;"
-			>
+		<div class="filter-group">
+			<div class="filter-group-header">
+				<h3 class="filter-title">Potongan Baju</h3>
+				{fitFilter && (
+					<a
+						href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), fit: "", page: "1" })}`}
+						class="filter-reset-small"
+					>
+						Hapus
+					</a>
+				)}
+			</div>
+			<div class="chips-wrap">
 				<a
 					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), fit: "", page: "1" })}`}
 					class={!fitFilter ? "active-chip" : "chip"}
-					style="font-size: 0.7rem;">Semua</a
 				>
+					Semua
+				</a>
 				<a
 					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), fit: "slim_fit", page: "1" })}`}
 					class={fitFilter === "slim_fit" ? "active-chip" : "chip"}
-					style="font-size: 0.7rem;">Slim Fit</a
 				>
+					Slim Fit
+				</a>
 				<a
 					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), fit: "regular", page: "1" })}`}
 					class={fitFilter === "regular" ? "active-chip" : "chip"}
-					style="font-size: 0.7rem;">Regular Fit</a
 				>
+					Regular Fit
+				</a>
 			</div>
 		</div>
 
-		<div
-			class="filter-group"
-			style="padding-bottom: var(--spacing-sm);"
-		>
-			<h3
-				class="text-uppercase"
-				style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px; margin-bottom: 0.6rem;"
-			>
-				Warna
-			</h3>
-			<div
-				style="display: flex; flex-wrap: wrap; gap: 0.6rem;"
-			>
+		<div class="filter-group">
+			<div class="filter-group-header">
+				<h3 class="filter-title">Warna</h3>
+				{colorFilter && (
+					<a
+						href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), color: "", page: "1" })}`}
+						class="filter-reset-small"
+					>
+						Hapus
+					</a>
+				)}
+			</div>
+			<div class="chips-wrap">
 				<a
 					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), color: "", page: "1" })}`}
 					class={!colorFilter ? "active-chip" : "chip"}
-					style="font-size: 0.7rem;">Semua Warna</a
 				>
+					Semua Warna
+				</a>
 				{
 					colorsData?.map((c) => (
 						<a
@@ -589,7 +578,6 @@ try {
 									? "active-chip"
 									: "chip"
 							}
-							style="font-size: 0.7rem;"
 						>
 							{c.name}
 						</a>
@@ -599,14 +587,8 @@ try {
 		</div>
 
 		<details class="filter-group">
-			<summary
-				style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; list-style: none; outline: none;"
-			>
-				<span
-					class="text-uppercase"
-					style="font-size: 0.75rem; color: var(--color-accent); font-weight: 600; letter-spacing: 2px;"
-					>Motif Batik</span
-				>
+			<summary class="filter-group-summary">
+				<span class="filter-title">Motif Batik</span>
 				<svg
 					class="chevron"
 					width="12"
@@ -617,28 +599,25 @@ try {
 					stroke-width="2.5"
 					stroke-linecap="round"
 					stroke-linejoin="round"
-					style="opacity: 0.5; transition: transform 0.3s ease;"
-					><polyline points="6 9 12 15 18 9"
-					></polyline></svg
 				>
+					<polyline points="6 9 12 15 18 9"></polyline>
+				</svg>
 			</summary>
-			<div
-				style="display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem 0 1rem 0;"
-			>
+			<div class="chips-wrap" style="padding-top: 0.3rem;">
 				<a
 					href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), motif: "", page: "1" })}`}
-					class={!motifFilter
-						? "active-filter"
-						: "filter-link"}>Semua Motif</a
+					class={!motifFilter ? "active-chip" : "chip"}
 				>
+					Semua Motif
+				</a>
 				{
 					motifsData?.map((m) => (
 						<a
 							href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), motif: m.name, page: "1" })}`}
 							class={
 								motifFilter === m.name
-									? "active-filter"
-									: "filter-link"
+									? "active-chip"
+									: "chip"
 							}
 						>
 							{m.name}
@@ -648,15 +627,28 @@ try {
 			</div>
 		</details>
 
-		<div
-			style="margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid var(--color-border);"
-		>
-			<p
-				style="font-size: 0.75rem; opacity: 0.4; font-style: italic;"
+			<div
+				style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #f1f5f9;"
 			>
-				Menampilkan {totalItems} produk dari koleksi
-				kami.
-			</p>
+				<p
+					style="font-size: 0.75rem; opacity: 0.5; font-style: italic; margin: 0;"
+				>
+					Menampilkan {totalItems} produk dari koleksi kami.
+				</p>
+			</div>
+		</div>
+
+		<!-- Sticky Bottom Action for Mobile -->
+		<div class="sidebar-mobile-footer">
+			{hasActiveFilters && (
+				<a href="/products" class="mobile-reset-btn">
+					Reset
+				</a>
+			)}
+			<button type="button" class="mobile-apply-btn" id="mobile-apply-filter-btn">
+				<span>Terapkan Filter</span>
+				<span class="mobile-apply-count">({totalItems} Produk)</span>
+			</button>
 		</div>
 	</aside>
 
@@ -867,7 +859,7 @@ try {
 			id="catalog-meta" 
 			data-total-pages={totalPages} 
 			data-current-page={currentPage} 
-			data-params-string={productParams.toString()}
+			data-params-string={searchParams.toString()}
 			style="display:none;"
 		></div>
 
@@ -905,6 +897,10 @@ try {
 	.sidebar-mobile-header {
 		display: none;
 	}
+
+	.sidebar-mobile-footer {
+		display: none;
+	}
 	
 	.mobile-filter-trigger-btn {
 		display: none;
@@ -939,65 +935,255 @@ try {
 		display: none;
 	}
 
+	.sidebar-scroll-content {
+		display: flex;
+		flex-direction: column;
+		gap: 1.2rem;
+		width: 100%;
+	}
+
 	.filter-group {
 		width: 100%;
+		border-bottom: 1px solid #f1f5f9;
+		padding-bottom: 1.1rem;
+	}
+
+	.filter-group:last-of-type {
+		border-bottom: none;
+	}
+
+	.filter-group-header,
+	.filter-group-summary {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 0.65rem;
+		cursor: pointer;
+		list-style: none;
+		outline: none;
+	}
+
+	.filter-title {
+		font-size: 0.72rem;
+		color: var(--color-accent, #94723c);
+		font-weight: 700;
+		letter-spacing: 1.8px;
+		text-transform: uppercase;
+		margin: 0;
+	}
+
+	.filter-reset-small {
+		font-size: 0.72rem;
+		color: #94a3b8;
+		text-decoration: none;
+		font-weight: 600;
+		padding: 2px 6px;
+		border-radius: 4px;
+		transition: all 0.2s;
+	}
+
+	.filter-reset-small:hover {
+		color: #ef4444;
+		background: #fef2f2;
+	}
+
+	/* Price Filter Row */
+	.price-inputs-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 	}
 
 	.price-input {
-		padding: 0.6rem 0.8rem;
-		border: 1px solid #eee;
-		border-radius: 4px;
+		flex: 1;
+		width: 100%;
+		padding: 0.55rem 0.75rem;
+		border: 1px solid #e2e8f0;
+		border-radius: 8px;
 		font-size: 0.8rem;
 		outline: none;
-		width: 100%;
-		background: #fafafa;
-		transition: all 0.3s ease;
+		background: #f8fafc;
+		color: var(--color-text, #1e293b);
+		font-family: var(--font-main);
+		font-weight: 500;
+		transition: all 0.2s ease;
 	}
 
 	.price-input:focus {
-		border-color: var(--color-accent);
-		background: #fff;
-		box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.05);
+		border-color: var(--color-accent, #c5a880);
+		background: #ffffff;
+		box-shadow: 0 0 0 3px rgba(197, 168, 128, 0.15);
 	}
 
-	.apply-filter-btn {
-		background: var(--color-text);
-		color: white;
+	.price-divider {
+		font-size: 0.8rem;
+		color: #cbd5e1;
+		user-select: none;
+	}
+
+	.apply-price-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		background: #1e293b;
+		color: #ffffff;
 		border: none;
-		padding: 0.5rem;
-		font-size: 0.7rem;
-		border-radius: 4px;
+		border-radius: 8px;
 		cursor: pointer;
-		text-transform: uppercase;
-		letter-spacing: 1px;
-		font-weight: 600;
-		transition: opacity 0.3s;
+		flex-shrink: 0;
+		transition: background 0.2s, transform 0.15s;
 	}
 
-	.apply-filter-btn:hover {
-		opacity: 0.9;
+	.apply-price-btn:hover {
+		background: #0f172a;
 	}
 
-	.filter-link {
-		font-size: 0.85rem;
-		opacity: 0.6;
-		transition: all 0.3s ease;
+	.apply-price-btn:active {
+		transform: scale(0.92);
+	}
+
+	/* Category Hierarchy Tree */
+	.category-tree {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 0.2rem 0;
+	}
+
+	.cat-node {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 8px 12px;
+		border-radius: 8px;
 		text-decoration: none;
-		color: var(--color-text);
+		font-family: var(--font-main);
+		transition: all 0.18s ease;
+		margin-bottom: 2px;
 	}
 
-	.filter-link:hover {
-		opacity: 1;
-		padding-left: 5px;
-		color: var(--color-accent);
-	}
-
-	.active-filter {
+	.cat-depth-0 {
 		font-size: 0.85rem;
-		opacity: 1;
-		color: var(--color-accent);
-		text-decoration: none;
 		font-weight: 600;
+		color: #1e293b;
+	}
+
+	.cat-depth-0:hover {
+		background: #f8fafc;
+		color: var(--color-accent, #94723c);
+	}
+
+	.cat-depth-0.is-parent {
+		background: #fdfaf6;
+		color: var(--color-accent, #8c6d3b);
+		font-weight: 700;
+		border-left: 3px solid var(--color-accent, #c5a880);
+	}
+
+	.cat-depth-1 {
+		font-size: 0.82rem;
+		font-weight: 500;
+		color: #475569;
+		margin-left: 14px;
+		padding-left: 14px;
+		border-left: 2px solid #e2e8f0;
+		border-radius: 0 8px 8px 0;
+	}
+
+	.cat-depth-1:hover {
+		background: #f8fafc;
+		color: #0f172a;
+		border-left-color: #cbd5e1;
+	}
+
+	.cat-depth-1.is-parent {
+		background: #fdfaf6;
+		color: var(--color-accent, #8c6d3b);
+		font-weight: 700;
+		border-left-color: var(--color-accent, #c5a880);
+	}
+
+	.cat-depth-2 {
+		font-size: 0.78rem;
+		font-weight: 500;
+		color: #64748b;
+		margin-left: 28px;
+		padding-left: 14px;
+		border-left: 2px solid #cbd5e1;
+		border-radius: 0 8px 8px 0;
+	}
+
+	.cat-depth-2:hover {
+		background: #f8fafc;
+		color: #0f172a;
+		border-left-color: #94a3b8;
+	}
+
+	.cat-node.is-selected {
+		background: #1e293b !important;
+		color: #ffffff !important;
+		font-weight: 600 !important;
+		border-left-color: var(--color-accent, #c5a880) !important;
+		box-shadow: 0 2px 8px rgba(30, 41, 59, 0.18);
+	}
+
+	.cat-check {
+		color: #ffffff;
+		flex-shrink: 0;
+		margin-left: 8px;
+	}
+
+	.cat-chevron {
+		opacity: 0.4;
+	}
+
+	/* Chips Styling */
+	.chips-wrap {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+		padding: 0.2rem 0;
+	}
+
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		padding: 6px 14px;
+		border: 1px solid #e2e8f0;
+		border-radius: 20px;
+		color: #475569;
+		font-size: 0.75rem;
+		font-weight: 500;
+		background: #ffffff;
+		text-decoration: none;
+		transition: all 0.2s ease;
+	}
+
+	.chip:hover {
+		border-color: var(--color-accent, #c5a880);
+		color: var(--color-accent, #8c6d3b);
+		background: #fdfaf6;
+		transform: translateY(-1px);
+	}
+
+	.active-chip {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		padding: 6px 14px;
+		background: #1e293b;
+		color: #ffffff !important;
+		border: 1px solid #1e293b;
+		border-radius: 20px;
+		font-size: 0.75rem;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(30, 41, 59, 0.2);
+		text-decoration: none;
 	}
 
 	.sorting-controls {
@@ -1119,53 +1305,12 @@ try {
 		font-weight: 700;
 	}
 
-	.filter-group summary span {
-		transition: color 0.3s ease;
-	}
-
-	.filter-group:hover summary span {
-		color: var(--color-accent);
-	}
-
 	details[open] .chevron {
 		transform: rotate(180deg);
 	}
 
 	details summary::-webkit-details-marker {
 		display: none;
-	}
-
-	.chip {
-		display: inline-block;
-		padding: 0.35rem 0.8rem;
-		border: 1px solid #eee;
-		border-radius: var(--radius-sm);
-		color: var(--color-text);
-		opacity: 0.6;
-		transition: all 0.3s ease;
-		font-weight: 500;
-		background: #fcfcfc;
-		text-decoration: none;
-	}
-
-	.chip:hover {
-		border-color: var(--color-accent);
-		color: var(--color-accent);
-		opacity: 1;
-		transform: translateY(-1px);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-	}
-
-	.active-chip {
-		display: inline-block;
-		padding: 0.35rem 0.8rem;
-		background: var(--color-text);
-		color: white !important;
-		border: 1px solid var(--color-text);
-		border-radius: var(--radius-sm);
-		font-weight: 600;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-		text-decoration: none;
 	}
 
 	.product-grid {
@@ -1191,26 +1336,27 @@ try {
 			gap: var(--spacing-xl);
 		}
 
-		/* Transform sidebar into premium slide-up Bottom Sheet */
+		/* Transform sidebar into a clean flexbox bottom sheet */
 		.filters-sidebar {
 			position: fixed !important;
 			bottom: 0 !important;
 			left: 0 !important;
+			right: 0 !important;
 			top: auto !important;
 			width: 100% !important;
-			max-height: 80vh !important;
-			background: white !important;
+			height: 85vh !important;
+			max-height: 85vh !important;
+			background: #ffffff !important;
 			z-index: 10001 !important;
-			padding: 0 1.5rem 2rem 1.5rem !important;
+			padding: 0 !important;
 			border-radius: 24px 24px 0 0 !important;
-			box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.15) !important;
-			transform: translateY(100%) !important; /* Hide off-screen */
-			transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+			box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2) !important;
+			transform: translateY(100%) !important;
+			transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
 			display: flex !important;
 			flex-direction: column !important;
-			gap: 1.5rem !important;
-			overflow-y: auto !important;
-			visibility: hidden; /* prevent tab focus when closed */
+			overflow: hidden !important; /* Root container NEVER scrolls */
+			visibility: hidden;
 		}
 
 		.filters-sidebar.active {
@@ -1218,25 +1364,23 @@ try {
 			visibility: visible !important;
 		}
 
-		/* Show specific mobile element layout */
+		/* Top Header: Always Pinned */
 		.sidebar-mobile-header {
 			display: block;
-			position: sticky;
-			top: 0;
-			background: white;
+			flex-shrink: 0;
+			background: #ffffff;
 			z-index: 10;
-			padding-top: 0.8rem;
-			padding-bottom: 1rem;
-			margin-bottom: 0.5rem;
+			padding: 0.75rem 1.25rem 0.75rem 1.25rem;
+			margin: 0;
 			border-bottom: 1px solid #f1f5f9;
 		}
 
 		.drag-handle {
-			width: 40px;
+			width: 36px;
 			height: 4px;
-			background: #e2e8f0;
-			border-radius: 2px;
-			margin: 0 auto 1rem auto;
+			background: #cbd5e1;
+			border-radius: 99px;
+			margin: 0 auto 0.75rem auto;
 		}
 
 		.header-title-row {
@@ -1245,13 +1389,32 @@ try {
 			align-items: center;
 		}
 
-		.header-title-row h3 {
-			font-size: 1rem;
+		.header-title-left {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.header-title-left h3 {
+			font-size: 0.95rem;
 			font-weight: 700;
 			margin: 0;
 			text-transform: uppercase;
-			letter-spacing: 1px;
-			color: var(--color-text);
+			letter-spacing: 1.2px;
+			color: #0f172a;
+		}
+
+		.active-filter-badge {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			background: var(--color-accent, #c5a880);
+			color: #ffffff;
+			font-size: 0.7rem;
+			font-weight: 700;
+			width: 20px;
+			height: 20px;
+			border-radius: 50%;
 		}
 
 		.close-sidebar-btn {
@@ -1260,18 +1423,106 @@ try {
 			width: 32px;
 			height: 32px;
 			border-radius: 50%;
-			font-size: 1.2rem;
-			line-height: 1;
 			cursor: pointer;
-			color: #64748b;
+			color: #475569;
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			transition: background 0.2s;
+			transition: background 0.2s, transform 0.15s;
 		}
 
 		.close-sidebar-btn:hover {
 			background: #e2e8f0;
+			color: #0f172a;
+		}
+
+		.close-sidebar-btn:active {
+			transform: scale(0.92);
+		}
+
+		/* Middle Content: THE ONLY ELEMENT THAT SCROLLS */
+		.sidebar-scroll-content {
+			flex: 1 1 auto;
+			overflow-y: auto;
+			-webkit-overflow-scrolling: touch;
+			padding: 1.25rem 1.25rem 2rem 1.25rem;
+			display: flex;
+			flex-direction: column;
+			gap: 1.2rem;
+		}
+
+		/* Bottom Footer: Always Pinned at bottom of drawer */
+		.sidebar-mobile-footer {
+			display: flex !important;
+			align-items: center;
+			gap: 10px;
+			flex-shrink: 0;
+			background: #ffffff !important;
+			border-top: 1px solid #eef2f6 !important;
+			box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06) !important;
+			padding: 12px 16px !important;
+			padding-bottom: max(16px, env(safe-area-inset-bottom, 16px)) !important;
+			z-index: 10;
+			width: 100%;
+			box-sizing: border-box;
+		}
+
+		.mobile-reset-btn {
+			height: 48px;
+			padding: 0 20px;
+			background: #f1f5f9;
+			color: #475569;
+			border: 1px solid #e2e8f0;
+			border-radius: 12px;
+			font-size: 0.9rem;
+			font-weight: 600;
+			font-family: var(--font-main);
+			text-decoration: none;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			white-space: nowrap;
+			cursor: pointer;
+			transition: all 0.2s ease;
+			box-sizing: border-box;
+		}
+
+		.mobile-reset-btn:hover {
+			background: #e2e8f0;
+			color: #0f172a;
+		}
+
+		.mobile-reset-btn:active {
+			transform: scale(0.97);
+		}
+
+		.mobile-apply-btn {
+			height: 48px;
+			flex: 1;
+			padding: 0 18px;
+			background: #1e293b;
+			color: #ffffff;
+			border: none;
+			border-radius: 12px;
+			font-size: 0.9rem;
+			font-weight: 600;
+			font-family: var(--font-main);
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 6px;
+			box-shadow: 0 4px 14px rgba(30, 41, 59, 0.2);
+			transition: transform 0.15s ease, background-color 0.2s ease;
+			box-sizing: border-box;
+		}
+
+		.mobile-apply-btn:hover {
+			background: #0f172a;
+		}
+
+		.mobile-apply-btn:active {
+			transform: scale(0.98);
 		}
 
 		/* Floating trigger at screen center bottom for thumb access */
@@ -1285,7 +1536,7 @@ try {
 			left: 50%;
 			transform: translateX(-50%);
 			z-index: 9999;
-			background: #1e293b; /* Slate-800 */
+			background: #1e293b;
 			color: white;
 			border: none;
 			padding: 0.8rem 1.5rem;
@@ -1316,8 +1567,8 @@ try {
 			display: block;
 			position: fixed;
 			inset: 0;
-			background: rgba(0, 0, 0, 0.4);
-			backdrop-filter: blur(2px);
+			background: rgba(0, 0, 0, 0.45);
+			backdrop-filter: blur(3px);
 			z-index: 10000;
 			opacity: 0;
 			pointer-events: none;
@@ -1328,23 +1579,20 @@ try {
 			opacity: 1;
 			pointer-events: auto;
 		}
-
-		.filter-group {
-			flex: none;
-			width: 100%;
-		}
-
-		.active-filter {
-			padding-left: 0;
-			border-left: none;
-			border-bottom: 2px solid var(--color-accent);
-		}
 	}
 
 	@media (max-width: 600px) {
-		/* Retain layout structures inside mobile bottom sheet but optimize for spacing */
-		.filters-sidebar {
-			padding: 0 1.2rem 2rem 1.2rem !important;
+		.sidebar-mobile-header {
+			padding: 0.75rem 1rem 0.75rem 1rem;
+		}
+
+		.sidebar-scroll-content {
+			padding: 1rem 1rem 1.5rem 1rem;
+		}
+
+		.sidebar-mobile-footer {
+			padding: 10px 14px !important;
+			padding-bottom: max(14px, env(safe-area-inset-bottom, 14px)) !important;
 		}
 	}
 </style>

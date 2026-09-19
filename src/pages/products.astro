@@ -4,7 +4,7 @@ import Layout from "../layouts/Layout.astro";
 import CatalogSkeleton from "../components/CatalogSkeleton.astro";
 
 const { searchParams } = Astro.url;
-const typeFilter = searchParams.get("type");
+const typeFilter = searchParams.get("type") || searchParams.get("type_id");
 const motifFilter = searchParams.get("motif");
 const sizeFilter = searchParams.get("size");
 const fitFilter = searchParams.get("fit");
@@ -429,11 +429,11 @@ const sort = searchParams.get("sort") || "newest";
 				closeBtn.addEventListener("click", () => toggleSidebar(false));
 			}
 
-			// Auto-close on filter select
-			const filterLinks = sidebar.querySelectorAll("a");
-			filterLinks.forEach((link) => {
-				link.addEventListener("click", () => toggleSidebar(false));
-			});
+			// Manual apply button to close drawer when finished
+			const applyBtn = document.getElementById("mobile-apply-filter-btn");
+			if (applyBtn) {
+				applyBtn.addEventListener("click", () => toggleSidebar(false));
+			}
 		}
 
 		function initInfiniteScroll() {
@@ -536,9 +536,12 @@ const sort = searchParams.get("sort") || "newest";
 					window.history.pushState({}, "", href);
 					loadCatalog(true); // Reload data in place with spinner
 
-					// Smoothly anchor user view back to header (UX Best Practice)
-					const anchor = document.querySelector(".catalog-header");
-					if (anchor) anchor.scrollIntoView({ behavior: "smooth" });
+					// Smoothly anchor user view back to header (only if mobile sidebar is closed)
+					const isMobileSidebarOpen = document.getElementById("filters-sidebar")?.classList.contains("active");
+					if (!isMobileSidebarOpen) {
+						const anchor = document.querySelector(".catalog-header");
+						if (anchor) anchor.scrollIntoView({ behavior: "smooth" });
+					}
 				});
 			});
 
@@ -579,14 +582,23 @@ const sort = searchParams.get("sort") || "newest";
 					window.history.pushState({}, "", path + query);
 					loadCatalog(true);
 
-					const anchor = document.querySelector(".catalog-header");
-					if (anchor) anchor.scrollIntoView({ behavior: "smooth" });
+					const isMobileSidebarOpen = document.getElementById("filters-sidebar")?.classList.contains("active");
+					if (!isMobileSidebarOpen) {
+						const anchor = document.querySelector(".catalog-header");
+						if (anchor) anchor.scrollIntoView({ behavior: "smooth" });
+					}
 				});
 			});
 		}
 
 		async function loadCatalog(showLoader = false) {
 			try {
+				// Detect if mobile drawer is currently open & capture scroll position
+				const oldSidebar = document.getElementById("filters-sidebar");
+				const wasSidebarOpen = oldSidebar?.classList.contains("active");
+				const oldScrollEl = document.getElementById("sidebar-scroll-content") || oldSidebar;
+				const oldScrollTop = oldScrollEl?.scrollTop || 0;
+
 				if (showLoader) {
 					const grid = container.querySelector(".product-grid");
 					if (grid) {
@@ -657,6 +669,16 @@ const sort = searchParams.get("sort") || "newest";
 							</div>
 						`;
 					}
+
+					// Update apply button text to indicate active loading
+					if (wasSidebarOpen) {
+						const applyBtn = document.getElementById("mobile-apply-filter-btn");
+						if (applyBtn) {
+							applyBtn.innerHTML = "<span>Memperbarui...</span>";
+							applyBtn.style.opacity = "0.7";
+							applyBtn.style.pointerEvents = "none";
+						}
+					}
 				}
 
 				const params = new URLSearchParams(window.location.search);
@@ -672,6 +694,31 @@ const sort = searchParams.get("sort") || "newest";
 
 				// Update main dynamic catalog frame
 				container.innerHTML = html;
+
+				// Seamlessly restore mobile sidebar state and scroll position
+				if (wasSidebarOpen) {
+					const newSidebar = document.getElementById("filters-sidebar");
+					const newOverlay = document.getElementById("sidebar-overlay");
+					const newScrollEl = document.getElementById("sidebar-scroll-content") || newSidebar;
+					if (newSidebar) {
+						newSidebar.style.transition = "none";
+						newSidebar.classList.add("active");
+						requestAnimationFrame(() => {
+							newSidebar.style.transition = "";
+						});
+					}
+					if (newScrollEl) {
+						newScrollEl.scrollTop = oldScrollTop;
+					}
+					if (newOverlay) {
+						newOverlay.style.transition = "none";
+						newOverlay.classList.add("active");
+						requestAnimationFrame(() => {
+							newOverlay.style.transition = "";
+						});
+					}
+					document.body.style.overflow = "hidden";
+				}
 
 				// Sync static search form bar on layout to match URL params
 				const layoutSearchInput =

@@ -22,7 +22,7 @@ try {
     product = p;
     // Fetch related products (same type, excluding current)
     try {
-      const resProducts = await apiFetch<any>(`products?type=${p.type_id}&per_page=5`);
+      const resProducts = await apiFetch<any>(`products?type_id=${p.type_id}&per_page=5`);
       const allProducts = resProducts?.data || resProducts || [];
       relatedProducts = allProducts
         .filter((item: any) => item.is_active && item.id !== id)

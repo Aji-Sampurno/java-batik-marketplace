@@ -3,20 +3,31 @@
 export const prerender = false;
 import { apiFetch } from "../../lib/api";
 import ProductCard from "../../components/ProductCard.astro";
+import { matchOutlet } from "../../lib/outlet";
+import { resolveCategoryIds } from "../../lib/category";
 
 const { searchParams } = Astro.url;
 const currentPage = Number(searchParams.get("page") || "1");
 const itemsPerPage = 12;
 
+const typeFilter = searchParams.get("type") || searchParams.get("type_id") || searchParams.get("type_id[]");
+const directTypeIds = [
+    ...searchParams.getAll("type_id[]"),
+    ...searchParams.getAll("type_id"),
+].filter(Boolean);
+
+const outletFilter = searchParams.get("outlet");
+const sizeFilter = searchParams.get("size");
+const fitFilter = searchParams.get("fit");
+const colorFilter = searchParams.get("color");
+
 const productParams = new URLSearchParams();
 productParams.set("page", String(currentPage));
 productParams.set("per_page", String(itemsPerPage));
 
+if (colorFilter) productParams.set("color", colorFilter);
 
-const sizeFilter = searchParams.get("size");
-const fitFilter = searchParams.get("fit");
-
-const passThrough = ["type", "motif", "fit", "search", "min_price", "max_price", "sort"];
+const passThrough = ["motif", "fit", "search", "min_price", "max_price", "sort"];
 passThrough.forEach(key => {
     const altKey = key === "search" ? "q" : (key === "min_price" ? "minP" : (key === "max_price" ? "maxP" : key));
     const val = searchParams.get(key) || searchParams.get(altKey);
@@ -39,6 +50,34 @@ let paginatedProducts = [];
 let settings = { contact_whatsapp: "628123456789" };
 
 try {
+    let matchingTypeIds: string[] = directTypeIds;
+    let targetType: any = null;
+    let rootType: any = null;
+
+    if (typeFilter) {
+        const typesRes = await apiFetch<any>("types").catch(() => []);
+        const typesData = typesRes?.data || typesRes || [];
+        const catResolved = resolveCategoryIds(typesData, typeFilter);
+        targetType = catResolved.targetType;
+        rootType = catResolved.rootType;
+        if (matchingTypeIds.length === 0) {
+            matchingTypeIds = catResolved.matchingTypeIds;
+        }
+    }
+
+    if (targetType) {
+        if (rootType) {
+            productParams.set("type_id", rootType.id);
+        }
+        if (targetType.parent_id) {
+            productParams.set("type", targetType.id);
+        }
+    } else if (matchingTypeIds.length === 1) {
+        productParams.set("type_id", matchingTypeIds[0]);
+    } else if (matchingTypeIds.length > 1) {
+        matchingTypeIds.forEach((id) => productParams.append("type_id[]", id));
+    }
+
     const pRes = await apiFetch<any>(`products?${productParams.toString()}`);
     let rawProducts = pRes?.data || [];
     const meta = pRes?.meta || pRes;
@@ -70,6 +109,27 @@ try {
     const realSizeFilter = (sizeFilter && !sizeFilter.includes("%")) ? sizeFilter.trim().toUpperCase() : null;
 
     const filterProduct = (p: any) => {
+        if (matchingTypeIds.length > 0) {
+            const pTypeId = p.type_id || p.type?.id;
+            const pCategoryIds = (p.categories || []).map((c: any) => c.id);
+            const matchesType = (pTypeId && matchingTypeIds.includes(pTypeId)) ||
+                pCategoryIds.some((cid: string) => matchingTypeIds.includes(cid));
+            if (!matchesType) return false;
+        }
+
+        if (outletFilter) {
+            const pOutlet = (p.outlet || p.outlet_location || "").trim();
+            const variants = p.variants || p.product_variants || [];
+            const matchesOutlet = (
+                (pOutlet && matchOutlet(pOutlet, outletFilter)) ||
+                variants.some((v: any) => {
+                    const vOutlet = (v.outlet || v.outlet_location || v.counter_name || "").trim();
+                    return vOutlet && matchOutlet(vOutlet, outletFilter);
+                })
+            );
+            if (!matchesOutlet) return false;
+        }
+
         if (!fitFilter && !realSizeFilter) return true;
         const variants = p.variants || p.product_variants || [];
         if (variants.length === 0) {
