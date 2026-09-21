@@ -62,6 +62,27 @@ if (isSetelanProduct && rawProductVariants.length > 0) {
   if (validPrices.length >= 2 && effectiveProductPrice < (validPrices[0] + validPrices[1])) {
     effectiveProductPrice = validPrices[0] + validPrices[1];
   }
+} else if (!isSetelanProduct && rawProductVariants.length > 0) {
+  const validVariants = rawProductVariants.filter((v: any) => Number(v.price || 0) > 0);
+  if (validVariants.length > 0) {
+    const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', '3L', '4XL', '4L', '5XL', '5L', 'ALL SIZE'];
+    const sortedBySize = [...validVariants].sort((a: any, b: any) => {
+      const sizeA = (a.size_name || a.name || '').trim().toUpperCase();
+      const sizeB = (b.size_name || b.name || '').trim().toUpperCase();
+      const idxA = sizeOrder.findIndex(s => sizeA === s || sizeA.startsWith(s + ' '));
+      const idxB = sizeOrder.findIndex(s => sizeB === s || sizeB.startsWith(s + ' '));
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return Number(a.price) - Number(b.price);
+    });
+    const minPrice = Math.min(...validVariants.map((v: any) => Number(v.price)));
+    const smallestSizePrice = Number(sortedBySize[0]?.price) || minPrice;
+    const cheapest = Math.min(smallestSizePrice, minPrice);
+    if (effectiveProductPrice <= 0 || cheapest < effectiveProductPrice) {
+      effectiveProductPrice = cheapest;
+    }
+  }
 }
 
 const waNumber = settings.contact_whatsapp || "628123456789";
@@ -344,11 +365,18 @@ parsedVariantsList.forEach((v: any) => {
   const sName = v.subName || '';
   const priceVal = Number(v.price || 0);
   const dalamanVal = v.dalaman || '';
-  const key = `${mName}___${sleeveVal}___${bSize}___${sName}___${priceVal}___${dalamanVal}`;
+  const key = `${mName}___${sleeveVal}___${bSize}`;
   const stockNum = parseInt(v.stock || 0);
   const outName = v.outlet || '';
 
   if (!sizeUnitMap.has(key)) {
+    const outletPrices: Record<string, number> = {};
+    const outletStocks: Record<string, number> = {};
+    if (outName) {
+      if (priceVal > 0) outletPrices[outName] = priceVal;
+      outletStocks[outName] = stockNum;
+    }
+
     sizeUnitMap.set(key, {
       motifName: mName,
       sleeve: sleeveVal,
@@ -362,13 +390,25 @@ parsedVariantsList.forEach((v: any) => {
       image: v.image_url || v.motifImage || '',
       sizeName: v.size_name || bSize,
       counterCodes: [v.counter || v.sku || ''].filter(Boolean),
-      outlets: [outName].filter(Boolean)
+      outlets: [outName].filter(Boolean),
+      outletPrices,
+      outletStocks
     });
   } else {
     const existing = sizeUnitMap.get(key);
     existing.stock += stockNum;
+    if (priceVal > 0 && (existing.price <= 0 || priceVal < existing.price)) {
+      existing.price = priceVal;
+    }
+    if (!existing.dalaman && dalamanVal) existing.dalaman = dalamanVal;
     if (v.counter || v.sku) existing.counterCodes.push(v.counter || v.sku);
-    if (outName && !existing.outlets.includes(outName)) existing.outlets.push(outName);
+    if (outName) {
+      if (!existing.outlets.includes(outName)) existing.outlets.push(outName);
+      if (priceVal > 0 && (!existing.outletPrices[outName] || priceVal < existing.outletPrices[outName])) {
+        existing.outletPrices[outName] = priceVal;
+      }
+      existing.outletStocks[outName] = (existing.outletStocks[outName] || 0) + stockNum;
+    }
   }
 });
 
@@ -434,6 +474,34 @@ function renderMarkdown(md: string): string {
   }
 
   return processedLines.join('\n');
+}
+
+function getCardDisplayPrice(p: any): number {
+  const pVariants = p?.variants || p?.product_variants || [];
+  let displayPrice = Number(p?.price) || 0;
+  if (pVariants && pVariants.length > 0) {
+    const validVariants = pVariants.filter((v: any) => Number(v.price || 0) > 0);
+    if (validVariants.length > 0) {
+      const fullSizeOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', '3L', '4XL', '4L', '5XL', '5L', 'ALL SIZE'];
+      const sortedBySize = [...validVariants].sort((a: any, b: any) => {
+        const sizeA = (a.size_name || a.name || '').trim().toUpperCase();
+        const sizeB = (b.size_name || b.name || '').trim().toUpperCase();
+        const idxA = fullSizeOrder.findIndex(s => sizeA === s || sizeA.startsWith(s + ' '));
+        const idxB = fullSizeOrder.findIndex(s => sizeB === s || sizeB.startsWith(s + ' '));
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return Number(a.price) - Number(b.price);
+      });
+      const minPrice = Math.min(...validVariants.map((v: any) => Number(v.price)));
+      const smallestSizePrice = Number(sortedBySize[0]?.price) || minPrice;
+      const cheapest = Math.min(smallestSizePrice, minPrice);
+      if (displayPrice <= 0 || cheapest < displayPrice) {
+        displayPrice = cheapest;
+      }
+    }
+  }
+  return displayPrice;
 }
 ---
 
@@ -510,8 +578,9 @@ function renderMarkdown(md: string): string {
 							</div>
 						</div>
 						<h1 class="product-name">{product.name}</h1>
-						<div style="display: flex; align-items: center; gap: 1rem; margin-bottom: var(--spacing-lg);">
+						<div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: var(--spacing-lg); flex-wrap: wrap;">
 							<p class="product-price" style="margin: 0;">Rp {Number(effectiveProductPrice).toLocaleString('id-ID')}</p>
+							<span id="outlet-price-tag" class="product-outlet-pill" style="display: none;"></span>
 							{product.original_price && product.original_price > effectiveProductPrice && (
 								<div style="display: flex; flex-direction: column;">
 									<span style="text-decoration: line-through; color: #999; font-size: 0.9rem;">
@@ -555,29 +624,6 @@ function renderMarkdown(md: string): string {
 									</span>
 								</div>
 							</div>
-
-							{uniqueOutletsList.length > 0 && (
-								<div id="product-outlet-section" style="border-top: 1px solid #ede8df; margin-top: 1rem; padding-top: 0.85rem; display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
-									<span id="outlet-section-label" style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #8c827a; font-weight: 600;">
-										Lokasi Outlet:
-									</span>
-									<div id="outlet-pills-container" style="display: inline-flex; flex-wrap: wrap; gap: 0.45rem;">
-										{uniqueOutletsList.map(out => {
-											const associatedMotifs = outletMotifsMap[out] || [];
-											return (
-												<span 
-													class="outlet-pill-badge" 
-													data-outlet={out}
-													data-motifs={associatedMotifs.join(",")}
-													style="background: #ffffff; color: #44403c; border: 1px solid #e2ddd5; padding: 3px 9px; border-radius: 4px; font-size: 0.76rem; font-weight: 500; transition: all 0.2s;"
-												>
-													{out}
-												</span>
-											);
-										})}
-									</div>
-								</div>
-							)}
 						</div>
 
 						{/* Variant & Size Selection */}
@@ -658,6 +704,8 @@ function renderMarkdown(md: string): string {
 														data-outlet={u.outlet}
 														data-image={u.image}
 														data-fullname={u.sizeName}
+														data-outlet-prices={JSON.stringify(u.outletPrices || {})}
+														data-outlet-stocks={JSON.stringify(u.outletStocks || {})}
 													>
 														<span>{u.baseSize}</span>
 														{isOutOfStock && (
@@ -668,6 +716,22 @@ function renderMarkdown(md: string): string {
 											})}
 										</div>
 									</div>
+
+									<!-- 4. Pilih Cabang & Harga -->
+									{uniqueOutletsList.length > 0 && (
+										<div id="selector-step-outlet" style="margin-top: 0.25rem;">
+											<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.55rem;">
+												<span style="font-size: 0.72rem; color: #78716c; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">
+													PILIH GERAI & HARGA
+												</span>
+												<span style="font-size: 0.72rem; color: #8c7851; font-weight: 500;">
+													Ukuran <strong id="breakdown-current-size" style="font-weight: 700; color: #1c1917;">-</strong>
+												</span>
+											</div>
+											<div id="outlet-branches-container" data-all-outlets={JSON.stringify(uniqueOutletsList)} class="outlet-options-list">
+											</div>
+										</div>
+									)}
 
 								</div>
 							</div>
@@ -741,20 +805,8 @@ function renderMarkdown(md: string): string {
 								</h3>
 								<p class="price-tag" style="font-size: 0.95rem;">
 									{(() => {
-										let maxPrice = Number(p.price) || 0;
-										const pVariants = p.variants || p.product_variants || [];
-										if(pVariants && pVariants.length > 0) {
-											const vPrices = pVariants
-												.map((v:any) => Number(v.price) || 0)
-												.filter((pr: number) => pr > 0);
-											if (vPrices.length > 0) {
-												const vMax = Math.max(...vPrices);
-												if (vMax > maxPrice) {
-													maxPrice = vMax;
-												}
-											}
-										}
-										return maxPrice > 0 ? `Rp ${maxPrice.toLocaleString("id-ID")}` : `Rp ${Number(p.price || 0).toLocaleString("id-ID")}`;
+										const dPrice = getCardDisplayPrice(p);
+										return dPrice > 0 ? `Rp ${dPrice.toLocaleString("id-ID")}` : `Rp ${Number(p.price || 0).toLocaleString("id-ID")}`;
 									})()}
 								</p>
 							</div>
@@ -1062,6 +1114,146 @@ function renderMarkdown(md: string): string {
 			border: 1px dashed #d6d3d1 !important;
 			cursor: not-allowed !important;
 			opacity: 0.6;
+		}
+
+		.product-outlet-pill {
+			display: inline-flex;
+			align-items: center;
+			gap: 0.35rem;
+			font-size: 0.75rem;
+			font-weight: 500;
+			padding: 0.2rem 0.65rem;
+			border-radius: 9999px;
+			background: #fdfbf7;
+			color: #57534e;
+			border: 1px solid #e7e2d8;
+			letter-spacing: 0.2px;
+		}
+
+		/* Boutique Outlet Option Rows */
+		:global(.outlet-options-list) {
+			display: flex;
+			flex-direction: column;
+			gap: 0.45rem;
+			width: 100%;
+		}
+
+		:global(.outlet-option-row) {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			width: 100%;
+			padding: 0.55rem 0.85rem;
+			background: #ffffff;
+			border: 1px solid #e7e5e4;
+			border-radius: 6px;
+			cursor: pointer;
+			transition: all 0.15s ease;
+			text-align: left;
+			font-family: var(--font-main);
+		}
+
+		:global(.outlet-option-row:hover) {
+			border-color: #8c7851 !important;
+			background: #faf8f5 !important;
+		}
+
+		:global(.outlet-option-row.active) {
+			background: #fdfbf7 !important;
+			border: 1.5px solid #8c7851 !important;
+			box-shadow: 0 1px 4px rgba(140, 120, 81, 0.08);
+		}
+
+		:global(.outlet-option-row .outlet-row-left) {
+			display: flex;
+			align-items: center;
+			gap: 0.65rem;
+			min-width: 0;
+		}
+
+		:global(.outlet-option-row .outlet-radio-circle) {
+			width: 15px;
+			height: 15px;
+			border-radius: 50%;
+			border: 1.5px solid #d6d3d1;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			flex-shrink: 0;
+			transition: all 0.15s ease;
+		}
+
+		:global(.outlet-option-row.active .outlet-radio-circle) {
+			border-color: #8c7851;
+			background: #8c7851;
+		}
+
+		:global(.outlet-option-row.active .outlet-radio-circle::after) {
+			content: '';
+			width: 5px;
+			height: 5px;
+			border-radius: 50%;
+			background: #ffffff;
+		}
+
+		:global(.outlet-option-row .outlet-branch-name) {
+			font-size: 0.84rem;
+			font-weight: 500;
+			color: #1c1917;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		:global(.outlet-option-row.active .outlet-branch-name) {
+			font-weight: 600;
+			color: #1c1917;
+		}
+
+		:global(.outlet-option-row .outlet-row-right) {
+			display: flex;
+			align-items: center;
+			gap: 0.6rem;
+			flex-shrink: 0;
+		}
+
+		:global(.outlet-option-row .outlet-price-val) {
+			font-size: 0.84rem;
+			font-weight: 500;
+			color: #44403c;
+			letter-spacing: -0.2px;
+		}
+
+		:global(.outlet-option-row.active .outlet-price-val) {
+			color: #8c7851;
+			font-weight: 700;
+		}
+
+		:global(.outlet-option-row .outlet-stock-pill) {
+			font-size: 0.68rem;
+			font-weight: 600;
+			padding: 2px 6px;
+			border-radius: 4px;
+			background: #f5f5f4;
+			color: #78716c;
+			border: 1px solid #e7e5e4;
+		}
+
+		:global(.outlet-option-row.active .outlet-stock-pill) {
+			background: #f5efe3;
+			color: #786542;
+			border-color: #ded4c0;
+		}
+
+		:global(.outlet-unavail-note) {
+			width: 100%;
+			display: flex;
+			align-items: center;
+			gap: 0.4rem;
+			font-size: 0.72rem;
+			color: #a8a29e;
+			margin-top: 0.4rem;
+			padding-top: 0.2rem;
 		}
 
 		.sub-var-btn {
@@ -1389,7 +1581,13 @@ function renderMarkdown(md: string): string {
 			}
 		};
 
-		const updateWAMessage = (selectedVar, dalaman, subName, counter, outlet) => {
+		let currentSelectedOutlet = "";
+		let currentActiveSizeBtn = null;
+		let currentSizeOutletPrices = {};
+		let currentSizeOutletStocks = {};
+		const outletPriceTag = document.getElementById("outlet-price-tag");
+
+		const updateWAMessage = (selectedVar, dalaman, subName, counter, outlet, price) => {
 			if (waBtn) {
 				const code = `${product.code || ''}`;
 				const name = `${product.name || ''}`;
@@ -1402,6 +1600,7 @@ function renderMarkdown(md: string): string {
 				else if (dalaman === 'TF') detailsArr.push(`Dalaman: Non Furing`);
 				if (counter) detailsArr.push(`Counter: ${counter}`);
 				if (outlet) detailsArr.push(`Outlet: ${outlet}`);
+				if (price) detailsArr.push(`Harga: Rp ${Number(price).toLocaleString('id-ID')}`);
 				
 				const specText = detailsArr.length > 0 ? ` [${detailsArr.join(' | ')}]` : '';
 				const msg = encodeURIComponent(`Halo, saya tertarik memesan produk ${name} (${code})${specText}. Apakah masih tersedia?`);
@@ -1409,53 +1608,103 @@ function renderMarkdown(md: string): string {
 			}
 		};
 
-		const updateOutletInfo = (outlet) => {
-			// Highlight active outlet in spec section
-			const outletBadges = document.querySelectorAll('.outlet-pill-badge');
-			outletBadges.forEach(badge => {
-				const badgeOutlet = badge.getAttribute('data-outlet');
-				const isMatch = outlet && badgeOutlet && (badgeOutlet.toLowerCase() === outlet.toLowerCase() || outlet.toLowerCase().includes(badgeOutlet.toLowerCase()));
-				if (isMatch) {
-					badge.style.background = '#1c1917';
-					badge.style.color = '#ffffff';
-					badge.style.borderColor = '#1c1917';
-					badge.style.fontWeight = '600';
-					badge.style.boxShadow = '0 1px 4px rgba(0,0,0,0.1)';
-					badge.style.transform = 'none';
-				} else {
-					badge.style.background = '#ffffff';
-					badge.style.color = '#44403c';
-					badge.style.borderColor = '#e2ddd5';
-					badge.style.fontWeight = '500';
-					badge.style.boxShadow = 'none';
-					badge.style.transform = 'none';
+		const renderOutletCards = (btn, outletPrices, outletStocks) => {
+			const container = document.getElementById('outlet-branches-container');
+			const sizeLabel = document.getElementById('breakdown-current-size');
+			if (!container || !btn) return;
+
+			const currentSize = btn.getAttribute('data-size') || '';
+			if (sizeLabel) {
+				sizeLabel.innerText = currentSize;
+			}
+
+			const allOutletsAttr = container.getAttribute('data-all-outlets');
+			let allOutlets = [];
+			try {
+				allOutlets = JSON.parse(allOutletsAttr || '[]');
+			} catch(e) {}
+
+			// Outlets that have stock > 0 for this size
+			const availableOutlets = Object.keys(outletStocks || {}).filter(o => outletStocks[o] > 0);
+			// Also include any outlet that has explicit price if not already in availableOutlets
+			Object.keys(outletPrices || {}).forEach(o => {
+				if (!availableOutlets.includes(o) && (outletStocks[o] === undefined || outletStocks[o] > 0)) {
+					availableOutlets.push(o);
 				}
+			});
+
+			let html = '';
+			if (availableOutlets.length === 0) {
+				html = `
+					<div style="color: #78716c; font-size: 0.78rem; font-style: italic; padding: 0.2rem 0;">
+						Stok ukuran <strong>${currentSize}</strong> saat ini habis di semua cabang.
+					</div>
+				`;
+			} else {
+				availableOutlets.forEach(outName => {
+					const stock = outletStocks[outName] !== undefined ? outletStocks[outName] : 1;
+					const price = outletPrices[outName] || parseInt(btn.getAttribute('data-price') || '0', 10);
+					const isSelected = currentSelectedOutlet && (currentSelectedOutlet.toLowerCase() === outName.toLowerCase());
+
+					html += `
+						<button 
+							type="button"
+							class="outlet-option-row ${isSelected ? 'active' : ''}" 
+							data-outlet="${outName}" 
+							data-price="${price}" 
+							data-stock="${stock}"
+						>
+							<div class="outlet-row-left">
+								<span class="outlet-radio-circle"></span>
+								<span class="outlet-branch-name">${outName}</span>
+							</div>
+							<div class="outlet-row-right">
+								<span class="outlet-price-val">Rp ${Number(price).toLocaleString('id-ID')}</span>
+								<span class="outlet-stock-pill">${stock} pcs</span>
+							</div>
+						</button>
+					`;
+				});
+
+				const unavailableOutlets = allOutlets.filter(o => !availableOutlets.includes(o));
+				if (unavailableOutlets.length > 0) {
+					html += `
+						<div class="outlet-unavail-note">
+							<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; opacity: 0.7;"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+							<span>Tidak tersedia untuk ukuran ini di: ${unavailableOutlets.join(', ')}</span>
+						</div>
+					`;
+				}
+			}
+
+			container.innerHTML = html;
+
+			const rows = container.querySelectorAll('.outlet-option-row');
+			rows.forEach(row => {
+				row.addEventListener('click', (e) => {
+					e.preventDefault();
+					const chosen = row.getAttribute('data-outlet');
+					if (chosen) {
+						currentSelectedOutlet = chosen;
+						applySizeDetails(btn);
+					}
+				});
 			});
 		};
 
 		// 3. Outlet Badges Filter by Motif
 		const filterOutletBadges = (motifName) => {
-			const outletBadges = document.querySelectorAll('.outlet-pill-badge');
-			const outletLabel = document.getElementById('outlet-section-label');
-			let visibleCount = 0;
-
+			const outletBadges = document.querySelectorAll('.outlet-summary-pill');
+			if (!outletBadges) return;
 			outletBadges.forEach(badge => {
 				const motifsAttr = badge.getAttribute('data-motifs') || '';
 				const motifsList = motifsAttr.split(',').map(m => m.trim()).filter(Boolean);
 				if (!motifName || motifsList.length === 0 || motifsList.includes(motifName)) {
 					badge.style.display = 'inline-flex';
-					visibleCount++;
 				} else {
 					badge.style.display = 'none';
 				}
 			});
-
-			if (outletLabel) {
-				if (motifName) {
-					outletLabel.innerText = `Lokasi Outlet untuk ${motifName}`;
-				} else {
-				}
-			}
 		};
 
 		const cleanUrl = (u) => (u || '').split('?')[0].trim();
@@ -1473,21 +1722,84 @@ function renderMarkdown(md: string): string {
 		// 4. Apply Size Details (Step 3 Target)
 		const applySizeDetails = (btn) => {
 			if (!btn) return;
-			const price = parseInt(btn.getAttribute('data-price') || '0', 10);
-			if (price > 0 && priceDisplay) priceDisplay.innerText = "Rp " + price.toLocaleString('id-ID');
-			const stock = parseInt(btn.getAttribute('data-stock') || '0', 10);
+			currentActiveSizeBtn = btn;
+			const basePrice = parseInt(btn.getAttribute('data-price') || '0', 10);
+			const baseStock = parseInt(btn.getAttribute('data-stock') || '0', 10);
 			const dalaman = btn.getAttribute('data-dalaman') || "";
 			const subName = btn.getAttribute('data-subname') || "";
 			const sleeve = btn.getAttribute('data-sleeve') || currentSelectedSleeve || "";
 			const counter = btn.getAttribute('data-counter') || "";
-			const outlet = btn.getAttribute('data-outlet') || "";
+			const outletsAttr = btn.getAttribute('data-outlet') || "";
 			const bImg = btn.getAttribute('data-image');
 
-			updateAvailability(stock);
+			try {
+				currentSizeOutletPrices = JSON.parse(btn.getAttribute('data-outlet-prices') || '{}');
+			} catch(e) {
+				currentSizeOutletPrices = {};
+			}
+
+			try {
+				currentSizeOutletStocks = JSON.parse(btn.getAttribute('data-outlet-stocks') || '{}');
+			} catch(e) {
+				currentSizeOutletStocks = {};
+			}
+
+			// Find available outlets for this size
+			const availableOutlets = Object.keys(currentSizeOutletStocks).filter(o => currentSizeOutletStocks[o] > 0);
+			Object.keys(currentSizeOutletPrices).forEach(o => {
+				if (!availableOutlets.includes(o) && (currentSizeOutletStocks[o] === undefined || currentSizeOutletStocks[o] > 0)) {
+					availableOutlets.push(o);
+				}
+			});
+
+			// If currentSelectedOutlet is invalid or not in availableOutlets, auto-select cheapest available outlet
+			if (availableOutlets.length > 0) {
+				if (!currentSelectedOutlet || !availableOutlets.some(o => o.toLowerCase() === currentSelectedOutlet.toLowerCase())) {
+					let bestOutlet = availableOutlets[0];
+					let lowestPrice = currentSizeOutletPrices[bestOutlet] || 999999999;
+					availableOutlets.forEach(o => {
+						const p = currentSizeOutletPrices[o] || 999999999;
+						if (p < lowestPrice) {
+							lowestPrice = p;
+							bestOutlet = o;
+						}
+					});
+					currentSelectedOutlet = bestOutlet;
+				}
+			} else {
+				currentSelectedOutlet = "";
+			}
+
+			let effectivePrice = basePrice;
+			let effectiveStock = baseStock;
+
+			if (currentSelectedOutlet && currentSizeOutletPrices[currentSelectedOutlet]) {
+				effectivePrice = currentSizeOutletPrices[currentSelectedOutlet];
+				if (currentSizeOutletStocks[currentSelectedOutlet] !== undefined) {
+					effectiveStock = currentSizeOutletStocks[currentSelectedOutlet];
+				}
+				if (outletPriceTag) {
+					outletPriceTag.innerHTML = `
+						<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8c7851" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+						<span>${currentSelectedOutlet}</span>
+					`;
+					outletPriceTag.style.display = 'inline-flex';
+				}
+			} else {
+				if (outletPriceTag) {
+					outletPriceTag.style.display = 'none';
+				}
+			}
+
+			if (effectivePrice > 0 && priceDisplay) {
+				priceDisplay.innerText = "Rp " + effectivePrice.toLocaleString('id-ID');
+			}
+
+			updateAvailability(effectiveStock);
 			updateDalaman(dalaman);
 			updateSleeveInfo(sleeve, subName);
-			updateOutletInfo(outlet);
-			updateWAMessage(btn.getAttribute('data-fullname') || btn.getAttribute('data-size'), dalaman, subName, counter, outlet);
+			renderOutletCards(btn, currentSizeOutletPrices, currentSizeOutletStocks);
+			updateWAMessage(btn.getAttribute('data-fullname') || btn.getAttribute('data-size'), dalaman, subName, counter, currentSelectedOutlet || outletsAttr, effectivePrice);
 
 			if (bImg) {
 				updateMainImage(bImg);
@@ -1701,8 +2013,6 @@ function renderMarkdown(md: string): string {
 				baseSzBtns.forEach(b => b.classList.remove('active'));
 				matchedSzBtn.classList.add('active');
 				applySizeDetails(matchedSzBtn);
-			} else if (thumbOutlet) {
-				updateOutletInfo(thumbOutlet);
 			}
 		};
 

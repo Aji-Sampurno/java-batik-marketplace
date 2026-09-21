@@ -15,10 +15,10 @@ export const OUTLET_ALIAS_MAP: Record<string, string> = {
   'merr': 'Surabaya, Merr',
   'buring': 'Malang, Jl. Buring',
   'mog': 'Malang, MOG',
-  'senopati': 'Jakarta, senopati',
+  'senopati': 'Jakarta, Senopati',
   'pik': 'Jakarta, PIK',
-  'aeon gc': 'Jakarta, Aeon Gc',
-  'aeon tb': 'Jakarta, Aeon Tb',
+  'aeon gc': 'Jakarta, AEON GC',
+  'aeon tb': 'Jakarta, AEON TB',
   'ijen': 'Online',
   'mog 2': 'Malang, MOG lt 2',
   'gudang': 'Online',
@@ -34,10 +34,10 @@ export const KNOWN_OUTLET_LIST: string[] = [
   'Malang, MOG',
   'Malang, MOG lt 2',
   'Malang, Jl. Buring',
-  'Jakarta, senopati',
+  'Jakarta, Senopati',
   'Jakarta, PIK',
-  'Jakarta, Aeon Gc',
-  'Jakarta, Aeon Tb',
+  'Jakarta, AEON GC',
+  'Jakarta, AEON TB',
   'Online'
 ];
 

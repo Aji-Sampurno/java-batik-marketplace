@@ -16,6 +16,35 @@ try {
 		image_url: p.imageUrl,
 	}));
 }
+
+const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', '3L', '4XL', '4L', '5XL', '5L', 'ALL SIZE'];
+
+function getCardDisplayPrice(p: any): number {
+	const variants = p?.variants || p?.product_variants || [];
+	let displayPrice = Number(p?.price) || 0;
+	if (variants.length > 0) {
+		const validVariants = variants.filter((v: any) => Number(v.price) > 0);
+		if (validVariants.length > 0) {
+			const sortedBySize = [...validVariants].sort((a: any, b: any) => {
+				const sizeA = (a.size_name || a.name || '').trim().toUpperCase();
+				const sizeB = (b.size_name || b.name || '').trim().toUpperCase();
+				const idxA = sizeOrder.findIndex(s => sizeA === s || sizeA.startsWith(s + ' '));
+				const idxB = sizeOrder.findIndex(s => sizeB === s || sizeB.startsWith(s + ' '));
+				if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+				if (idxA !== -1) return -1;
+				if (idxB !== -1) return 1;
+				return Number(a.price) - Number(b.price);
+			});
+			const minPrice = Math.min(...validVariants.map((v: any) => Number(v.price)));
+			const smallestSizePrice = Number(sortedBySize[0]?.price) || minPrice;
+			const cheapest = Math.min(smallestSizePrice, minPrice);
+			if (displayPrice <= 0 || cheapest < displayPrice) {
+				displayPrice = cheapest;
+			}
+		}
+	}
+	return displayPrice;
+}
 ---
 
 <style is:inline>
@@ -93,35 +122,26 @@ try {
 				</h3>
 				<p class="price-tag">
 					{p.is_active ? (
-						<>
-							{p.original_price && p.original_price > p.price && (
-								<span style="text-decoration: line-through; color: #999; font-size: 0.8rem; margin-right: 0.5rem;">
-									Rp{" "}
-									{Number(p.original_price).toLocaleString(
-										"id-ID",
+						(() => {
+							const displayPrice = getCardDisplayPrice(p);
+							return (
+								<>
+									{p.original_price && Number(p.original_price) > displayPrice && (
+										<span style="text-decoration: line-through; color: #999; font-size: 0.8rem; margin-right: 0.5rem;">
+											Rp{" "}
+											{Number(p.original_price).toLocaleString(
+												"id-ID",
+											)}
+										</span>
 									)}
-								</span>
-							)}
-							<span>
-								{(() => {
-									let maxPrice = Number(p.price) || 0;
-									const variants =
-										p.variants || p.product_variants || [];
-									if (variants && variants.length > 0) {
-										const vPrices = variants
-											.map((v: any) => Number(v.price) || 0)
-											.filter((pr: number) => pr > 0);
-										if (vPrices.length > 0) {
-											const vMax = Math.max(...vPrices);
-											if (vMax > maxPrice) {
-												maxPrice = vMax;
-											}
-										}
-									}
-									return maxPrice > 0 ? `Rp ${maxPrice.toLocaleString("id-ID")}` : `Rp ${Number(p.price || 0).toLocaleString("id-ID")}`;
-								})()}
-							</span>
-						</>
+									<span>
+										{displayPrice > 0
+											? `Rp ${displayPrice.toLocaleString("id-ID")}`
+											: `Rp ${Number(p.price || 0).toLocaleString("id-ID")}`}
+									</span>
+								</>
+							);
+						})()
 					) : (
 						<span style="color: #b91c1c; font-weight: 700;">
 							STOK HABIS
