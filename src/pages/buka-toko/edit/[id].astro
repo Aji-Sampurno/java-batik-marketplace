@@ -701,6 +701,16 @@ if (Astro.request.method === "POST") {
 								<label class="text-uppercase" style="font-size: 0.65rem; font-weight: 700; color: #64748b; display: block; margin-bottom: 0.3rem;">Harga Utama (Rp)</label>
 								<input type="text" class="currency-mask" data-hidden-id="product_price_input" required id="product_price_input_display" value={Number(product.price || 0).toLocaleString("id-ID")} placeholder="450.000" style="width: 100%; padding: 0.7rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 700; font-size: 0.95rem;" />
 								<input type="hidden" name="price" id="product_price_input" value={product.price || ""} />
+								
+								<!-- Quick Price Selector from Variants -->
+								<div id="variant_price_picker_container" style="margin-top: 0.5rem; display: none; background: #f8fafc; border: 1.5px dashed #cbd5e1; border-radius: 8px; padding: 7px 10px;">
+									<div style="font-size: 0.65rem; font-weight: 800; color: #334155; margin-bottom: 5px; display: flex; align-items: center; justify-content: space-between;">
+										<span>🎯 Pilih Harga Tampilan Katalog:</span>
+										<span style="font-size: 0.6rem; color: #64748b; font-weight: 600;">Klik untuk memilih</span>
+									</div>
+									<div id="variant_price_chips" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+								</div>
+
 								<div id="price_markup_preview" style="font-size: 0.65rem; color: #10b981; margin-top: 0.4rem; font-weight: 600; display: none;">
 									Harga Coret: Rp <span id="markup_val">0</span> (Hemat Rp <span id="markup_pct">0</span>)
 								</div>
@@ -1856,8 +1866,16 @@ if (Astro.request.method === "POST") {
 							`}
 
 							<!-- Harga Satuan -->
-							<div style="flex: 1; min-width: 160px;">
-								<span style="display: block; font-size: 0.65rem; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">💰 Harga Satuan (Rp)</span>
+							<div style="flex: 1; min-width: 170px;">
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+									<span style="display: block; font-size: 0.65rem; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.3px;">💰 Harga (Rp)</span>
+									<button type="button" class="btn-set-main-price" title="Jadikan harga varian ini sebagai harga tampilan di katalog" style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; padding: 1px 6px; font-size: 0.6rem; font-weight: 700; color: #0284c7; cursor: pointer; transition: all 0.15s; white-space: nowrap;">
+										⭐ Tampilkan
+									</button>
+									<span class="v-main-price-tag" style="display: none; font-size: 0.6rem; font-weight: 800; color: #15803d; background: #dcfce7; border: 1px solid #86efac; border-radius: 4px; padding: 1px 6px; white-space: nowrap;">
+										✓ Di Katalog
+									</span>
+								</div>
 								<div style="display: flex; align-items: center; gap: 3px;">
 									<span style="font-size: 0.75rem; font-weight: 700; color: #64748b;">Rp</span>
 									<input type="text" value="${priceVal.toLocaleString('id-ID')}" class="v-price-display" style="width: 100%; padding: 5px 8px; font-size: 0.78rem; border: 1.5px solid #cbd5e1; border-radius: 6px; font-weight: 700; color: #0f172a; background: #fff;" />
@@ -1940,7 +1958,25 @@ if (Astro.request.method === "POST") {
 					if (fileInp) fileInp.disabled = !active;
 					updateSelectedCounterBadge();
 					renderMotifPhotoCards();
+					updateVariantPricePicker();
 				});
+
+				const setMainPriceBtn = row.querySelector(".btn-set-main-price");
+				if (setMainPriceBtn) {
+					setMainPriceBtn.addEventListener("click", () => {
+						const currentVal = parseInt(priceHidden.value || "0", 10);
+						if (currentVal > 0) {
+							const mainDisp = document.getElementById("product_price_input_display");
+							const mainHdn = document.getElementById("product_price_input");
+							if (mainDisp && mainHdn) {
+								mainHdn.value = currentVal;
+								mainDisp.value = currentVal.toLocaleString("id-ID");
+								mainDisp.dispatchEvent(new Event("input"));
+							}
+							updateVariantPricePicker();
+						}
+					});
+				}
 
 				motifSelect.addEventListener("change", () => {
 					motifHidden.value = motifSelect.value;
@@ -1955,23 +1991,27 @@ if (Astro.request.method === "POST") {
 
 				sizeSelect.addEventListener("change", () => {
 					sizeHidden.value = sizeSelect.value;
+					updateVariantPricePicker();
 				});
 
 				priceDisp.addEventListener("input", (e) => {
 					const num = e.target.value.replace(/\D/g, "");
 					priceHidden.value = num || "0";
 					priceDisp.value = num ? parseInt(num, 10).toLocaleString("id-ID") : "";
+					updateVariantPricePicker();
 				});
 
 				deleteBtn.addEventListener("click", () => {
 					row.remove();
 					updateSelectedCounterBadge();
 					renderMotifPhotoCards();
+					updateVariantPricePicker();
 				});
 			});
 
 			updateSelectedCounterBadge();
 			renderMotifPhotoCards();
+			updateVariantPricePicker();
 		}
 
 		function updateSelectedCounterBadge() {
@@ -2177,7 +2217,105 @@ if (Astro.request.method === "POST") {
 					const rawVal = e.target.value.replace(/\D/g, "");
 					if (hidden) hidden.value = rawVal;
 					input.value = rawVal ? parseInt(rawVal, 10).toLocaleString("id-ID") : "";
+					updateVariantPricePicker();
 				});
+			});
+		}
+
+		function updateVariantPricePicker() {
+			const pickerContainer = document.getElementById("variant_price_picker_container");
+			const chipsContainer = document.getElementById("variant_price_chips");
+			const currentMainPrice = parseInt(document.getElementById("product_price_input")?.value || "0", 10);
+			if (!pickerContainer || !chipsContainer) return;
+
+			const rows = Array.from(document.querySelectorAll(".counter-table-row"));
+			const priceMap = new Map();
+
+			rows.forEach(row => {
+				const cb = row.querySelector(".v-counter-cb");
+				if (cb && !cb.checked) return;
+				const pHidden = row.querySelector(".v-price-hidden");
+				const sizeHidden = row.querySelector(".v-size-hidden") || row.querySelector(".v-size-select");
+				const pVal = parseInt(pHidden?.value || "0", 10);
+				const sVal = (sizeHidden?.value || "").trim().toUpperCase();
+
+				if (pVal > 0) {
+					if (!priceMap.has(pVal)) priceMap.set(pVal, new Set());
+					if (sVal) priceMap.get(pVal).add(sVal);
+				}
+			});
+
+			if (priceMap.size === 0) {
+				pickerContainer.style.display = "none";
+				updateRowMainPriceIndicators();
+				return;
+			}
+
+			pickerContainer.style.display = "block";
+			chipsContainer.innerHTML = "";
+
+			const sortedPrices = Array.from(priceMap.keys()).sort((a, b) => a - b);
+
+			sortedPrices.forEach(price => {
+				const sizes = Array.from(priceMap.get(price)).join(", ");
+				const isSelected = price === currentMainPrice;
+
+				const chip = document.createElement("button");
+				chip.type = "button";
+				chip.className = `btn-price-chip ${isSelected ? 'active-price-chip' : ''}`;
+				chip.style.cssText = `
+					padding: 4px 10px;
+					font-size: 0.72rem;
+					font-weight: 700;
+					border-radius: 6px;
+					cursor: pointer;
+					transition: all 0.15s ease;
+					display: inline-flex;
+					align-items: center;
+					gap: 6px;
+					border: 1.5px solid ${isSelected ? 'var(--color-accent, #8c7851)' : '#cbd5e1'};
+					background: ${isSelected ? '#fdfbf7' : '#ffffff'};
+					color: ${isSelected ? 'var(--color-accent, #8c7851)' : '#334155'};
+					box-shadow: ${isSelected ? '0 1px 4px rgba(140, 120, 81, 0.25)' : 'none'};
+				`;
+
+				chip.innerHTML = `
+					<span>${isSelected ? '✓ ' : ''}Rp ${price.toLocaleString('id-ID')}</span>
+					${sizes ? `<span style="font-size: 0.62rem; opacity: 0.8; font-weight: 600; background: ${isSelected ? 'rgba(140, 120, 81, 0.15)' : '#f1f5f9'}; padding: 1px 5px; border-radius: 3px;">${sizes}</span>` : ''}
+				`;
+
+				chip.addEventListener("click", () => {
+					const disp = document.getElementById("product_price_input_display");
+					const hdn = document.getElementById("product_price_input");
+					if (disp && hdn) {
+						hdn.value = price;
+						disp.value = price.toLocaleString("id-ID");
+						disp.dispatchEvent(new Event("input"));
+					}
+					updateVariantPricePicker();
+				});
+
+				chipsContainer.appendChild(chip);
+			});
+
+			updateRowMainPriceIndicators();
+		}
+
+		function updateRowMainPriceIndicators() {
+			const currentMainPrice = parseInt(document.getElementById("product_price_input")?.value || "0", 10);
+			const rows = Array.from(document.querySelectorAll(".counter-table-row"));
+			rows.forEach(row => {
+				const pHidden = row.querySelector(".v-price-hidden");
+				const pVal = parseInt(pHidden?.value || "0", 10);
+				const tag = row.querySelector(".v-main-price-tag");
+				const btn = row.querySelector(".btn-set-main-price");
+				if (pVal > 0 && pVal === currentMainPrice) {
+					if (tag) tag.style.display = "inline-flex";
+					if (btn) btn.style.display = "none";
+				} else {
+					if (tag) tag.style.display = "none";
+					if (btn) btn.style.display = "inline-flex";
+				}
 			});
 		}
 
@@ -2310,6 +2448,7 @@ if (Astro.request.method === "POST") {
 						if (hdn) hdn.value = num;
 						if (disp) disp.value = num ? num.toLocaleString("id-ID") : "";
 					});
+					updateVariantPricePicker();
 				}
 			});
 

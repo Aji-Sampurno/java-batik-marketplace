@@ -1,3 +1,25 @@
+// Custom display order for root categories – groups similar product types together
+const ROOT_CATEGORY_ORDER: string[] = [
+  "Batik Anak",
+  "Kemeja",
+  "Hem",
+  "Blus",
+  "Tunik",
+  "Dress",
+  "Kebaya",
+  "Gamis/Kaftan",
+  "Jumpsuit",
+  "Setelan",
+  "Sarimbit",
+  "Bolero",
+  "Outer",
+  "Jas",
+  "Rok/Bawahan",
+  "Celana",
+  "Kain",
+  "Accessories",
+];
+
 export function buildCategoryTree(
   list: any[],
   parentId: any = null,
@@ -5,12 +27,29 @@ export function buildCategoryTree(
   currentPath = ""
 ): any[] {
   let result: any[] = [];
-  list.filter((item) => item.parent_id === parentId).forEach((item) => {
-    const fullPath = currentPath ? `${currentPath} > ${item.name}` : item.name;
-    result.push({ ...item, depth, fullPath });
-    const children = buildCategoryTree(list, item.id, depth + 1, fullPath);
-    result = result.concat(children);
-  });
+  list.filter((item) => item.parent_id === parentId)
+    .sort((a, b) => {
+      if (depth === 0) {
+        // Root level: use the predefined custom order
+        const idxA = ROOT_CATEGORY_ORDER.findIndex(
+          (n) => n.toLowerCase() === (a.name || "").toLowerCase()
+        );
+        const idxB = ROOT_CATEGORY_ORDER.findIndex(
+          (n) => n.toLowerCase() === (b.name || "").toLowerCase()
+        );
+        const posA = idxA === -1 ? ROOT_CATEGORY_ORDER.length : idxA;
+        const posB = idxB === -1 ? ROOT_CATEGORY_ORDER.length : idxB;
+        return posA - posB;
+      }
+      // Child levels: alphabetical
+      return (a.name || "").localeCompare(b.name || "", "id");
+    })
+    .forEach((item) => {
+      const fullPath = currentPath ? `${currentPath} > ${item.name}` : item.name;
+      result.push({ ...item, depth, fullPath });
+      const children = buildCategoryTree(list, item.id, depth + 1, fullPath);
+      result = result.concat(children);
+    });
   return result;
 }
 

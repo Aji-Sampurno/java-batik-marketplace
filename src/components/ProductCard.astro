@@ -136,31 +136,9 @@ const imageOutlets: string[] = cardImages.map((img) => {
 	return rawOut ? getOutletAlias(rawOut) : (outletDisplay || "");
 });
 
-// Price Calculation: Display lowest price / smallest size variant (harga termurah)
-const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', '3L', '4XL', '4L', '5XL', '5L', 'ALL SIZE'];
-const variants = p.variants || p.product_variants || [];
-let cardDisplayPrice = Number(p.price) || 0;
-if (variants.length > 0) {
-	const validVariants = variants.filter((v: any) => Number(v.price) > 0);
-	if (validVariants.length > 0) {
-		const sortedBySize = [...validVariants].sort((a: any, b: any) => {
-			const sizeA = (a.size_name || a.name || '').trim().toUpperCase();
-			const sizeB = (b.size_name || b.name || '').trim().toUpperCase();
-			const idxA = sizeOrder.findIndex(s => sizeA === s || sizeA.startsWith(s + ' '));
-			const idxB = sizeOrder.findIndex(s => sizeB === s || sizeB.startsWith(s + ' '));
-			if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-			if (idxA !== -1) return -1;
-			if (idxB !== -1) return 1;
-			return Number(a.price) - Number(b.price);
-		});
-		const minPrice = Math.min(...validVariants.map((v: any) => Number(v.price)));
-		const smallestSizePrice = Number(sortedBySize[0]?.price) || minPrice;
-		const cheapest = Math.min(smallestSizePrice, minPrice);
-		if (cardDisplayPrice <= 0 || cheapest < cardDisplayPrice) {
-			cardDisplayPrice = cheapest;
-		}
-	}
-}
+// Price Calculation: Tampilkan langsung Harga Utama yang dipilih penjual (p.price)
+// Tidak otomatis memilih termurah atau termahal
+const cardDisplayPrice = Number(p.price) || 0;
 ---
 
 <div
