@@ -95,7 +95,36 @@ export function findTargetCategory(tree: any[], filter: string | null): any | nu
   if (match) return match;
   // 4. Any category with matching name
   match = tree.find((t) => t.name?.toLowerCase() === trimmed.toLowerCase());
-  return match || null;
+  if (match) return match;
+
+  // 5. Normalized match (handles URLs modified by Instagram/Meta link parsers,
+  //    where '+' was decoded prematurely to space or '%2B' became '+++')
+  const normalize = (str: string | null | undefined): string => {
+    if (!str) return "";
+    return str
+      .toLowerCase()
+      .replace(/\+/g, " ")        // treat literal '+' as space for flexible comparison
+      .replace(/\s+/g, " ")       // collapse multiple consecutive spaces into one
+      .replace(/\s*>\s*/g, " > ") // normalize path separator spacing
+      .trim();
+  };
+
+  const normFilter = normalize(trimmed);
+  if (normFilter) {
+    // Match by normalized fullPath (e.g. "Setelan > Atasan Rok" matches "Setelan > Atasan + Rok")
+    match = tree.find((t) => normalize(t.fullPath) === normFilter);
+    if (match) return match;
+
+    // Match by normalized root category name
+    match = tree.find((t) => !t.parent_id && normalize(t.name) === normFilter);
+    if (match) return match;
+
+    // Match by normalized any category name
+    match = tree.find((t) => normalize(t.name) === normFilter);
+    if (match) return match;
+  }
+
+  return null;
 }
 
 export function resolveCategoryIds(

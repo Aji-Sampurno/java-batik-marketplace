@@ -407,7 +407,7 @@ try {
 							);
 						})
 						.map((t) => {
-							const isSelected = typeFilter === t.fullPath || typeFilter === t.id;
+							const isSelected = targetType ? targetType.id === t.id : (typeFilter === t.fullPath || typeFilter === t.id);
 							const isParentActive = activePathIds.includes(t.id);
 							const hasChildren = hierarchicalTypes.some((c) => c.parent_id === t.id);
 
@@ -779,7 +779,7 @@ try {
 				<span style="font-size: 0.75rem; font-weight: 600; color: var(--color-accent); text-transform: uppercase; letter-spacing: 1px; margin-right: 0.3rem;">Filter Aktif:</span>
 				{typeFilter && (
 					<a href={getClearFilterUrl("type")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
-						Jenis: <strong>{typeFilter.includes('>') ? typeFilter.split('>').pop()?.trim() : typeFilter}</strong>
+						Jenis: <strong>{targetType?.name || (typeFilter.includes('>') ? typeFilter.split('>').pop()?.trim() : typeFilter)}</strong>
 						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
 					</a>
 				)}
