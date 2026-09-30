@@ -286,7 +286,7 @@ try {
 				<div class="header-title-left">
 					<h3>Filter & Kategori</h3>
 					{activeFilterCount > 0 && (
-						<span class="active-filter-badge">{activeFilterCount}</span>
+						<span class="sidebar-counter-badge">{activeFilterCount}</span>
 					)}
 				</div>
 				<button type="button" class="close-sidebar-btn" id="close-sidebar-btn" aria-label="Tutup filter">
@@ -775,57 +775,63 @@ try {
 		</div>
 
 		{hasActiveFilters && (
-			<div class="active-filters-bar" style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; padding: 0.8rem 1rem; background: #fdfbf7; border: 1px solid #f3ece1; border-radius: 8px;">
-				<span style="font-size: 0.75rem; font-weight: 600; color: var(--color-accent); text-transform: uppercase; letter-spacing: 1px; margin-right: 0.3rem;">Filter Aktif:</span>
-				{typeFilter && (
-					<a href={getClearFilterUrl("type")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
-						Jenis: <strong>{targetType?.name || (typeFilter.includes('>') ? typeFilter.split('>').pop()?.trim() : typeFilter)}</strong>
-						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
-					</a>
-				)}
-				{sizeFilter && (
-					<a href={getClearFilterUrl("size")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
-						Ukuran: <strong>{sizeFilter}</strong>
-						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
-					</a>
-				)}
-				{fitFilter && (
-					<a href={getClearFilterUrl("fit")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
-						Potongan: <strong>{fitFilter === "slim_fit" ? "Slim Fit" : fitFilter === "regular" ? "Regular Fit" : fitFilter}</strong>
-						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
-					</a>
-				)}
-				{colorFilter && (
-					<a href={getClearFilterUrl("color")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
-						Warna: <strong>{colorFilter}</strong>
-						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
-					</a>
-				)}
-				{outletFilter && (
-					<a href={getClearFilterUrl("outlet")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #0369a1; text-decoration: none; font-weight: 600;">
-						Outlet: <strong>📍 {outletFilter}</strong>
-						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
-					</a>
-				)}
-				{motifFilter && (
-					<a href={getClearFilterUrl("motif")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
-						Motif: <strong>{motifFilter}</strong>
-						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
-					</a>
-				)}
-				{searchQuery && (
-					<a href={getClearFilterUrl("q")} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
-						Cari: <strong>"{searchQuery}"</strong>
-						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
-					</a>
-				)}
-				{(minPrice || maxPrice) && (
-					<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), minP: "", maxP: "", page: "1" })}`} class="active-filter-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; background: #ffffff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 20px; color: #1e293b; text-decoration: none; font-weight: 500;">
-						Harga: <strong>{minPrice ? `Rp ${minPrice.toLocaleString("id-ID")}` : "0"} - {maxPrice ? `Rp ${maxPrice.toLocaleString("id-ID")}` : "Max"}</strong>
-						<span style="opacity: 0.5; margin-left: 2px;">&times;</span>
-					</a>
-				)}
-				<a href="/products" style="margin-left: auto; font-size: 0.75rem; color: #b91c1c; text-decoration: underline; font-weight: 600;">Hapus Semua Filter</a>
+			<div class="active-filters-bar">
+				<div class="active-filters-header-mobile">
+					<span class="active-filters-title">Filter Aktif:</span>
+					<a href="/products" class="clear-all-filters-btn">Hapus Semua</a>
+				</div>
+				<span class="active-filters-title desktop-only">Filter Aktif:</span>
+				<div class="active-filters-list">
+					{typeFilter && (
+						<a href={getClearFilterUrl("type")} class="active-filter-pill" title="Hapus filter jenis">
+							<span>Jenis: <strong>{targetType?.name || (typeFilter.includes('>') ? typeFilter.split('>').pop()?.trim() : typeFilter)}</strong></span>
+							<span class="pill-remove-icon">&times;</span>
+						</a>
+					)}
+					{sizeFilter && (
+						<a href={getClearFilterUrl("size")} class="active-filter-pill" title="Hapus filter ukuran">
+							<span>Ukuran: <strong>{sizeFilter}</strong></span>
+							<span class="pill-remove-icon">&times;</span>
+						</a>
+					)}
+					{fitFilter && (
+						<a href={getClearFilterUrl("fit")} class="active-filter-pill" title="Hapus filter potongan">
+							<span>Potongan: <strong>{fitFilter === "slim_fit" ? "Slim Fit" : fitFilter === "regular" ? "Regular Fit" : fitFilter}</strong></span>
+							<span class="pill-remove-icon">&times;</span>
+						</a>
+					)}
+					{colorFilter && (
+						<a href={getClearFilterUrl("color")} class="active-filter-pill" title="Hapus filter warna">
+							<span>Warna: <strong>{colorFilter}</strong></span>
+							<span class="pill-remove-icon">&times;</span>
+						</a>
+					)}
+					{outletFilter && (
+						<a href={getClearFilterUrl("outlet")} class="active-filter-pill outlet-pill" title="Hapus filter outlet">
+							<span>Outlet: <strong>📍 {outletFilter}</strong></span>
+							<span class="pill-remove-icon">&times;</span>
+						</a>
+					)}
+					{motifFilter && (
+						<a href={getClearFilterUrl("motif")} class="active-filter-pill" title="Hapus filter motif">
+							<span>Motif: <strong>{motifFilter}</strong></span>
+							<span class="pill-remove-icon">&times;</span>
+						</a>
+					)}
+					{searchQuery && (
+						<a href={getClearFilterUrl("q")} class="active-filter-pill" title="Hapus pencarian">
+							<span>Cari: <strong>"{searchQuery}"</strong></span>
+							<span class="pill-remove-icon">&times;</span>
+						</a>
+					)}
+					{(minPrice || maxPrice) && (
+						<a href={`/products?${new URLSearchParams({ ...Object.fromEntries(searchParams), minP: "", maxP: "", page: "1" })}`} class="active-filter-pill" title="Hapus filter harga">
+							<span>Harga: <strong>{minPrice ? `Rp ${minPrice.toLocaleString("id-ID")}` : "0"} - {maxPrice ? `Rp ${maxPrice.toLocaleString("id-ID")}` : "Max"}</strong></span>
+							<span class="pill-remove-icon">&times;</span>
+						</a>
+					)}
+				</div>
+				<a href="/products" class="clear-all-filters-btn desktop-only">Hapus Semua Filter</a>
 			</div>
 		)}
 
@@ -1319,10 +1325,149 @@ try {
 		gap: var(--spacing-lg);
 	}
 
+	/* Active Filters Bar Styles */
+	.active-filters-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+		margin-bottom: 1.5rem;
+		padding: 0.75rem 1rem;
+		background: #fdfbf7;
+		border: 1px solid #f3ece1;
+		border-radius: 12px;
+	}
+
+	.active-filters-title {
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: var(--color-accent, #8c7851);
+		text-transform: uppercase;
+		letter-spacing: 0.8px;
+		white-space: nowrap;
+		margin-right: 0.25rem;
+	}
+
+	.active-filters-header-mobile {
+		display: none;
+	}
+
+	.active-filters-list {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+	}
+
+	.active-filter-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.75rem;
+		background: #ffffff;
+		border: 1px solid #e2e8f0;
+		padding: 5px 12px;
+		border-radius: 20px;
+		color: #1e293b;
+		text-decoration: none;
+		font-weight: 500;
+		white-space: nowrap;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+		transition: background-color 0.15s, border-color 0.15s, transform 0.1s;
+	}
+
+	.active-filter-pill:hover {
+		background: #f8fafc;
+		border-color: #cbd5e1;
+	}
+
+	.active-filter-pill:active {
+		transform: scale(0.97);
+	}
+
+	.active-filter-pill.outlet-pill {
+		color: #0369a1;
+		border-color: #bae6fd;
+		background: #f0f9ff;
+	}
+
+	.active-filter-pill.outlet-pill:hover {
+		background: #e0f2fe;
+	}
+
+	.pill-remove-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 14px;
+		height: 14px;
+		font-size: 0.95rem;
+		line-height: 1;
+		color: #94a3b8;
+		margin-left: 2px;
+		transition: color 0.15s;
+	}
+
+	.active-filter-pill:hover .pill-remove-icon {
+		color: #dc2626;
+	}
+
+	.clear-all-filters-btn {
+		font-size: 0.75rem;
+		color: #b91c1c;
+		text-decoration: underline;
+		font-weight: 600;
+		white-space: nowrap;
+		transition: color 0.15s;
+	}
+
+	.clear-all-filters-btn:hover {
+		color: #991b1b;
+	}
+
+	.desktop-only {
+		display: inline;
+	}
+
+	.clear-all-filters-btn.desktop-only {
+		margin-left: auto;
+	}
+
 	@media (max-width: 768px) {
 		.product-grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
 			gap: 10px !important;
+		}
+
+		.active-filters-bar {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.6rem;
+			padding: 0.75rem 0.85rem;
+			margin-bottom: 1.25rem;
+		}
+
+		.desktop-only {
+			display: none !important;
+		}
+
+		.active-filters-header-mobile {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			width: 100%;
+			padding-bottom: 0.4rem;
+			border-bottom: 1px dashed #ede2cf;
+		}
+
+		.active-filters-list {
+			width: 100%;
+			gap: 0.4rem;
+		}
+
+		.active-filter-pill {
+			font-size: 0.72rem;
+			padding: 4px 10px;
 		}
 	}
 
@@ -1404,7 +1549,7 @@ try {
 			color: #0f172a;
 		}
 
-		.active-filter-badge {
+		.sidebar-counter-badge {
 			display: inline-flex;
 			align-items: center;
 			justify-content: center;
