@@ -479,6 +479,29 @@ function renderMarkdown(md: string): string {
 function getCardDisplayPrice(p: any): number {
   const pVariants = p?.variants || p?.product_variants || [];
   let displayPrice = Number(p?.price) || 0;
+
+  const pCats = p?.categories || [];
+  const isSetelan =
+    pCats.some((c: any) => {
+      const name = typeof c === 'string' ? c : (c.name || '');
+      return name.toUpperCase().includes('SETELAN') || name.toUpperCase().includes('STELAN');
+    }) ||
+    (p?.types?.name || '').toUpperCase().includes('SETELAN') ||
+    (p?.types?.name || '').toUpperCase().includes('STELAN') ||
+    (p?.type?.name || '').toUpperCase().includes('SETELAN') ||
+    (p?.type?.name || '').toUpperCase().includes('STELAN') ||
+    (p?.name || '').toUpperCase().includes('SETELAN') ||
+    (p?.name || '').toUpperCase().includes('STELAN') ||
+    (p?.name || '').toUpperCase().startsWith('S ') ||
+    ((p?.code || '').length >= 2 && (p?.code || '').charAt(1).toUpperCase() === 'S');
+
+  if (isSetelan && pVariants.length > 0) {
+    const validPrices = pVariants.map((v: any) => Number(v.price || 0)).filter((pr: number) => pr > 0);
+    if (validPrices.length >= 2 && displayPrice < (validPrices[0] + validPrices[1])) {
+      return validPrices[0] + validPrices[1];
+    }
+  }
+
   if (pVariants && pVariants.length > 0) {
     const validVariants = pVariants.filter((v: any) => Number(v.price || 0) > 0);
     if (validVariants.length > 0) {
