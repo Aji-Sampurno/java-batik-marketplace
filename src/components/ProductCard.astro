@@ -177,6 +177,7 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 <div
 	class={`product-card reveal-up ${isOutOfStock ? "product-inactive" : ""}`}
 	data-delay={(index % 4) * 100}
+	onmouseleave="if(window.resetCardSlide) window.resetCardSlide(this);"
 >
 	<div
 		class="product-image product-image-slider"
@@ -184,7 +185,6 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 		data-images-count={cardImages.length}
 		data-current-slide="0"
 		data-image-outlets={JSON.stringify(imageOutlets)}
-		onmouseleave={`if(window.hoverCardSlide) window.hoverCardSlide(this.querySelector('.hover-segment'), 0);`}
 	>
 		<a href={`/products/${p.id}`} class="slider-link">
 			<div 
@@ -246,6 +246,28 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 				</div>
 			</div>
 		)}
+	</div>
+
+	<!-- Card Thumbnails Strip below main image (rendered for all products for consistent layout) -->
+	<div class="card-thumbnails-strip" aria-label="Pilihan foto produk">
+		{cardImages.map((imgUrl, i) => (
+			<button
+				type="button"
+				class={`card-thumb-item ${i === 0 ? "active" : ""}`}
+				data-thumb-index={i}
+				title={`Foto ${i + 1}${imageOutlets[i] ? ` (${imageOutlets[i]})` : ""}`}
+				aria-label={`Foto ${i + 1}`}
+				onmouseenter={`if(window.hoverCardThumb) window.hoverCardThumb(this, ${i});`}
+				onclick={`if(window.clickCardThumb) window.clickCardThumb(this, ${i}, event);`}
+			>
+				<img
+					src={imgUrl}
+					alt={`${p.name} foto ${i + 1}`}
+					loading="lazy"
+					class={isOutOfStock ? "out-of-stock-img" : ""}
+				/>
+			</button>
+		))}
 	</div>
 
 	<div
@@ -691,7 +713,87 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 		box-shadow: 0 0 6px rgba(255, 255, 255, 0.85);
 	}
 
+	/* Card Thumbnails Strip below main image (Consistent across all cards) */
+	.card-thumbnails-strip {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 0 4px 0;
+		min-height: 56px;
+		box-sizing: border-box;
+		overflow-x: auto;
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+		-webkit-overflow-scrolling: touch;
+		width: 100%;
+	}
+
+	.card-thumbnails-strip::-webkit-scrollbar {
+		display: none;
+	}
+
+	.card-thumb-item {
+		width: 44px;
+		height: 44px;
+		flex-shrink: 0;
+		aspect-ratio: 1;
+		border-radius: 6px;
+		overflow: hidden;
+		cursor: pointer;
+		border: 1.5px solid #e2e8f0;
+		background: #f8fafc;
+		padding: 0;
+		margin: 0;
+		outline: none;
+		transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+		opacity: 0.8;
+		position: relative;
+		box-sizing: border-box;
+	}
+
+	.card-thumb-item:hover {
+		opacity: 1;
+		border-color: #94a3b8;
+		transform: translateY(-1px);
+	}
+
+	.card-thumb-item.active {
+		border-color: var(--color-accent, #8c7851);
+		box-shadow: 0 0 0 1.5px var(--color-accent, #8c7851), 0 2px 6px rgba(140, 120, 81, 0.25);
+		opacity: 1;
+		transform: scale(1.04);
+	}
+
+	.card-thumb-item img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+		pointer-events: none;
+	}
+
+	.segment-bars-container {
+		display: none;
+	}
+
 	@media (max-width: 768px) {
+		.card-thumbnails-strip {
+			gap: 5px;
+			padding: 6px 0 2px 0;
+			min-height: 44px;
+		}
+
+		.card-thumb-item {
+			width: 34px;
+			height: 34px;
+			border-radius: 5px;
+			border-width: 1.5px;
+		}
+
+		.card-thumb-item.active {
+			transform: scale(1.03);
+		}
+
 		.product-card {
 			padding: 0.4rem;
 		}
@@ -804,6 +906,89 @@ window.updateCardOutlet = function(slider, idx) {
 	} catch(e) {}
 };
 
+window.goToCardSlide = function(cardOrSlider, targetIdx) {
+	if (!cardOrSlider) return;
+	const card = cardOrSlider.classList && cardOrSlider.classList.contains('product-card')
+		? cardOrSlider
+		: cardOrSlider.closest('.product-card');
+	const slider = card ? card.querySelector('.product-image-slider') : cardOrSlider.closest('.product-image-slider');
+	if (!slider) return;
+	const track = slider.querySelector('.slider-track');
+	if (!track) return;
+
+	const count = parseInt(slider.getAttribute('data-images-count') || '1', 10);
+	if (count <= 1) return;
+	if (targetIdx < 0 || targetIdx >= count) return;
+
+	const imgs = track.querySelectorAll('.slide-img');
+	if (imgs[targetIdx]) {
+		const targetImg = imgs[targetIdx];
+		track.scrollTo({
+			left: targetImg.offsetLeft,
+			behavior: 'smooth'
+		});
+		imgs.forEach((img, i) => {
+			img.classList.toggle('active', i === targetIdx);
+		});
+	} else {
+		const width = track.clientWidth || 1;
+		track.scrollTo({
+			left: targetIdx * width,
+			behavior: 'smooth'
+		});
+	}
+	slider.setAttribute('data-current-slide', targetIdx);
+
+	// Synchronize segment bars
+	const bars = slider.querySelectorAll('.segment-bar');
+	bars.forEach((b, i) => {
+		b.classList.toggle('active', i === targetIdx);
+	});
+
+	// Synchronize thumbnails
+	if (card) {
+		const thumbs = card.querySelectorAll('.card-thumb-item');
+		thumbs.forEach((t, i) => {
+			const isActive = i === targetIdx;
+			t.classList.toggle('active', isActive);
+			if (isActive) {
+				t.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+			}
+		});
+	}
+
+	window.updateCardOutlet(slider, targetIdx);
+};
+
+window.hoverCardSlide = function(el, targetIdx) {
+	if (!el) return;
+	window.goToCardSlide(el, targetIdx);
+};
+
+window.hoverCardThumb = function(thumbEl, idx) {
+	if (!thumbEl) return;
+	window.goToCardSlide(thumbEl, idx);
+};
+
+window.clickCardThumb = function(thumbEl, idx, event) {
+	if (event) {
+		event.preventDefault();
+		event.stopPropagation();
+	}
+	if (!thumbEl) return;
+	const card = thumbEl.closest('.product-card');
+	if (card) {
+		card.setAttribute('data-user-selected', 'true');
+	}
+	window.goToCardSlide(thumbEl, idx);
+};
+
+window.resetCardSlide = function(cardEl) {
+	if (!cardEl) return;
+	if (cardEl.getAttribute('data-user-selected') === 'true') return;
+	window.goToCardSlide(cardEl, 0);
+};
+
 window.handleCardTrackScroll = function(track) {
 	if (!track) return;
 	const slider = track.closest('.product-image-slider');
@@ -817,34 +1002,19 @@ window.handleCardTrackScroll = function(track) {
 		bars.forEach((b, i) => {
 			b.classList.toggle('active', i === idx);
 		});
+		const card = slider.closest('.product-card');
+		if (card) {
+			const thumbs = card.querySelectorAll('.card-thumb-item');
+			thumbs.forEach((t, i) => {
+				const isActive = i === idx;
+				t.classList.toggle('active', isActive);
+				if (isActive) {
+					t.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+				}
+			});
+		}
 		window.updateCardOutlet(slider, idx);
 	}
-};
-
-window.hoverCardSlide = function(el, targetIdx) {
-	if (!el) return;
-	const slider = el.closest('.product-image-slider');
-	if (!slider) return;
-	const track = slider.querySelector('.slider-track');
-	if (!track) return;
-	const cur = parseInt(slider.getAttribute('data-current-slide') || '0', 10);
-	if (cur === targetIdx) return;
-
-	const bars = slider.querySelectorAll('.segment-bar');
-	const count = parseInt(slider.getAttribute('data-images-count') || '1', 10);
-	if (count <= 1) return;
-
-	track.scrollTo({
-		left: targetIdx * track.clientWidth,
-		behavior: 'smooth'
-	});
-
-	bars.forEach((b, i) => {
-		b.classList.toggle('active', i === targetIdx);
-	});
-
-	slider.setAttribute('data-current-slide', targetIdx);
-	window.updateCardOutlet(slider, targetIdx);
 };
 
 // Global Listener for Mobile Scroll & Drag Sync Fallback

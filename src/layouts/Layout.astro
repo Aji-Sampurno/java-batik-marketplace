@@ -1068,7 +1068,7 @@ const faviconUrl = rawFavicon.includes("?")
 				.forEach((el) => revealObserver.observe(el));
 			handleHeader(); // Initial check
 
-			// Global Product Card Slider (Zara/ASOS Hover Split + Native Mobile Scroll Snap)
+			// Global Product Card Slider (Zara/ASOS Hover Split + Native Mobile Scroll Snap + Interactive Thumbnails)
 			window.updateCardOutlet = function(slider, idx) {
 				if (!slider) return;
 				const rawOutlets = slider.getAttribute('data-image-outlets');
@@ -1085,6 +1085,90 @@ const faviconUrl = rawFavicon.includes("?")
 				} catch(e) {}
 			};
 
+			window.goToCardSlide = function(cardOrSlider, targetIdx) {
+				if (!cardOrSlider) return;
+				const card = cardOrSlider.classList && cardOrSlider.classList.contains('product-card')
+					? cardOrSlider
+					: cardOrSlider.closest('.product-card');
+				const slider = card ? card.querySelector('.product-image-slider') : cardOrSlider.closest('.product-image-slider');
+				if (!slider) return;
+				const track = slider.querySelector('.slider-track');
+				if (!track) return;
+
+				const count = parseInt(slider.getAttribute('data-images-count') || '1', 10);
+				if (count <= 1) return;
+				if (targetIdx < 0 || targetIdx >= count) return;
+
+				const imgs = track.querySelectorAll('.slide-img');
+				if (imgs[targetIdx]) {
+					const targetImg = imgs[targetIdx];
+					track.scrollTo({
+						left: targetImg.offsetLeft,
+						behavior: 'smooth'
+					});
+					imgs.forEach((img, i) => {
+						img.classList.toggle('active', i === targetIdx);
+					});
+				} else {
+					const width = track.clientWidth || 1;
+					track.scrollTo({
+						left: targetIdx * width,
+						behavior: 'smooth'
+					});
+				}
+
+				slider.setAttribute('data-current-slide', targetIdx);
+
+				// Synchronize segment bars
+				const bars = slider.querySelectorAll('.segment-bar');
+				bars.forEach((b, i) => {
+					b.classList.toggle('active', i === targetIdx);
+				});
+
+				// Synchronize thumbnails
+				if (card) {
+					const thumbs = card.querySelectorAll('.card-thumb-item');
+					thumbs.forEach((t, i) => {
+						const isActive = i === targetIdx;
+						t.classList.toggle('active', isActive);
+						if (isActive) {
+							t.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+						}
+					});
+				}
+
+				window.updateCardOutlet(slider, targetIdx);
+			};
+
+			window.hoverCardSlide = function(el, targetIdx) {
+				if (!el) return;
+				window.goToCardSlide(el, targetIdx);
+			};
+
+			window.hoverCardThumb = function(thumbEl, idx) {
+				if (!thumbEl) return;
+				window.goToCardSlide(thumbEl, idx);
+			};
+
+			window.clickCardThumb = function(thumbEl, idx, event) {
+				if (event) {
+					event.preventDefault();
+					event.stopPropagation();
+				}
+				if (!thumbEl) return;
+				const card = thumbEl.closest('.product-card');
+				if (card) {
+					card.setAttribute('data-user-selected', 'true');
+				}
+				window.goToCardSlide(thumbEl, idx);
+			};
+
+			window.resetCardSlide = function(cardEl) {
+				if (!cardEl) return;
+				if (cardEl.getAttribute('data-user-selected') === 'true') return;
+				window.goToCardSlide(cardEl, 0);
+			};
+
 			window.handleCardTrackScroll = function(track) {
 				if (!track) return;
 				const slider = track.closest('.product-image-slider');
@@ -1098,35 +1182,47 @@ const faviconUrl = rawFavicon.includes("?")
 					bars.forEach((b, i) => {
 						b.classList.toggle('active', i === idx);
 					});
+					const card = slider.closest('.product-card');
+					if (card) {
+						const thumbs = card.querySelectorAll('.card-thumb-item');
+						thumbs.forEach((t, i) => {
+							const isActive = i === idx;
+							t.classList.toggle('active', isActive);
+							if (isActive) {
+								t.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+							}
+						});
+					}
 					window.updateCardOutlet(slider, idx);
 				}
 			};
 
-			window.hoverCardSlide = function(el, targetIdx) {
-				if (!el) return;
-				const slider = el.closest('.product-image-slider');
-				if (!slider) return;
-				const track = slider.querySelector('.slider-track');
-				if (!track) return;
-				const cur = parseInt(slider.getAttribute('data-current-slide') || '0', 10);
-				if (cur === targetIdx) return;
+			// Global Event Delegation for Product Card Thumbnails
+			if (!window.__cardThumbClickDelegationInitialized) {
+				window.__cardThumbClickDelegationInitialized = true;
 
-				const bars = slider.querySelectorAll('.segment-bar');
-				const count = parseInt(slider.getAttribute('data-images-count') || '1', 10);
-				if (count <= 1) return;
+				document.addEventListener('click', (e) => {
+					const thumb = e.target.closest('.card-thumb-item');
+					if (thumb) {
+						e.preventDefault();
+						e.stopPropagation();
+						const idx = parseInt(thumb.getAttribute('data-thumb-index') || '0', 10);
+						if (window.clickCardThumb) {
+							window.clickCardThumb(thumb, idx, e);
+						}
+					}
+				}, true);
 
-				track.scrollTo({
-					left: targetIdx * track.clientWidth,
-					behavior: 'smooth'
-				});
-
-				bars.forEach((b, i) => {
-					b.classList.toggle('active', i === targetIdx);
-				});
-
-				slider.setAttribute('data-current-slide', targetIdx);
-				window.updateCardOutlet(slider, targetIdx);
-			};
+				document.addEventListener('mouseenter', (e) => {
+					const thumb = e.target && e.target.closest ? e.target.closest('.card-thumb-item') : null;
+					if (thumb) {
+						const idx = parseInt(thumb.getAttribute('data-thumb-index') || '0', 10);
+						if (window.hoverCardThumb) {
+							window.hoverCardThumb(thumb, idx);
+						}
+					}
+				}, true);
+			}
 		</script>
 	</body>
 </html>
