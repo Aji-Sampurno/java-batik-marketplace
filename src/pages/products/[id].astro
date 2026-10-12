@@ -1623,9 +1623,9 @@ function getCardDisplayPrice(p: any): number {
 				const code = `${product.code || ''}`;
 				const name = `${product.name || ''}`;
 				let detailsArr = [];
-				if (currentSelectedMotif) detailsArr.push(`Motif: ${currentSelectedMotif}`);
-				if (currentSelectedSleeve) detailsArr.push(`Lengan: ${currentSelectedSleeve}`);
-				if (selectedVar) detailsArr.push(`Ukuran: ${selectedVar}`);
+				if (currentSelectedMotif) detailsArr.push(currentSelectedMotif.trim());
+				if (currentSelectedSleeve) detailsArr.push(currentSelectedSleeve.trim());
+				if (selectedVar) detailsArr.push(selectedVar.trim());
 				
 				const specText = detailsArr.length > 0 ? ` [${detailsArr.join(' | ')}]` : '';
 				const currentProductUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
