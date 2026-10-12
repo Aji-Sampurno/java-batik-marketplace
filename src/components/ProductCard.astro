@@ -230,10 +230,6 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 			</div>
 		)}
 
-		<div class="outlet-tag" style={imageOutlets[0] ? "" : "display: none;"}>
-			<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-			<span>{imageOutlets[0] || outletDisplay}</span>
-		</div>
 		{isSlimFitProduct && (
 			<div class="fit-tag">
 				SLIM FIT
@@ -350,6 +346,11 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 			</p>
 		</div>
 
+		<div class="outlet-tag" style={imageOutlets[0] || outletDisplay ? "" : "display: none;"} title={imageOutlets[0] || outletDisplay}>
+			<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+			<span>{imageOutlets[0] || outletDisplay}</span>
+		</div>
+
 		<div class="actions">
 			{p.tokopedia_url && (
 				<a
@@ -373,7 +374,7 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 			<a
 				href={
 					!isOutOfStock
-						? `${waBaseUrl}${settings.contact_whatsapp}?text=Halo, saya tertarik dengan produk ${p.name}`
+						? `${waBaseUrl}${settings.contact_whatsapp}?text=${encodeURIComponent(`Halo, saya tertarik dengan produk ${p.name}${p.code ? ` (${p.code})` : ""}.\nFoto: ${cardImages[0] || p.image_url || ""}\nApakah masih tersedia?`)}`
 						: "javascript:void(0)"
 				}
 				target={
@@ -382,6 +383,10 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 						: "_self"
 				}
 				class={`wa-btn ${isOutOfStock ? "disabled-btn" : ""}`}
+				data-chat-admin="true"
+				data-product-name={p.name}
+				data-product-code={p.code || ""}
+				data-product-image={cardImages[0] || p.image_url || ""}
 			>
 				{!isOutOfStock
 					? "Chat Admin"
@@ -419,24 +424,30 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 	}
 
 	.outlet-tag {
-		position: absolute;
-		top: 10px;
-		left: 10px;
-		z-index: 6;
-		background: rgba(255, 255, 255, 0.92);
-		backdrop-filter: blur(8px);
-		-webkit-backdrop-filter: blur(8px);
-		border: 1px solid rgba(226, 232, 240, 0.9);
-		border-radius: 4px;
-		padding: 3px 8px;
-		font-size: 0.65rem;
-		font-weight: 600;
-		color: #1e293b;
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-		letter-spacing: 0.2px;
+		font-size: 0.68rem;
+		font-weight: 500;
+		color: #64748b;
+		margin-top: 0.35rem;
+		margin-bottom: 0.15rem;
+		letter-spacing: 0.1px;
+		width: fit-content;
+		max-width: 100%;
+	}
+
+	.outlet-tag svg {
+		width: 11px;
+		height: 11px;
+		flex-shrink: 0;
+		color: #94a3b8;
+	}
+
+	.outlet-tag span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.fit-tag {
@@ -718,8 +729,8 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		padding: 8px 0 4px 0;
-		min-height: 56px;
+		padding: 6px 4px 6px 4px;
+		min-height: 58px;
 		box-sizing: border-box;
 		overflow-x: auto;
 		scrollbar-width: none;
@@ -733,11 +744,11 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 	}
 
 	.card-thumb-item {
-		width: 44px;
-		height: 44px;
+		width: 38px;
+		height: 48px;
+		aspect-ratio: 4/5;
 		flex-shrink: 0;
-		aspect-ratio: 1;
-		border-radius: 6px;
+		border-radius: 4px;
 		overflow: hidden;
 		cursor: pointer;
 		border: 1.5px solid #e2e8f0;
@@ -746,7 +757,7 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 		margin: 0;
 		outline: none;
 		transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-		opacity: 0.8;
+		opacity: 0.85;
 		position: relative;
 		box-sizing: border-box;
 	}
@@ -761,13 +772,13 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 		border-color: var(--color-accent, #8c7851);
 		box-shadow: 0 0 0 1.5px var(--color-accent, #8c7851), 0 2px 6px rgba(140, 120, 81, 0.25);
 		opacity: 1;
-		transform: scale(1.04);
 	}
 
 	.card-thumb-item img {
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
+		object-position: center top;
 		display: block;
 		pointer-events: none;
 	}
@@ -778,20 +789,21 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 
 	@media (max-width: 768px) {
 		.card-thumbnails-strip {
-			gap: 5px;
-			padding: 6px 0 2px 0;
-			min-height: 44px;
+			gap: 6px;
+			padding: 5px 3px 3px 3px;
+			min-height: 46px;
 		}
 
 		.card-thumb-item {
-			width: 34px;
-			height: 34px;
-			border-radius: 5px;
+			width: 30px;
+			height: 38px;
+			aspect-ratio: 4/5;
+			border-radius: 3px;
 			border-width: 1.5px;
 		}
 
 		.card-thumb-item.active {
-			transform: scale(1.03);
+			border-color: var(--color-accent, #8c7851);
 		}
 
 		.product-card {
@@ -799,17 +811,16 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 		}
 
 		.outlet-tag {
-			top: 6px;
-			left: 6px;
-			padding: 2px 6px;
-			font-size: 0.55rem;
+			font-size: 0.6rem;
 			gap: 3px;
-			max-width: calc(100% - 12px);
+			margin-top: 0.2rem;
+			margin-bottom: 0.1rem;
+			max-width: 100%;
 		}
 
 		.outlet-tag svg {
-			width: 9px;
-			height: 9px;
+			width: 10px;
+			height: 10px;
 			flex-shrink: 0;
 		}
 
@@ -896,12 +907,16 @@ window.updateCardOutlet = function(slider, idx) {
 	if (!rawOutlets) return;
 	try {
 		const outlets = JSON.parse(rawOutlets);
-		const outletTag = slider.querySelector('.outlet-tag span');
-		const parentTag = slider.querySelector('.outlet-tag');
+		const card = slider.closest('.product-card') || slider;
+		const outletTag = card.querySelector('.outlet-tag span');
+		const parentTag = card.querySelector('.outlet-tag');
 		if (outlets && outlets[idx] !== undefined) {
 			const text = outlets[idx] || '';
-			if (outletTag) outletTag.textContent = text;
-			if (parentTag) parentTag.style.display = text ? 'flex' : 'none';
+			if (outletTag) {
+				outletTag.textContent = text;
+				if (parentTag) parentTag.setAttribute('title', text);
+			}
+			if (parentTag) parentTag.style.display = text ? 'inline-flex' : 'none';
 		}
 	} catch(e) {}
 };

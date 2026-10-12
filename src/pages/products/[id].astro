@@ -86,7 +86,7 @@ if (isSetelanProduct && rawProductVariants.length > 0) {
 }
 
 const waNumber = settings.contact_whatsapp || "628123456789";
-const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${product.name} (${product.code || ''}). Apakah masih tersedia?`);
+const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${product.name} (${product.code || ''}).\nFoto: ${product.image_url || ''}\nApakah masih tersedia?`);
 const isOutOfStock = !product.is_active || product.total_stock === 0 || product.stock_status === 'habis';
 
 const colorsList: string[] = product.colors || [];
@@ -781,6 +781,10 @@ function getCardDisplayPrice(p: any): number {
 							href={!isOutOfStock ? `${waBaseUrl}${waNumber}?text=${waMessage}` : 'javascript:void(0)'} 
 							target={!isOutOfStock ? "_blank" : "_self"} 
 							class={`btn-primary ${isOutOfStock ? 'btn-disabled' : ''}`}
+							data-chat-admin="true"
+							data-product-name={product.name}
+							data-product-code={product.code || ''}
+							data-product-image={product.image_url || ''}
 						>
 							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 10px;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-11.7.19.19 0 0 1 .1 0 8.38 8.38 0 0 1 3.8.9L21 3z"/></svg>
 							<span class="btn-text">{!isOutOfStock ? 'Chat Admin' : 'CEK PRODUK LAIN'}</span>
@@ -936,16 +940,16 @@ function getCardDisplayPrice(p: any): number {
 		}
 
 		.thumb-item {
-			width: 68px;
-			height: 68px;
+			width: 64px;
+			height: 80px;
 			flex-shrink: 0;
-			aspect-ratio: 1;
-			border-radius: 8px;
+			aspect-ratio: 4/5;
+			border-radius: 6px;
 			overflow: hidden;
 			cursor: pointer;
 			border: 2px solid #e2e8f0;
 			transition: all 0.2s ease;
-			opacity: 0.7;
+			opacity: 0.75;
 			background: #f8fafc;
 		}
 
@@ -965,6 +969,7 @@ function getCardDisplayPrice(p: any): number {
 			width: 100%;
 			height: 100%;
 			object-fit: cover;
+			object-position: center top;
 			display: block;
 		}
 
@@ -1626,8 +1631,10 @@ function getCardDisplayPrice(p: any): number {
 				if (price) detailsArr.push(`Harga: Rp ${Number(price).toLocaleString('id-ID')}`);
 				
 				const specText = detailsArr.length > 0 ? ` [${detailsArr.join(' | ')}]` : '';
-				const msg = encodeURIComponent(`Halo, saya tertarik memesan produk ${name} (${code})${specText}. Apakah masih tersedia?`);
+				const currentImg = (mainImg && mainImg.src) ? mainImg.src : `${product.image_url || ''}`;
+				const msg = encodeURIComponent(`Halo, saya tertarik memesan produk ${name} (${code})${specText}.\nFoto: ${currentImg}\nApakah masih tersedia?`);
 				waBtn.setAttribute('href', `https://wa.me/${waNumber}?text=${msg}`);
+				waBtn.setAttribute('data-product-image', currentImg);
 			}
 		};
 

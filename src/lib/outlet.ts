@@ -19,10 +19,10 @@ export const OUTLET_ALIAS_MAP: Record<string, string> = {
   'pik': 'Jakarta, PIK',
   'aeon gc': 'Jakarta, AEON GC',
   'aeon tb': 'Jakarta, AEON TB',
-  'ijen': 'Online',
+  'ijen': 'Khusus Pemesanan Online',
   'mog 2': 'Malang, MOG lt 2',
-  'gudang': 'Online',
-  'gudang i': 'Online',
+  'gudang': 'Khusus Pemesanan Online',
+  'gudang i': 'Khusus Pemesanan Online',
 };
 
 // Daftar unik nama outlet resmi untuk filter katalog
@@ -38,7 +38,7 @@ export const KNOWN_OUTLET_LIST: string[] = [
   'Jakarta, PIK',
   'Jakarta, AEON GC',
   'Jakarta, AEON TB',
-  'Online'
+  'Khusus Pemesanan Online'
 ];
 
 /**

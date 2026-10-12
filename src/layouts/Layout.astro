@@ -6,6 +6,7 @@ interface Props {
 const { title } = Astro.props;
 import { apiFetch } from "../lib/api";
 import "../styles/index.css";
+import ChatAdminModal from "../components/ChatAdminModal.astro";
 
 // Fetch Site Settings
 let settings: any = { site_name: "Batik Nusantara" };
@@ -536,6 +537,8 @@ const faviconUrl = rawFavicon.includes("?")
 		<main>
 			<slot />
 		</main>
+		<!-- Chat Admin Modal & Toast (Solusi 2 & 3) -->
+		<ChatAdminModal />
 		<!-- Floating WhatsApp Button -->
 		<div
 			class="fixed-contact-trigger"
@@ -1102,12 +1105,16 @@ const faviconUrl = rawFavicon.includes("?")
 				if (!rawOutlets) return;
 				try {
 					const outlets = JSON.parse(rawOutlets);
-					const outletTag = slider.querySelector('.outlet-tag span');
-					const parentTag = slider.querySelector('.outlet-tag');
+					const card = slider.closest('.product-card') || slider;
+					const outletTag = card.querySelector('.outlet-tag span');
+					const parentTag = card.querySelector('.outlet-tag');
 					if (outlets && outlets[idx] !== undefined) {
 						const text = outlets[idx] || '';
-						if (outletTag) outletTag.textContent = text;
-						if (parentTag) parentTag.style.display = text ? 'flex' : 'none';
+						if (outletTag) {
+							outletTag.textContent = text;
+							if (parentTag) parentTag.setAttribute('title', text);
+						}
+						if (parentTag) parentTag.style.display = text ? 'inline-flex' : 'none';
 					}
 				} catch(e) {}
 			};

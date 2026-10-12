@@ -1,0 +1,822 @@
+---
+// src/components/ChatAdminModal.astro
+// Komponen Modal & Toast untuk Solusi 2 (Web Share API) dan Solusi 3 (Copy to Clipboard)
+---
+
+<!-- Toast Notifikasi (Desktop & Mobile) -->
+<div id="chat-admin-toast" class="cam-toast" aria-live="polite" role="status">
+  <div class="cam-toast-icon">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+    </svg>
+    <span class="cam-check-badge">✓</span>
+  </div>
+  <div class="cam-toast-body">
+    <div class="cam-toast-title">Foto Produk Disalin ke Clipboard!</div>
+    <div class="cam-toast-desc" id="cam-toast-desc-text">
+      Tekan <strong>Tempel / Paste (Ctrl+V)</strong> di chat WhatsApp untuk melampirkan foto.
+    </div>
+  </div>
+  <button type="button" class="cam-toast-close" onclick="window.hideChatAdminToast()" aria-label="Tutup notifikasi">✕</button>
+</div>
+
+<!-- Modal Bottom Sheet (Khusus Mobile / Web Share) -->
+<div id="chat-admin-modal-overlay" class="cam-modal-overlay" onclick="if(event.target === this) window.closeChatAdminModal()">
+  <div class="cam-modal" role="dialog" aria-modal="true" aria-labelledby="cam-modal-title">
+    <div class="cam-modal-drag-handle"></div>
+    
+    <div class="cam-modal-header">
+      <div class="cam-modal-title-group">
+        <h3 id="cam-modal-title" class="cam-modal-title">Chat Admin WhatsApp</h3>
+        <p class="cam-modal-subtitle">Pilih cara pengiriman pesan & foto produk</p>
+      </div>
+      <button type="button" class="cam-modal-close" onclick="window.closeChatAdminModal()" aria-label="Tutup modal">✕</button>
+    </div>
+
+    <!-- Preview Produk -->
+    <div class="cam-product-preview">
+      <img id="cam-preview-img" src="" alt="Produk" class="cam-preview-img" />
+      <div class="cam-preview-info">
+        <h4 id="cam-preview-title" class="cam-preview-title">-</h4>
+        <div id="cam-preview-desc" class="cam-preview-desc">-</div>
+      </div>
+    </div>
+
+    <!-- Pilihan Solusi -->
+    <div class="cam-options-list">
+      <!-- Opsi 1: Solusi 2 (Web Share API) -->
+      <button type="button" class="cam-option-card cam-option-share" id="cam-opt-share" onclick="window.executeChatAdminShare()">
+        <div class="cam-option-icon cam-icon-share">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3"></circle>
+            <circle cx="6" cy="12" r="3"></circle>
+            <circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+          </svg>
+        </div>
+        <div class="cam-option-content">
+          <div class="cam-option-header">
+            <span class="cam-option-title">Bagikan Langsung dengan Foto</span>
+            <span class="cam-badge cam-badge-gold">Rekomendasi HP</span>
+          </div>
+          <p class="cam-option-desc">Foto fisik produk terlampir otomatis ke WhatsApp lewat menu Berbagi ponsel.</p>
+        </div>
+        <div class="cam-option-arrow">›</div>
+      </button>
+
+      <!-- Opsi 2: Solusi 3 (Direct WA + Auto Copy Image) -->
+      <button type="button" class="cam-option-card cam-option-direct" id="cam-opt-direct" onclick="window.executeChatAdminDirect()">
+        <div class="cam-option-icon cam-icon-wa">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.412h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.883-9.885 9.883m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+          </svg>
+        </div>
+        <div class="cam-option-content">
+          <div class="cam-option-header">
+            <span class="cam-option-title">Chat Nomor Admin (+ Salin Foto)</span>
+            <span class="cam-badge cam-badge-green">Langsung ke Admin</span>
+          </div>
+          <p class="cam-option-desc">Foto disalin ke clipboard dan langsung ke chat Admin. Anda tinggal tekan <strong>Tempel / Paste</strong>.</p>
+        </div>
+        <div class="cam-option-arrow">›</div>
+      </button>
+    </div>
+
+    <!-- Status Loading State -->
+    <div id="cam-loading-indicator" class="cam-loading-indicator" style="display: none;">
+      <div class="cam-spinner"></div>
+      <span id="cam-loading-text">Menyiapkan foto produk...</span>
+    </div>
+
+    <div class="cam-modal-footer">
+      <button type="button" class="cam-btn-cancel" onclick="window.closeChatAdminModal()">Batal</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* ========================================================================= */
+  /* TOAST NOTIFICATION STYLING                                                */
+  /* ========================================================================= */
+  .cam-toast {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: rgba(18, 18, 18, 0.94);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    color: #ffffff;
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    border-radius: 16px;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.35), 0 0 20px rgba(212, 175, 55, 0.15);
+    z-index: 100000;
+    max-width: 92vw;
+    width: 460px;
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+  }
+
+  .cam-toast.active {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .cam-toast-icon {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    background: rgba(212, 175, 55, 0.15);
+    border: 1px solid rgba(212, 175, 55, 0.4);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #d4af37;
+  }
+
+  .cam-check-badge {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    width: 16px;
+    height: 16px;
+    background: #22c55e;
+    color: white;
+    font-size: 10px;
+    font-weight: 800;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #181818;
+  }
+
+  .cam-toast-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cam-toast-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 2px;
+    letter-spacing: 0.2px;
+  }
+
+  .cam-toast-desc {
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.78);
+    line-height: 1.35;
+  }
+
+  .cam-toast-desc strong {
+    color: #facc15;
+    font-weight: 600;
+  }
+
+  .cam-toast-close {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.2s;
+  }
+
+  .cam-toast-close:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* ========================================================================= */
+  /* MODAL / BOTTOM SHEET STYLING                                              */
+  /* ========================================================================= */
+  .cam-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 10, 0.65);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 99999;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .cam-modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .cam-modal {
+    background: #ffffff;
+    width: 100%;
+    max-width: 480px;
+    border-radius: 24px 24px 0 0;
+    padding: 16px 20px 24px 20px;
+    box-shadow: 0 -15px 40px rgba(0, 0, 0, 0.2);
+    transform: translateY(100%);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .cam-modal-overlay.active .cam-modal {
+    transform: translateY(0);
+  }
+
+  @media (min-width: 640px) {
+    .cam-modal-overlay {
+      align-items: center;
+      padding: 20px;
+    }
+    .cam-modal {
+      border-radius: 20px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.25);
+      transform: scale(0.94) translateY(20px);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .cam-modal-overlay.active .cam-modal {
+      transform: scale(1) translateY(0);
+    }
+    .cam-modal-drag-handle {
+      display: none;
+    }
+  }
+
+  .cam-modal-drag-handle {
+    width: 42px;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    margin: 0 auto 14px auto;
+  }
+
+  .cam-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .cam-modal-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 2px 0;
+    font-family: inherit;
+  }
+
+  .cam-modal-subtitle {
+    font-size: 0.78rem;
+    color: #64748b;
+    margin: 0;
+  }
+
+  .cam-modal-close {
+    background: #f1f5f9;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: #64748b;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .cam-modal-close:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+
+  /* Product Preview Card */
+  .cam-product-preview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    margin-bottom: 18px;
+  }
+
+  .cam-preview-img {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: #f1f5f9;
+    border: 1px solid rgba(0,0,0,0.06);
+  }
+
+  .cam-preview-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cam-preview-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 2px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cam-preview-desc {
+    font-size: 0.74rem;
+    color: #64748b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Options List */
+  .cam-options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .cam-option-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1.5px solid #e2e8f0;
+    background: #ffffff;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.22s ease;
+    font-family: inherit;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .cam-option-card:hover {
+    border-color: #8c7851;
+    background: #faf9f6;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(140, 120, 81, 0.08);
+  }
+
+  .cam-option-card:active {
+    transform: translateY(0);
+  }
+
+  .cam-option-icon {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cam-icon-share {
+    background: rgba(212, 175, 55, 0.12);
+    color: #8c7851;
+  }
+
+  .cam-icon-wa {
+    background: rgba(37, 211, 102, 0.12);
+    color: #25d366;
+  }
+
+  .cam-option-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cam-option-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+    flex-wrap: wrap;
+  }
+
+  .cam-option-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #1e293b;
+  }
+
+  .cam-badge {
+    font-size: 0.65rem;
+    padding: 2px 7px;
+    border-radius: 20px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .cam-badge-gold {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .cam-badge-green {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .cam-option-desc {
+    font-size: 0.74rem;
+    color: #64748b;
+    margin: 0;
+    line-height: 1.35;
+  }
+
+  .cam-option-arrow {
+    font-size: 1.4rem;
+    color: #cbd5e1;
+    line-height: 1;
+  }
+
+  /* Loading state */
+  .cam-loading-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 10px;
+    margin-bottom: 14px;
+    font-size: 0.8rem;
+    color: #475569;
+    font-weight: 600;
+  }
+
+  .cam-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2.5px solid #cbd5e1;
+    border-top-color: #8c7851;
+    border-radius: 50%;
+    animation: cam-spin 0.7s linear infinite;
+  }
+
+  @keyframes cam-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .cam-modal-footer {
+    display: flex;
+    justify-content: center;
+  }
+
+  .cam-btn-cancel {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+
+  .cam-btn-cancel:hover {
+    color: #475569;
+  }
+</style>
+
+<script is:inline>
+  // =========================================================================
+  // GLOBAL CHAT ADMIN MANAGER (SOLUSI 2 & SOLUSI 3)
+  // =========================================================================
+  (function () {
+    let currentPayload = null;
+    let toastTimeout = null;
+
+    // Helper: Convert any Blob to PNG Blob using Canvas
+    async function convertBlobToPng(blob) {
+      if (!blob) return null;
+      if (blob.type === 'image/png') return blob;
+      try {
+        let img;
+        if (window.createImageBitmap) {
+          img = await createImageBitmap(blob);
+        } else {
+          img = await new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = reject;
+            image.src = URL.createObjectURL(blob);
+          });
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        return new Promise((resolve) => {
+          canvas.toBlob((pngBlob) => {
+            resolve(pngBlob || blob);
+          }, 'image/png');
+        });
+      } catch (e) {
+        console.warn('Canvas conversion to PNG error:', e);
+        return blob;
+      }
+    }
+
+    // Helper: Fetch image blob safely through proxy
+    async function fetchImageBlob(imageUrl) {
+      if (!imageUrl) return null;
+      try {
+        const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(imageUrl)}`;
+        const res = await fetch(proxyUrl);
+        if (!res.ok) return null;
+        return await res.blob();
+      } catch (err) {
+        console.warn('Fetch image blob failed:', err);
+        return null;
+      }
+    }
+
+    // Helper: Copy image to clipboard (Solusi 3)
+    async function copyImageBlobToClipboard(blob) {
+      if (!blob || !navigator.clipboard || !window.ClipboardItem) return false;
+      try {
+        const pngBlob = await convertBlobToPng(blob);
+        if (!pngBlob) return false;
+        const item = new ClipboardItem({ 'image/png': pngBlob });
+        await navigator.clipboard.write([item]);
+        return true;
+      } catch (err) {
+        console.warn('Gagal salin gambar ke clipboard:', err);
+        return false;
+      }
+    }
+
+    // Toast UI
+    window.showChatAdminToast = function (customText) {
+      const toast = document.getElementById('chat-admin-toast');
+      const descEl = document.getElementById('cam-toast-desc-text');
+      if (!toast) return;
+
+      if (customText && descEl) {
+        descEl.innerHTML = customText;
+      } else if (descEl) {
+        descEl.innerHTML = 'Tekan <strong>Tempel / Paste (Ctrl+V)</strong> di chat WhatsApp untuk melampirkan foto.';
+      }
+
+      toast.classList.add('active');
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('active');
+      }, 6500);
+    };
+
+    window.hideChatAdminToast = function () {
+      const toast = document.getElementById('chat-admin-toast');
+      if (toast) toast.classList.remove('active');
+      if (toastTimeout) clearTimeout(toastTimeout);
+    };
+
+    // Modal UI
+    window.openChatAdminModal = function (payload) {
+      currentPayload = payload;
+      const overlay = document.getElementById('chat-admin-modal-overlay');
+      const previewImg = document.getElementById('cam-preview-img');
+      const previewTitle = document.getElementById('cam-preview-title');
+      const previewDesc = document.getElementById('cam-preview-desc');
+      const optShare = document.getElementById('cam-opt-share');
+
+      if (previewImg) previewImg.src = payload.imageUrl || '';
+      if (previewTitle) previewTitle.textContent = payload.title || 'Produk Batik';
+      if (previewDesc) previewDesc.textContent = payload.specText || 'Pesan Sekarang via WhatsApp';
+
+      // Check if navigator.canShare supports files
+      const canShareFiles = !!(navigator.canShare);
+      if (optShare) {
+        optShare.style.display = canShareFiles ? 'flex' : 'none';
+      }
+
+      if (overlay) overlay.classList.add('active');
+    };
+
+    window.closeChatAdminModal = function () {
+      const overlay = document.getElementById('chat-admin-modal-overlay');
+      if (overlay) overlay.classList.remove('active');
+    };
+
+    const setLoading = (loading, text) => {
+      const indicator = document.getElementById('cam-loading-indicator');
+      const textEl = document.getElementById('cam-loading-text');
+      if (indicator) indicator.style.display = loading ? 'flex' : 'none';
+      if (textEl && text) textEl.textContent = text;
+    };
+
+    // Eksekusi Solusi 2: Web Share API (File Gambar Fisik)
+    window.executeChatAdminShare = async function () {
+      if (!currentPayload) return;
+      setLoading(true, 'Menyiapkan lampiran foto...');
+      try {
+        const rawBlob = await fetchImageBlob(currentPayload.imageUrl);
+        let shared = false;
+
+        if (rawBlob && navigator.canShare) {
+          const ext = rawBlob.type && rawBlob.type.includes('png') ? 'png' : 'jpg';
+          const file = new File([rawBlob], `produk.${ext}`, { type: rawBlob.type || 'image/jpeg' });
+          if (navigator.canShare({ files: [file] })) {
+            window.closeChatAdminModal();
+            await navigator.share({
+              files: [file],
+              title: currentPayload.title,
+              text: currentPayload.rawText || currentPayload.text
+            });
+            shared = true;
+          }
+        }
+
+        if (!shared) {
+          // Fallback ke direct WA
+          window.executeChatAdminDirect();
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.warn('Web Share failed, fallback to direct:', err);
+          window.executeChatAdminDirect();
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Eksekusi Solusi 3: Direct WA + Salin Gambar ke Clipboard
+    window.executeChatAdminDirect = async function () {
+      if (!currentPayload) return;
+      setLoading(true, 'Menyalin foto & membuka chat...');
+      
+      const payload = currentPayload;
+      let copied = false;
+
+      try {
+        const rawBlob = await fetchImageBlob(payload.imageUrl);
+        if (rawBlob) {
+          copied = await copyImageBlobToClipboard(rawBlob);
+        }
+      } catch (e) {
+        console.warn('Error saat menyalin gambar:', e);
+      }
+
+      setLoading(false);
+      window.closeChatAdminModal();
+
+      if (copied) {
+        window.showChatAdminToast(
+          'Foto produk disalin! Tekan <strong>Tempel / Paste</strong> di chat WhatsApp.'
+        );
+      }
+
+      // Buka URL WhatsApp
+      if (payload.waUrl) {
+        // Pada mobile, gunakan window.location untuk membuka aplikasi WhatsApp langsung
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        if (isMobile) {
+          window.location.href = payload.waUrl;
+        } else {
+          window.open(payload.waUrl, '_blank');
+        }
+      }
+    };
+
+    // =========================================================================
+    // GLOBAL HANDLER CLICK TRIGGER
+    // =========================================================================
+    window.handleChatAdminClick = async function (e, btn) {
+      if (!btn) return;
+      if (btn.classList.contains('disabled-btn') || btn.classList.contains('btn-disabled')) return;
+
+      const waUrl = btn.getAttribute('href') || '';
+      if (!waUrl || waUrl.startsWith('javascript:')) return;
+
+      // Ambil data produk
+      const card = btn.closest('.product-card');
+      let title = btn.getAttribute('data-product-name') || '';
+      let imageUrl = btn.getAttribute('data-product-image') || '';
+      let specText = '';
+
+      if (card) {
+        if (!title) {
+          const titleEl = card.querySelector('.product-name, h3, h2');
+          if (titleEl) title = titleEl.textContent.trim();
+        }
+        // Cari gambar yang sedang aktif (apabila digeser/diswipe)
+        const activeImg = card.querySelector('.product-image-slider img.active, .product-image img');
+        if (activeImg && activeImg.src) {
+          imageUrl = activeImg.src;
+        }
+      } else {
+        // Cek halaman detail produk
+        const mainImg = document.getElementById('main-product-img');
+        if (mainImg && mainImg.src) {
+          imageUrl = mainImg.src;
+        }
+      }
+
+      // Parse teks dari waUrl
+      let rawText = '';
+      try {
+        const u = new URL(waUrl);
+        rawText = u.searchParams.get('text') || '';
+      } catch (err) {
+        const match = waUrl.match(/text=([^&]*)/);
+        if (match) rawText = decodeURIComponent(match[1]);
+      }
+
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && window.innerWidth <= 768);
+      const canShare = !!(navigator.share && navigator.canShare);
+
+      const payload = {
+        title: title || 'Produk Batik',
+        imageUrl: imageUrl,
+        waUrl: waUrl,
+        rawText: rawText,
+        specText: title
+      };
+
+      // Jika di Mobile dan mendukung Web Share: Tampilkan pilihan Bottom Sheet
+      if (isMobile && canShare) {
+        window.openChatAdminModal(payload);
+        return;
+      }
+
+      // Jika di Desktop / PC: Langsung jalankan Solusi 3 (Salin foto ke clipboard + buka WA)
+      currentPayload = payload;
+      
+      // Berikan visual feedback cepat pada tombol
+      const origText = btn.innerHTML;
+      btn.style.opacity = '0.7';
+      btn.style.pointerEvents = 'none';
+
+      let copied = false;
+      try {
+        const rawBlob = await fetchImageBlob(imageUrl);
+        if (rawBlob) {
+          copied = await copyImageBlobToClipboard(rawBlob);
+        }
+      } catch (err) {}
+
+      btn.style.opacity = '1';
+      btn.style.pointerEvents = 'auto';
+
+      if (copied) {
+        window.showChatAdminToast(
+          'Foto produk disalin ke clipboard! Tekan <strong>Tempel / Paste (Ctrl+V)</strong> di WhatsApp.'
+        );
+      }
+
+      window.open(waUrl, '_blank');
+    };
+
+    // Global Event Delegation untuk menangkap semua tombol Chat Admin
+    if (!window.__chatAdminDelegationInitialized) {
+      window.__chatAdminDelegationInitialized = true;
+      document.addEventListener('click', function (e) {
+        const btn = e.target.closest('#wa-btn, .wa-btn, [data-chat-admin="true"]');
+        if (!btn) return;
+
+        if (btn.classList.contains('disabled-btn') || btn.classList.contains('btn-disabled')) return;
+        const href = btn.getAttribute('href') || '';
+        if (!href || href.startsWith('javascript:')) return;
+        if (!href.includes('wa.me') && !href.includes('whatsapp.com')) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        window.handleChatAdminClick(e, btn);
+      }, true);
+    }
+  })();
+</script>
