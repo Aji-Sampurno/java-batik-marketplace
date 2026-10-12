@@ -92,7 +92,7 @@ const siteOrigin = (Astro.url && !Astro.url.hostname.includes("localhost") && !A
   ? Astro.url.origin
   : (Astro.site ? Astro.site.origin : "https://javabatikgallery.com");
 const productUrl = `${siteOrigin}/products/${product.id}`;
-const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${product.name}${product.code ? ` (${product.code})` : ''}.\nLink: ${productUrl}\nApakah masih tersedia?`);
+const waMessage = encodeURIComponent(`Halo, saya tertarik dengan produk ${product.name}${product.code ? ` (${product.code})` : ''}.\nApakah masih tersedia?\n\n${productUrl}`);
 const isOutOfStock = !product.is_active || product.total_stock === 0 || product.stock_status === 'habis';
 
 const colorsList: string[] = product.colors || [];
@@ -1631,7 +1631,7 @@ function getCardDisplayPrice(p: any): number {
 				const currentProductUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
 					? `https://javabatikgallery.com/products/${product.id}`
 					: `${window.location.origin}/products/${product.id}`;
-				const msg = encodeURIComponent(`Halo, saya tertarik memesan produk ${name}${code ? ` (${code})` : ''}${specText}.\nLink: ${currentProductUrl}\nApakah masih tersedia?`);
+				const msg = encodeURIComponent(`Halo, saya tertarik memesan produk ${name}${code ? ` (${code})` : ''}${specText}.\nApakah masih tersedia?\n\n${currentProductUrl}`);
 				waBtn.setAttribute('href', `https://wa.me/${waNumber}?text=${msg}`);
 			}
 		};
