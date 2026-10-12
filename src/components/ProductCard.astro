@@ -110,6 +110,15 @@ const isOutOfStock =
 	(p.total_inventory !== undefined ? Number(p.total_inventory) === 0 : (p.total_stock === 0 || p.stock_status === "habis"));
 
 const waBaseUrl = "https://wa.me/";
+const rawWaNumber = settings?.contact_whatsapp || "628123456789";
+const cleanWaNumber = String(rawWaNumber).replace(/^0/, "62").replace(/\D/g, "");
+const siteOrigin = (Astro.url && !Astro.url.hostname.includes("localhost") && !Astro.url.hostname.includes("127.0.0.1"))
+	? Astro.url.origin
+	: (Astro.site ? Astro.site.origin : "https://javabatikgallery.com");
+const productUrl = `${siteOrigin}/products/${p.id}`;
+const cardWaMessage = encodeURIComponent(
+	`Halo, saya tertarik dengan produk ${p.name}${p.code ? ` (${p.code})` : ""}.\nLink: ${productUrl}\nApakah masih tersedia?`
+);
 const rawOutletStr = p.outlet || p.outlet_location || (p.variants && p.variants[0]?.outlet) || (p.product_variants && p.product_variants[0]?.outlet) || "";
 const outletDisplay = getOutletAlias(rawOutletStr);
 
@@ -374,7 +383,7 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 			<a
 				href={
 					!isOutOfStock
-						? `${waBaseUrl}${settings.contact_whatsapp}?text=${encodeURIComponent(`Halo, saya tertarik dengan produk ${p.name}${p.code ? ` (${p.code})` : ""}.\nFoto: ${cardImages[0] || p.image_url || ""}\nApakah masih tersedia?`)}`
+						? `${waBaseUrl}${cleanWaNumber}?text=${cardWaMessage}`
 						: "javascript:void(0)"
 				}
 				target={
@@ -382,11 +391,8 @@ if (isSetelanProductForCard && rawVariantsForCard.length > 0) {
 						? "_blank"
 						: "_self"
 				}
+				rel="noopener noreferrer"
 				class={`wa-btn ${isOutOfStock ? "disabled-btn" : ""}`}
-				data-chat-admin="true"
-				data-product-name={p.name}
-				data-product-code={p.code || ""}
-				data-product-image={cardImages[0] || p.image_url || ""}
 			>
 				{!isOutOfStock
 					? "Chat Admin"

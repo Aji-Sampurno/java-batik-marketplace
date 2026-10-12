@@ -1,12 +1,13 @@
 ---
 interface Props {
 	title: string;
+	description?: string;
+	image?: string;
 }
 
-const { title } = Astro.props;
+const { title, description, image } = Astro.props;
 import { apiFetch } from "../lib/api";
 import "../styles/index.css";
-import ChatAdminModal from "../components/ChatAdminModal.astro";
 
 // Fetch Site Settings
 let settings: any = { site_name: "Batik Nusantara" };
@@ -81,11 +82,24 @@ const faviconUrl = rawFavicon.includes("?")
 		<meta charset="UTF-8" />
 		<meta
 			name="description"
-			content="Marketplace Batik Eksklusif - Modern & Minimalist"
+			content={description || "Marketplace Batik Eksklusif - Modern & Minimalist"}
 		/>
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
 		<meta name="google-site-verification" content="5ckBUSehsVl3IkQpcqaviBVUJJLzywh3clT_qQRzF10" />
+
+		<!-- Open Graph / WhatsApp Preview -->
+		<meta property="og:type" content="website" />
+		<meta property="og:url" content={Astro.url.href} />
+		<meta property="og:title" content={`${title} | ${settings?.site_name || "Java Batik"}`} />
+		<meta property="og:description" content={description || "Marketplace Batik Eksklusif - Modern & Minimalist"} />
+		{image && <meta property="og:image" content={image} />}
+
+		<!-- Twitter Card -->
+		<meta name="twitter:card" content={image ? "summary_large_image" : "summary"} />
+		<meta name="twitter:title" content={`${title} | ${settings?.site_name || "Java Batik"}`} />
+		<meta name="twitter:description" content={description || "Marketplace Batik Eksklusif - Modern & Minimalist"} />
+		{image && <meta name="twitter:image" content={image} />}
 
 		<!-- Google tag (gtag.js) -->
 		<script async src="https://www.googletagmanager.com/gtag/js?id=G-R4JQ8VC3FP"></script>
@@ -537,8 +551,6 @@ const faviconUrl = rawFavicon.includes("?")
 		<main>
 			<slot />
 		</main>
-		<!-- Chat Admin Modal & Toast (Solusi 2 & 3) -->
-		<ChatAdminModal />
 		<!-- Floating WhatsApp Button -->
 		<div
 			class="fixed-contact-trigger"
