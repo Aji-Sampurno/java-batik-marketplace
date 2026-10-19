@@ -48,15 +48,17 @@ const productCategories = (product.categories || product.product_categories || [
   .filter(Boolean)
   .sort((a: any, b: any) => (a.category_level || a.level || 0) - (b.category_level || b.level || 0)) || [];
 
+const rawProductVariants = product.variants || product.product_variants || [];
 const isSetelanProduct =
   productCategories.some((c: any) => (c.name || '').toUpperCase().includes('SETELAN') || (c.name || '').toUpperCase().includes('STELAN')) ||
   (product.types?.name || '').toUpperCase().includes('SETELAN') ||
   (product.types?.name || '').toUpperCase().includes('STELAN') ||
   (product.name || '').toUpperCase().includes('SETELAN') ||
-  (product.name || '').toUpperCase().startsWith('S ');
+  (product.name || '').toUpperCase().startsWith('S ') ||
+  rawProductVariants.some((v: any) => (v.sku || '').toUpperCase().startsWith('WS')) ||
+  (rawProductVariants.length === 2 && (Number(rawProductVariants[0].price || 0) + Number(rawProductVariants[1].price || 0) === Number(product.price || 0)) && Number(product.price || 0) > 0);
 
 let effectiveProductPrice = Number(product.price || 0);
-const rawProductVariants = product.variants || product.product_variants || [];
 if (isSetelanProduct && rawProductVariants.length > 0) {
   const validPrices = rawProductVariants.map((v: any) => Number(v.price || 0)).filter((p: number) => p > 0);
   if (validPrices.length >= 2 && effectiveProductPrice < (validPrices[0] + validPrices[1])) {
@@ -499,16 +501,19 @@ function getCardDisplayPrice(p: any): number {
     (p?.name || '').toUpperCase().includes('SETELAN') ||
     (p?.name || '').toUpperCase().includes('STELAN') ||
     (p?.name || '').toUpperCase().startsWith('S ') ||
-    ((p?.code || '').length >= 2 && (p?.code || '').charAt(1).toUpperCase() === 'S');
+    ((p?.code || '').length >= 2 && (p?.code || '').charAt(1).toUpperCase() === 'S') ||
+    pVariants.some((v: any) => (v.sku || '').toUpperCase().startsWith('WS')) ||
+    (pVariants.length === 2 && (Number(pVariants[0].price || 0) + Number(pVariants[1].price || 0) === Number(p?.price || 0)) && Number(p?.price || 0) > 0);
 
   if (isSetelan && pVariants.length > 0) {
     const validPrices = pVariants.map((v: any) => Number(v.price || 0)).filter((pr: number) => pr > 0);
     if (validPrices.length >= 2 && displayPrice < (validPrices[0] + validPrices[1])) {
       return validPrices[0] + validPrices[1];
     }
+    return displayPrice;
   }
 
-  if (pVariants && pVariants.length > 0) {
+  if (!isSetelan && pVariants && pVariants.length > 0) {
     const validVariants = pVariants.filter((v: any) => Number(v.price || 0) > 0);
     if (validVariants.length > 0) {
       const fullSizeOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', '3L', '4XL', '4L', '5XL', '5L', 'ALL SIZE'];

@@ -160,7 +160,9 @@ const isSetelanProductForCard =
 	(p.name || '').toUpperCase().includes('SETELAN') ||
 	(p.name || '').toUpperCase().includes('STELAN') ||
 	(p.name || '').toUpperCase().startsWith('S ') ||
-	((p.code || '').length >= 2 && (p.code || '').charAt(1).toUpperCase() === 'S');
+	((p.code || '').length >= 2 && (p.code || '').charAt(1).toUpperCase() === 'S') ||
+	rawVariantsForCard.some((v: any) => (v.sku || '').toUpperCase().startsWith('WS')) ||
+	(rawVariantsForCard.length === 2 && (Number(rawVariantsForCard[0].price || 0) + Number(rawVariantsForCard[1].price || 0) === Number(p.price || 0)) && Number(p.price || 0) > 0);
 
 let cardDisplayPrice = Number(p.price) || 0;
 let cardOriginalPrice = p.original_price ? Number(p.original_price) : 0;

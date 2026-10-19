@@ -36,16 +36,19 @@ function getCardDisplayPrice(p: any): number {
 		(p?.name || '').toUpperCase().includes('SETELAN') ||
 		(p?.name || '').toUpperCase().includes('STELAN') ||
 		(p?.name || '').toUpperCase().startsWith('S ') ||
-		((p?.code || '').length >= 2 && (p?.code || '').charAt(1).toUpperCase() === 'S');
+		((p?.code || '').length >= 2 && (p?.code || '').charAt(1).toUpperCase() === 'S') ||
+		variants.some((v: any) => (v.sku || '').toUpperCase().startsWith('WS')) ||
+		(variants.length === 2 && (Number(variants[0].price || 0) + Number(variants[1].price || 0) === Number(p?.price || 0)) && Number(p?.price || 0) > 0);
 
 	if (isSetelan && variants.length > 0) {
 		const validPrices = variants.map((v: any) => Number(v.price || 0)).filter((pr: number) => pr > 0);
 		if (validPrices.length >= 2 && displayPrice < (validPrices[0] + validPrices[1])) {
 			return validPrices[0] + validPrices[1];
 		}
+		return displayPrice;
 	}
 
-	if (variants.length > 0) {
+	if (!isSetelan && variants.length > 0) {
 		const validVariants = variants.filter((v: any) => Number(v.price) > 0);
 		if (validVariants.length > 0) {
 			const sortedBySize = [...validVariants].sort((a: any, b: any) => {
