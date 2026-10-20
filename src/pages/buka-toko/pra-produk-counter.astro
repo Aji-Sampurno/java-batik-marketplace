@@ -108,15 +108,26 @@ if (success === "product") {
 			<!-- Pagination Controls -->
 			<div id="paginationControls" style="display: none; justify-content: center; align-items: center; margin-top: 3.5rem; padding-bottom: 3rem;">
 				<div style="display: flex; justify-content: center; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-					<button id="btnPrev" style="padding: 0.6rem 1.2rem; background: white; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+					<button id="btnPrev" style="padding: 0.6rem 1.2rem; background: white; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.2s;">
 						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
 						Prev
 					</button>
-					<div id="pageNumbersContainer" style="display: flex; align-items: center; gap: 0.4rem;"></div>
-					<button id="btnNext" style="padding: 0.6rem 1.2rem; background: white; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+					<div id="pageNumbersContainer" style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;"></div>
+					<button id="btnNext" style="padding: 0.6rem 1.2rem; background: white; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.2s;">
 						Next
 						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
 					</button>
+
+					<!-- Dropdown Pindah Halaman -->
+					<div class="page-select-wrapper" style="display: flex; align-items: center; gap: 0.5rem; margin-left: 0.5rem; padding-left: 0.75rem; border-left: 1px solid #e2e8f0;">
+						<label for="pageSelect" style="font-size: 0.85rem; color: #64748b; font-weight: 600; white-space: nowrap;">Ke Halaman:</label>
+						<div style="position: relative; display: inline-flex; align-items: center;">
+							<select id="pageSelect" aria-label="Pilih Halaman" style="padding: 0.55rem 2.2rem 0.55rem 0.85rem; background: white; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; outline: none; appearance: none; -webkit-appearance: none; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.2s;">
+							</select>
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" style="position: absolute; right: 0.7rem; pointer-events: none;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+						</div>
+						<span style="font-size: 0.85rem; color: #64748b; font-weight: 500; white-space: nowrap;">dari <span id="totalPagesText" style="font-weight: 700; color: #334155;">1</span></span>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -150,8 +161,26 @@ if (success === "product") {
 		}
 		.search-input:focus { background: white; border-color: var(--color-accent) !important; box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.08) !important; }
 
+		.page-select-wrapper select:focus {
+			border-color: var(--color-accent) !important;
+			box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1) !important;
+		}
+		.page-select-wrapper select:hover {
+			border-color: #94a3b8;
+		}
+
 		@media (max-width: 768px) {
 			.controls-container { flex-direction: column; align-items: stretch; background: transparent; border: none; padding: 0; }
+		}
+		@media (max-width: 640px) {
+			.page-select-wrapper {
+				border-left: none !important;
+				padding-left: 0 !important;
+				margin-left: 0 !important;
+				margin-top: 0.5rem;
+				width: 100%;
+				justify-content: center;
+			}
 		}
 	</style>
 
@@ -175,6 +204,8 @@ if (success === "product") {
 		const btnPrev = document.getElementById('btnPrev');
 		const btnNext = document.getElementById('btnNext');
 		const pageNumbersContainer = document.getElementById('pageNumbersContainer');
+		const pageSelect = document.getElementById('pageSelect');
+		const totalPagesText = document.getElementById('totalPagesText');
 
 		async function fetchExistingCodes() {
 			try {
@@ -269,13 +300,22 @@ if (success === "product") {
 
 		function updatePaginationUI() {
 			pageNumbersContainer.innerHTML = '';
+			let lastRendered = 0;
 			for (let i = 1; i <= totalPages; i++) {
 				if (totalPages > 7 && (i !== 1 && i !== totalPages && Math.abs(i - currentPage) > 2)) {
 					continue;
 				}
+				if (lastRendered && i - lastRendered > 1) {
+					const dots = document.createElement('span');
+					dots.textContent = '...';
+					dots.style.cssText = 'padding: 0 0.35rem; color: #94a3b8; font-weight: 700; font-size: 0.85rem; user-select: none;';
+					pageNumbersContainer.appendChild(dots);
+				}
+				lastRendered = i;
+
 				const btn = document.createElement('button');
 				btn.textContent = i;
-				btn.style.cssText = `padding: 0.5rem 0.9rem; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.8rem; font-weight: 700; cursor: pointer; background: ${i === currentPage ? 'var(--color-text)' : 'white'}; color: ${i === currentPage ? 'white' : '#475569'};`;
+				btn.style.cssText = `padding: 0.5rem 0.9rem; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.8rem; font-weight: 700; cursor: pointer; background: ${i === currentPage ? 'var(--color-text)' : 'white'}; color: ${i === currentPage ? 'white' : '#475569'}; transition: all 0.15s;`;
 				btn.addEventListener('click', () => {
 					if (currentPage !== i) {
 						currentPage = i;
@@ -285,6 +325,37 @@ if (success === "product") {
 				});
 				pageNumbersContainer.appendChild(btn);
 			}
+
+			// Update Dropdown Pindah Halaman
+			if (pageSelect) {
+				pageSelect.innerHTML = '';
+				for (let i = 1; i <= totalPages; i++) {
+					const opt = document.createElement('option');
+					opt.value = i;
+					opt.textContent = i;
+					if (i === currentPage) {
+						opt.selected = true;
+					}
+					pageSelect.appendChild(opt);
+				}
+				pageSelect.value = currentPage;
+			}
+
+			if (totalPagesText) {
+				totalPagesText.textContent = totalPages;
+			}
+
+			if (btnPrev) {
+				btnPrev.disabled = currentPage <= 1;
+				btnPrev.style.opacity = currentPage <= 1 ? '0.45' : '1';
+				btnPrev.style.cursor = currentPage <= 1 ? 'not-allowed' : 'pointer';
+			}
+			if (btnNext) {
+				btnNext.disabled = currentPage >= totalPages;
+				btnNext.style.opacity = currentPage >= totalPages ? '0.45' : '1';
+				btnNext.style.cursor = currentPage >= totalPages ? 'not-allowed' : 'pointer';
+			}
+
 			paginationControls.style.display = totalPages > 1 ? 'flex' : 'none';
 		}
 
@@ -417,6 +488,17 @@ if (success === "product") {
 				window.scrollTo({ top: 0, behavior: 'smooth' });
 			}
 		});
+
+		if (pageSelect) {
+			pageSelect.addEventListener('change', (e) => {
+				const selectedPage = parseInt(e.target.value, 10);
+				if (selectedPage && selectedPage !== currentPage) {
+					currentPage = selectedPage;
+					fetchProducts();
+					window.scrollTo({ top: 0, behavior: 'smooth' });
+				}
+			});
+		}
 
 		fetchExistingCodes();
 		fetchProducts();
