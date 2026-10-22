@@ -138,6 +138,16 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 						<span>Status Sinkronisasi</span>
 					</a>
 					<a
+						href="/buka-toko/reminder-poin"
+						style="display: inline-flex; align-items: center; gap: 0.4rem; background: #fffbeb; color: #b45309; border: 1px solid #fde68a; padding: 0.55rem 0.9rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; text-decoration: none; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05);"
+					>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+							<path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+						</svg>
+						<span>🔔 Reminder Poin Member</span>
+					</a>
+					<a
 						href="/buka-toko/tes-watermark"
 						style="display: inline-flex; align-items: center; gap: 0.4rem; background: #fffbeb; color: #b45309; border: 1px solid #fde68a; padding: 0.55rem 0.9rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; text-decoration: none; transition: all 0.2s;"
 					>
@@ -208,6 +218,22 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 					</p>
 					<h2 style="font-size: 2rem; margin: 0;">
 						<span id="stat-praproduk-count">--</span>
+					</h2>
+				</a>
+				<a
+					href="/buka-toko/reminder-poin"
+					class="glass"
+					style="padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid #f59e0b; text-decoration: none; color: inherit; display: block; transition: transform 0.2s;"
+				>
+					<p
+						class="text-uppercase opacity-50"
+						style="font-size: 0.65rem;"
+					>
+						Reminder Poin Member
+					</p>
+					<h2 style="font-size: 2rem; margin: 0; display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap;">
+						<span id="stat-reminders-count">--</span>
+						<span style="font-size: 0.72rem; color: #b45309; font-weight: 700;" id="stat-reminders-pending"></span>
 					</h2>
 				</a>
 			</div>
@@ -498,6 +524,22 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 													statPraproduk.innerText = (json.total).toLocaleString('id-ID');
 												}
 											}).catch(e => console.error("Praproduk external fail:", e));
+
+										// Fetch external Reminders Count asynchronously
+										const statReminders = document.getElementById('stat-reminders-count');
+										const statRemindersPending = document.getElementById('stat-reminders-pending');
+										fetch("https://noir.grace.gracianna.web.id/api/v1/getReminders")
+											.then(r => r.json())
+											.then(json => {
+												if (json && statReminders) {
+													const total = json.total || (json.reminders ? json.reminders.length : 0);
+													statReminders.innerText = total.toLocaleString('id-ID');
+													const pending = total - (json.total_wa_sent || 0);
+													if (statRemindersPending && pending > 0) {
+														statRemindersPending.innerText = `(${pending} Belum WA)`;
+													}
+												}
+											}).catch(e => console.error("Reminders external fail:", e));
 											
 									} catch(err) {
 										console.error('Stats Orchestration Error:', err);

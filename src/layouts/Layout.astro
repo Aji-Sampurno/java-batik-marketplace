@@ -195,7 +195,7 @@ const faviconUrl = rawFavicon.includes("?")
 
 				<!-- Desktop Navigation -->
 				<ul
-					style="display: flex; gap: var(--spacing-md); list-style: none; align-items: center;"
+					style="display: flex; gap: 0.55rem; list-style: none; align-items: center; flex-wrap: nowrap; white-space: nowrap;"
 					class="text-uppercase nav-links hide-mobile"
 				>
 					{
@@ -204,7 +204,7 @@ const faviconUrl = rawFavicon.includes("?")
 								<li>
 									<a
 										href="/"
-										style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px;"
+										style="font-weight: 500; font-size: 0.72rem; letter-spacing: 0.4px; white-space: nowrap; padding: 0.2rem 0.35rem;"
 									>
 										Lihat Toko
 									</a>
@@ -213,7 +213,7 @@ const faviconUrl = rawFavicon.includes("?")
 									<a
 										href="/buka-toko/kategori"
 										class="nav-admin-btn"
-										style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;"
+										style="font-weight: 500; font-size: 0.72rem; letter-spacing: 0.4px; white-space: nowrap; padding: 0.2rem 0.35rem;"
 									>
 										Kategori
 									</a>
@@ -222,7 +222,7 @@ const faviconUrl = rawFavicon.includes("?")
 									<a
 										href="/buka-toko/motif"
 										class="nav-admin-btn"
-										style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;"
+										style="font-weight: 500; font-size: 0.72rem; letter-spacing: 0.4px; white-space: nowrap; padding: 0.2rem 0.35rem;"
 									>
 										Motif
 									</a>
@@ -231,7 +231,7 @@ const faviconUrl = rawFavicon.includes("?")
 									<a
 										href="/buka-toko/info-toko"
 										class="nav-admin-btn"
-										style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;"
+										style="font-weight: 500; font-size: 0.72rem; letter-spacing: 0.4px; white-space: nowrap; padding: 0.2rem 0.35rem;"
 									>
 										Info Toko
 									</a>
@@ -240,7 +240,7 @@ const faviconUrl = rawFavicon.includes("?")
 									<a
 										href="/buka-toko/ukuran"
 										class="nav-admin-btn"
-										style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;"
+										style="font-weight: 500; font-size: 0.72rem; letter-spacing: 0.4px; white-space: nowrap; padding: 0.2rem 0.35rem;"
 									>
 										Ukuran
 									</a>
@@ -249,34 +249,34 @@ const faviconUrl = rawFavicon.includes("?")
 									<a
 										href="/buka-toko/warna"
 										class="nav-admin-btn"
-										style="font-weight: 500; font-size: 0.75rem; letter-spacing: 0.5px; padding: 0.25rem 0.5rem;"
+										style="font-weight: 500; font-size: 0.72rem; letter-spacing: 0.4px; white-space: nowrap; padding: 0.2rem 0.35rem;"
 									>
 										Warna
 									</a>
 								</li>
-								{/* <li><a href="/buka-toko/pra-produk" style="font-weight: 500; color: var(--color-accent-light); font-size: 0.75rem; letter-spacing: 0.5px;">Pra-Produk</a></li> */}
 								<li>
 									<a
 										href="/buka-toko/pra-produk-counter"
-										style="font-weight: 700; color: #38bdf8; font-size: 0.75rem; letter-spacing: 0.5px; background: rgba(56, 189, 248, 0.1); padding: 0.25rem 0.6rem; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.2);"
+										style="font-weight: 600; color: #0284c7; font-size: 0.72rem; letter-spacing: 0.4px; white-space: nowrap; padding: 0.2rem 0.4rem; background: rgba(56, 189, 248, 0.1); border-radius: 4px;"
 									>
 										Pra-Produk
 									</a>
 								</li>
-								{/* <li>
-									<a
-										href="/buka-toko/folder-gambar"
-										style="font-weight: 600; color: #38bdf8; font-size: 0.75rem; letter-spacing: 0.5px;"
-									>
-										Folder Gambar
-									</a>
-								</li> */}
 								<li>
 									<a
 										href="/buka-toko/promosi"
-										style="font-weight: 500; color: #fbbf24; font-size: 0.75rem; letter-spacing: 0.5px;"
+										style="font-weight: 500; color: #d97706; font-size: 0.72rem; letter-spacing: 0.4px; white-space: nowrap; padding: 0.2rem 0.35rem;"
 									>
 										Promo
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/reminder-poin"
+										style="font-weight: 600; color: #b45309; font-size: 0.72rem; letter-spacing: 0.4px; white-space: nowrap; padding: 0.2rem 0.4rem; background: rgba(245, 158, 11, 0.1); border-radius: 4px;"
+										title="Reminder Poin Member"
+									>
+										Reminder
 									</a>
 								</li>
 								<li>
@@ -284,19 +284,16 @@ const faviconUrl = rawFavicon.includes("?")
 										href="https://katalog.javabatikgallery.com/sync-report"
 										target="_blank"
 										rel="noopener noreferrer"
-										style="font-weight: 600; color: #10b981; font-size: 0.75rem; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 4px; background: rgba(16, 185, 129, 0.1); padding: 0.25rem 0.6rem; border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.25); text-decoration: none;"
-										title="Buka Status Sinkronisasi"
+										style="font-weight: 600; color: #059669; font-size: 0.72rem; letter-spacing: 0.4px; white-space: nowrap; padding: 0.2rem 0.4rem; background: rgba(16, 185, 129, 0.1); border-radius: 4px; text-decoration: none;"
+										title="Buka Status Sinkronisasi POS"
 									>
-										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-											<path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-										</svg>
-										Status Sinkronisasi
+										Sync
 									</a>
 								</li>
 								<li>
 									<a
 										href="?logout=true"
-										style="font-weight: 600; color: #ff4d4d; font-size: 0.75rem; letter-spacing: 0.5px; margin-left: var(--spacing-sm);"
+										style="font-weight: 600; color: #ef4444; font-size: 0.72rem; letter-spacing: 0.4px; white-space: nowrap; padding: 0.2rem 0.35rem;"
 									>
 										Logout
 									</a>
@@ -448,6 +445,18 @@ const faviconUrl = rawFavicon.includes("?")
 										style="font-size: 1.3rem; font-weight: 500; color: #fbbf24;"
 									>
 										Promo
+									</a>
+								</li>
+								<li>
+									<a
+										href="/buka-toko/reminder-poin"
+										style="font-size: 1.3rem; font-weight: 700; color: #f59e0b; display: inline-flex; align-items: center; justify-content: center; gap: 8px;"
+									>
+										<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+											<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+											<path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+										</svg>
+										Reminder Poin
 									</a>
 								</li>
 								<li>
