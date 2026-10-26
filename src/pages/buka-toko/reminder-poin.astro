@@ -71,6 +71,14 @@ try {
 
 				<!-- Quick Header Action Buttons -->
 				<div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+					<button id="btnOpenWabaTest" style="display: inline-flex; align-items: center; gap: 6px; padding: 0.6rem 1rem; border-radius: 8px; font-size: 0.82rem; font-weight: 700; cursor: pointer; background: #0284c7; color: white; border: 1px solid #0369a1; box-shadow: 0 1px 3px rgba(2,132,199,0.3); transition: all 0.2s;" title="Kirim Pesan Uji Coba Template WABA (reminder_member) ke Nomor Pribadi">
+						<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+							<line x1="22" y1="2" x2="11" y2="13"></line>
+							<polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+						</svg>
+						<span>Tes WABA Template</span>
+					</button>
+
 					<button id="btnRefresh" style="display: inline-flex; align-items: center; gap: 6px; padding: 0.6rem 1rem; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; background: #fefce8; color: #854d0e; border: 1px solid #fef08a; transition: all 0.2s;" title="Muat ulang data terbaru dari API">
 						<svg id="refreshSpinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
 							<path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
@@ -422,6 +430,116 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 		</div>
 	</div>
 
+	<!-- Modal Kirim WABA Template (reminder_member) -->
+	<div id="wabaModal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.65); backdrop-filter: blur(4px); z-index: 99999; align-items: center; justify-content: center; padding: 1rem;">
+		<div style="background: white; border-radius: 16px; max-width: 580px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
+			<!-- Modal Header -->
+			<div style="padding: 1.2rem 1.5rem; background: linear-gradient(135deg, #0369a1, #0284c7); color: white; display: flex; align-items: center; justify-content: space-between;">
+				<div>
+					<div style="display: flex; align-items: center; gap: 8px;">
+						<h3 style="margin: 0; font-size: 1.1rem; font-weight: 800; letter-spacing: -0.01em;">Kirim WABA Template</h3>
+						<span style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 700;">reminder_member</span>
+					</div>
+					<p style="margin: 3px 0 0 0; font-size: 0.78rem; opacity: 0.9;">Pengirim resmi: <b>+62 811-3000-626 (Java Batik Member)</b></p>
+				</div>
+				<button id="closeWabaModalBtn" type="button" style="background: rgba(255,255,255,0.15); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.1rem; font-weight: 700;">✕</button>
+			</div>
+
+			<!-- Modal Body (Scrollable) -->
+			<div style="padding: 1.25rem 1.5rem; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 1rem;">
+				<!-- Mode Notice / Alert -->
+				<div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 0.75rem 1rem; font-size: 0.8rem; color: #0369a1; display: flex; gap: 8px;">
+					<span style="font-size: 1.1rem;">💡</span>
+					<span>Masukkan <b>nomor pribadi Anda</b> di kolom nomor penerima untuk menguji coba pesan sebelum dikirim ke pelanggan sesungguhnya.</span>
+				</div>
+
+				<!-- Target Phone -->
+				<div>
+					<label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; font-weight: 700; color: #334155; margin-bottom: 4px;">
+						<span>Nomor WhatsApp Penerima <span style="color: #ef4444;">*</span></span>
+						<span id="dbFetchStatus" style="font-size: 0.72rem; color: #0284c7; font-weight: 600;"></span>
+					</label>
+					<div style="display: flex; gap: 6px;">
+						<input id="wabaInputPhone" type="text" placeholder="Contoh: 082334059852 atau 6282334059852" style="flex: 1; padding: 0.65rem 0.85rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.88rem; font-weight: 600; color: #0f172a; outline: none;" />
+						<button id="btnFetchDbMember" type="button" style="display: inline-flex; align-items: center; gap: 4px; background: #0284c7; border: 1px solid #0369a1; border-radius: 8px; padding: 0 12px; font-size: 0.75rem; font-weight: 700; color: white; cursor: pointer; white-space: nowrap;" title="Tarik data nama, poin, dan voucher langsung dari database">
+							<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+							<span>Tarik dari DB</span>
+						</button>
+						<button id="btnLoadAji" type="button" style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 10px; font-size: 0.75rem; font-weight: 700; color: #334155; cursor: pointer; white-space: nowrap;" title="Isi nomor pribadi Pak Aji (6282334059852)">
+							Aji Sampurno
+						</button>
+					</div>
+					<span style="font-size: 0.7rem; color: #64748b; margin-top: 3px; display: block;">Data member & poin otomatis ditarik dari database POS saat nomor diisi atau tombol "Tarik dari DB" diklik.</span>
+				</div>
+
+				<!-- Template Parameters Grid -->
+				<div style="background: #fafaf9; border: 1px solid #e2e8f0; border-radius: 10px; padding: 0.85rem 1rem;">
+					<div style="font-size: 0.76rem; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 0.6rem; letter-spacing: 0.04em;">
+						Parameter Pesan (5 Variabel Meta WABA)
+					</div>
+					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;">
+						<div>
+							<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(1) Nama Member</label>
+							<input id="wabaParamName" type="text" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
+						</div>
+						<div>
+							<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(2) Saldo Poin</label>
+							<input id="wabaParamPoin" type="text" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
+						</div>
+						<div>
+							<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(3) Kode Voucher</label>
+							<input id="wabaParamVoucher" type="text" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
+						</div>
+						<div>
+							<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(4) Outlet</label>
+							<input id="wabaParamOutlet" type="text" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
+						</div>
+					</div>
+					<div style="margin-top: 0.6rem;">
+						<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(5) Link / Info Tambahan</label>
+						<input id="wabaParamAdditional" type="text" value="https://javabatikgallery.com/products" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
+					</div>
+				</div>
+
+				<!-- Header Image & Live Card Preview -->
+				<div>
+					<label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; font-weight: 700; color: #334155; margin-bottom: 6px;">
+						<span>Gambar Header (Kartu Member Digital Java Batik)</span>
+						<span style="font-size: 0.7rem; color: #854d0e; background: #fef9c3; padding: 1px 6px; border-radius: 4px; font-weight: 700;">Format Sesuai Connect</span>
+					</label>
+
+					<!-- Visual Card Preview -->
+					<div style="background: #1c1917; border-radius: 12px; padding: 10px; text-align: center; border: 1.5px solid #a16207; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-bottom: 8px;">
+						<img id="wabaCardPreviewImg" src="" style="width: 100%; max-height: 220px; object-fit: contain; border-radius: 8px; display: block; margin: 0 auto;" alt="Pratinjau Kartu Member Java Batik" />
+						<div style="margin-top: 8px; font-size: 0.72rem; color: #fbbf24; font-weight: 700; letter-spacing: 0.03em;">
+							💳 KARTU MEMBER DIGITAL RESMI • JAVA BATIK GALLERY
+						</div>
+					</div>
+
+					<!-- URL Input -->
+					<div style="display: flex; align-items: center; gap: 6px;">
+						<input id="wabaInputImage" type="text" style="flex: 1; padding: 0.45rem 0.65rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.75rem; color: #475569; background: #f8fafc;" />
+						<button id="btnRefreshCard" type="button" style="padding: 0.45rem 0.75rem; background: white; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.72rem; font-weight: 700; color: #334155; cursor: pointer;">Perbarui</button>
+					</div>
+				</div>
+
+				<!-- Response Status Box -->
+				<div id="wabaResultBox" style="display: none; padding: 0.85rem; border-radius: 8px; font-size: 0.8rem;"></div>
+			</div>
+
+			<!-- Modal Footer -->
+			<div style="padding: 1rem 1.5rem; border-top: 1px solid #f1f5f9; background: #fafaf9; display: flex; justify-content: flex-end; gap: 0.75rem;">
+				<button id="btnCancelWaba" type="button" style="background: white; border: 1px solid #cbd5e1; color: #475569; padding: 0.65rem 1.1rem; border-radius: 8px; font-weight: 700; font-size: 0.82rem; cursor: pointer;">
+					Tutup
+				</button>
+				<button id="btnSubmitSendWaba" type="button" style="display: inline-flex; align-items: center; gap: 6px; background: #0284c7; color: white; border: none; padding: 0.65rem 1.25rem; border-radius: 8px; font-weight: 700; font-size: 0.84rem; cursor: pointer; box-shadow: 0 2px 4px rgba(2,132,199,0.3);">
+					<span id="wabaBtnSpinner" style="display: none; width: 14px; height: 14px; border: 2px solid white; border-top-color: transparent; border-radius: 50%; animation: spinAnim 0.8s linear infinite;"></span>
+					<span id="wabaBtnText">Kirim Sekarang via WABA</span>
+				</button>
+			</div>
+		</div>
+	</div>
+
 	<!-- Floating Toast -->
 	<div id="toastNotification" style="position: fixed; bottom: 2rem; right: 2rem; background: #0f172a; color: white; padding: 0.75rem 1.25rem; border-radius: 8px; font-size: 0.84rem; font-weight: 600; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 0.5rem; z-index: 100000; display: none;">
 		<span style="background: #10b981; color: white; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 800;">✓</span>
@@ -704,7 +822,11 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 							</td>
 							<td style="padding: 0.85rem 1rem; text-align: right;">
 								<div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
-									<a href="${waLink}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 5px; background: #25d366; color: white; padding: 6px 12px; border-radius: 7px; font-size: 0.78rem; font-weight: 700; text-decoration: none; box-shadow: 0 1px 3px rgba(37,211,102,0.3); white-space: nowrap;" title="Buka WhatsApp & Kirim Pesan">
+									<button class="btn-waba-row" data-id="${member.id}" style="display: inline-flex; align-items: center; gap: 4px; background: #0284c7; color: white; border: none; padding: 6px 10px; border-radius: 7px; font-size: 0.76rem; font-weight: 700; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 3px rgba(2,132,199,0.3);" title="Kirim Template WABA (Bisa diuji coba ke no. pribadi)">
+										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+										<span>WABA</span>
+									</button>
+									<a href="${waLink}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 5px; background: #25d366; color: white; padding: 6px 12px; border-radius: 7px; font-size: 0.78rem; font-weight: 700; text-decoration: none; box-shadow: 0 1px 3px rgba(37,211,102,0.3); white-space: nowrap;" title="Buka WhatsApp & Kirim Pesan Manual">
 										<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.007c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.861.174.086.275.072.376-.044.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.043.073.043.419-.101.824z"/></svg>
 										<span>Kirim WA</span>
 									</a>
@@ -825,6 +947,16 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 						openModal(memberData);
 					});
 				});
+
+				// Open WABA Modal from Table Row
+				document.querySelectorAll('.btn-waba-row').forEach(btn => {
+					btn.addEventListener('click', (e) => {
+						e.stopPropagation();
+						const row = btn.closest('tr');
+						const memberData = JSON.parse(decodeURIComponent(row.getAttribute('data-member')));
+						openWabaModal(memberData);
+					});
+				});
 			}
 
 			// Modal Handlers
@@ -870,6 +1002,238 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 					showToast('Teks pesan reminder berhasil disalin!');
 				}
 			});
+
+			// ==========================================
+			// WABA Modal Handlers (reminder_member)
+			// ==========================================
+			const wabaModal = document.getElementById('wabaModal');
+			const closeWabaModalBtn = document.getElementById('closeWabaModalBtn');
+			const btnCancelWaba = document.getElementById('btnCancelWaba');
+			const btnOpenWabaTest = document.getElementById('btnOpenWabaTest');
+			const btnSubmitSendWaba = document.getElementById('btnSubmitSendWaba');
+			const wabaBtnSpinner = document.getElementById('wabaBtnSpinner');
+			const wabaBtnText = document.getElementById('wabaBtnText');
+			const wabaResultBox = document.getElementById('wabaResultBox');
+
+			const wabaInputPhone = document.getElementById('wabaInputPhone');
+			const wabaParamName = document.getElementById('wabaParamName');
+			const wabaParamPoin = document.getElementById('wabaParamPoin');
+			const wabaParamVoucher = document.getElementById('wabaParamVoucher');
+			const wabaParamOutlet = document.getElementById('wabaParamOutlet');
+			const wabaParamAdditional = document.getElementById('wabaParamAdditional');
+			const wabaInputImage = document.getElementById('wabaInputImage');
+
+			const dbFetchStatus = document.getElementById('dbFetchStatus');
+			const btnFetchDbMember = document.getElementById('btnFetchDbMember');
+			const btnLoadAji = document.getElementById('btnLoadAji');
+			const wabaCardPreviewImg = document.getElementById('wabaCardPreviewImg');
+			const btnRefreshCard = document.getElementById('btnRefreshCard');
+
+			function getMemberCardUrl(phone, name) {
+				let clean = String(phone || '6282334059852').replace(/[^0-9]/g, '');
+				if (clean.startsWith('0')) clean = '62' + clean.slice(1);
+				const encName = encodeURIComponent(name || 'MEMBER SETIA');
+				return `https://connect.gooproper.com/api/member-card?phone=${clean}&name=${encName}&business=JAVA+BATIK`;
+			}
+
+			function updateCardPreview() {
+				const phone = wabaInputPhone.value.trim() || '6282334059852';
+				const name = wabaParamName.value.trim() || 'MEMBER SETIA';
+				const cardUrl = getMemberCardUrl(phone, name);
+				wabaInputImage.value = cardUrl;
+				wabaCardPreviewImg.src = cardUrl;
+			}
+
+			async function fetchMemberFromDb(phoneToFetch) {
+				let clean = String(phoneToFetch || '').replace(/[^0-9]/g, '');
+				if (!clean) return;
+				if (clean.startsWith('0')) clean = '62' + clean.slice(1);
+				if (dbFetchStatus) {
+					dbFetchStatus.textContent = 'Mengambil data dari DB...';
+					dbFetchStatus.style.color = '#0284c7';
+				}
+				try {
+					const res = await fetch(`/api/check-member-db?phone=${clean}`);
+					const json = await res.json();
+					if (res.ok && json && json.success && json.data) {
+						const d = json.data;
+						wabaParamName.value = d.name || 'Aji Sampurno';
+						wabaParamPoin.value = Number(d.poin || 0).toLocaleString('id-ID');
+						wabaParamVoucher.value = d.code || 'JAVABTK1';
+						wabaParamOutlet.value = d.outlet || 'Java Batik Gallery';
+						if (dbFetchStatus) {
+							dbFetchStatus.textContent = `✓ Data ${d.name} (${Number(d.poin || 0).toLocaleString('id-ID')} Poin) Ditemukan!`;
+							dbFetchStatus.style.color = '#059669';
+						}
+						updateCardPreview();
+						showToast(`Data member "${d.name}" berhasil ditarik dari database!`);
+					} else {
+						if (dbFetchStatus) {
+							dbFetchStatus.textContent = '⚠️ Tidak terdaftar di DB Noir';
+							dbFetchStatus.style.color = '#d97706';
+						}
+						updateCardPreview();
+					}
+				} catch (err) {
+					if (dbFetchStatus) {
+						dbFetchStatus.textContent = '❌ Gagal koneksi DB';
+						dbFetchStatus.style.color = '#dc2626';
+					}
+					updateCardPreview();
+				}
+			}
+
+			if (btnFetchDbMember) {
+				btnFetchDbMember.addEventListener('click', () => {
+					fetchMemberFromDb(wabaInputPhone.value.trim());
+				});
+			}
+
+			if (btnLoadAji) {
+				btnLoadAji.addEventListener('click', () => {
+					wabaInputPhone.value = '6282334059852';
+					wabaParamName.value = 'Aji Sampurno';
+					fetchMemberFromDb('6282334059852');
+				});
+			}
+
+			if (btnRefreshCard) {
+				btnRefreshCard.addEventListener('click', updateCardPreview);
+			}
+
+			wabaInputPhone.addEventListener('blur', () => {
+				const val = wabaInputPhone.value.trim();
+				if (val && val.length >= 9) {
+					fetchMemberFromDb(val);
+				}
+			});
+
+			wabaParamName.addEventListener('input', updateCardPreview);
+
+			function openWabaModal(member, isHeaderTest = false) {
+				wabaResultBox.style.display = 'none';
+				wabaResultBox.innerHTML = '';
+				btnSubmitSendWaba.disabled = false;
+				wabaBtnSpinner.style.display = 'none';
+				wabaBtnText.textContent = 'Kirim Sekarang via WABA';
+				if (dbFetchStatus) dbFetchStatus.textContent = '';
+
+				if (isHeaderTest) {
+					// Tes Uji Coba: Default ke data Pak Aji Sampurno dari Database
+					wabaInputPhone.value = '6282334059852';
+					wabaParamName.value = 'Aji Sampurno';
+					wabaParamPoin.value = '100.000';
+					wabaParamVoucher.value = 'JAVABTK1';
+					wabaParamOutlet.value = 'Boutique Senopati';
+					updateCardPreview();
+					fetchMemberFromDb('6282334059852');
+				} else if (member) {
+					wabaInputPhone.value = cleanPhone(member.tlp);
+					wabaParamName.value = member.name ? member.name.trim() : 'Kakak';
+					wabaParamPoin.value = Number(member.total_poin || 0).toLocaleString('id-ID');
+					wabaParamVoucher.value = member.voucher_code || '-';
+					wabaParamOutlet.value = member.outlet ? member.outlet.trim() : 'Java Batik Gallery';
+					updateCardPreview();
+				} else {
+					wabaInputPhone.value = '6282334059852';
+					wabaParamName.value = 'Aji Sampurno';
+					wabaParamPoin.value = '100.000';
+					wabaParamVoucher.value = 'JAVABTK1';
+					wabaParamOutlet.value = 'Boutique Senopati';
+					updateCardPreview();
+					fetchMemberFromDb('6282334059852');
+				}
+
+				wabaModal.style.display = 'flex';
+				wabaInputPhone.focus();
+			}
+
+			function closeWabaModal() {
+				wabaModal.style.display = 'none';
+			}
+
+			if (closeWabaModalBtn) closeWabaModalBtn.addEventListener('click', closeWabaModal);
+			if (btnCancelWaba) btnCancelWaba.addEventListener('click', closeWabaModal);
+			if (wabaModal) {
+				wabaModal.addEventListener('click', (e) => {
+					if (e.target === wabaModal) closeWabaModal();
+				});
+			}
+
+			if (btnOpenWabaTest) {
+				btnOpenWabaTest.addEventListener('click', () => {
+					openWabaModal(null, true);
+				});
+			}
+
+			if (btnSubmitSendWaba) {
+				btnSubmitSendWaba.addEventListener('click', async () => {
+					const targetPhone = wabaInputPhone.value.trim();
+					if (!targetPhone) {
+						alert('Silakan masukkan nomor WhatsApp tujuan (bisa nomor pribadi Anda untuk tes).');
+						wabaInputPhone.focus();
+						return;
+					}
+
+					btnSubmitSendWaba.disabled = true;
+					wabaBtnSpinner.style.display = 'inline-block';
+					wabaBtnText.textContent = 'Mengirim ke Meta API...';
+					wabaResultBox.style.display = 'none';
+
+					try {
+						const res = await fetch('/api/send-reminder-waba', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								to: targetPhone,
+								name: wabaParamName.value.trim(),
+								poin: wabaParamPoin.value.trim(),
+								voucher: wabaParamVoucher.value.trim(),
+								outlet: wabaParamOutlet.value.trim(),
+								additional: wabaParamAdditional.value.trim(),
+								imageUrl: wabaInputImage.value.trim()
+							})
+						});
+
+						const data = await res.json();
+
+						wabaResultBox.style.display = 'block';
+						if (res.ok && data.success) {
+							wabaResultBox.style.background = '#ecfdf5';
+							wabaResultBox.style.border = '1px solid #a7f3d0';
+							wabaResultBox.style.color = '#065f46';
+							const msgId = data.data?.messages?.[0]?.id || '-';
+							wabaResultBox.innerHTML = `
+								<div style="font-weight: 700; margin-bottom: 4px;">✓ Berhasil Terkirim ke Meta WhatsApp!</div>
+								<div style="font-size: 0.75rem; color: #047857; line-height: 1.4;">
+									Template: <b>reminder_member</b><br/>
+									Tujuan: <b>${targetPhone}</b><br/>
+									Message ID: <code style="background: rgba(0,0,0,0.06); padding: 2px 4px; border-radius: 4px;">${msgId}</code>
+								</div>
+							`;
+							showToast(`Template WABA berhasil dikirim ke ${targetPhone}!`);
+						} else {
+							wabaResultBox.style.background = '#fef2f2';
+							wabaResultBox.style.border = '1px solid #fecaca';
+							wabaResultBox.style.color = '#991b1b';
+							wabaResultBox.innerHTML = `
+								<div style="font-weight: 700; margin-bottom: 4px;">❌ Gagal Mengirim Pesan Meta:</div>
+								<div style="font-size: 0.75rem; color: #b91c1c;">${data.error || 'Terjadi kesalahan pada Meta API.'}</div>
+							`;
+						}
+					} catch (err) {
+						wabaResultBox.style.display = 'block';
+						wabaResultBox.style.background = '#fef2f2';
+						wabaResultBox.style.border = '1px solid #fecaca';
+						wabaResultBox.style.color = '#991b1b';
+						wabaResultBox.innerHTML = `<div style="font-weight: 700;">Gagal: ${err.message}</div>`;
+					} finally {
+						btnSubmitSendWaba.disabled = false;
+						wabaBtnSpinner.style.display = 'none';
+						wabaBtnText.textContent = 'Kirim Sekarang via WABA';
+					}
+				});
+			}
 
 			// Filter Event Listeners
 			searchInput.addEventListener('input', (e) => {
