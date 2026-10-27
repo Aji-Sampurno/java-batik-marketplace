@@ -6,12 +6,17 @@ export const POST: APIRoute = async ({ request }) => {
 		const body = await request.json();
 		const {
 			to,
-			name = 'Kakak',
+			nickname = '',
+			fullName = '',
 			poin = '0',
-			voucher = '-',
-			outlet = 'Java Batik & Online',
-			additional = 'https://javabatikgallery.com/products',
-			imageUrl = 'https://javabatikgallery.com/images/promo_cinematic.png'
+			transaksi = '1x belanja',
+			lastTrx = '-',
+			imageUrl = 'https://javabatikgallery.com/images/promo_cinematic.png',
+			// Compatibility fallbacks
+			name = '',
+			voucher = '',
+			outlet = '',
+			additional = ''
 		} = body;
 
 		if (!to) {
@@ -39,6 +44,18 @@ export const POST: APIRoute = async ({ request }) => {
 			}), { status: 500, headers: { 'Content-Type': 'application/json' } });
 		}
 
+		// Map to 5 variables of reminder_member template:
+		// {{1}} = Nama Panggilan (Halo Kak {{1}}!)
+		// {{2}} = Nama Lengkap (Nama : {{2}})
+		// {{3}} = Total Poin (Total Poin : {{3}} poin)
+		// {{4}} = Total Transaksi (Total Transaksi : {{4}})
+		// {{5}} = Transaksi Terakhir (Transaksi Terakhir : {{5}})
+		const paramNickname = (nickname || (name ? name.split(' ')[0] : 'Kakak')).trim();
+		const paramFullName = (fullName || name || paramNickname).trim();
+		const paramPoin = String(poin || '0').trim();
+		const paramTransaksi = String(transaksi || outlet || '1x belanja').trim();
+		const paramLastTrx = String(lastTrx || additional || voucher || '-').trim();
+
 		// Prepare payload for Meta WhatsApp Cloud API
 		const payload = {
 			messaging_product: 'whatsapp',
@@ -65,11 +82,11 @@ export const POST: APIRoute = async ({ request }) => {
 					{
 						type: 'body',
 						parameters: [
-							{ type: 'text', text: String(name || 'Kakak').trim() },
-							{ type: 'text', text: String(poin || '0').trim() },
-							{ type: 'text', text: String(voucher || '-').trim() },
-							{ type: 'text', text: String(outlet || 'Java Batik').trim() },
-							{ type: 'text', text: String(additional || 'https://javabatikgallery.com/products').trim() }
+							{ type: 'text', text: paramNickname },
+							{ type: 'text', text: paramFullName },
+							{ type: 'text', text: paramPoin },
+							{ type: 'text', text: paramTransaksi },
+							{ type: 'text', text: paramLastTrx }
 						]
 					}
 				]

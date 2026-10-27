@@ -208,23 +208,55 @@ try {
 						<svg id="templateToggleIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
 					</div>
 				</div>
-				<div id="templateContent" style="display: none; padding: 1.1rem 1.25rem; background: white; border-top: 1px solid #f1f5f9;">
-					<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; font-size: 0.83rem; line-height: 1.6; color: #334155; white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Halo Kak <b>[Nama Member]</b>! ✨
+				<div id="templateContent" style="display: none; padding: 1.25rem; background: #f8fafc; border-top: 1px solid #f1f5f9;">
+					<div style="max-width: 480px; margin: 0 auto; background: #efeae2; border-radius: 14px; padding: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;">
+						<!-- Header Image Card -->
+						<div style="background: #1c1917; border-radius: 10px; padding: 8px; text-align: center; border: 1.5px solid #a16207; margin-bottom: 10px;">
+							<div style="font-size: 0.68rem; color: #fbbf24; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.04em;">
+								💳 HEADER PESAN: KARTU MEMBER DIGITAL
+							</div>
+							<img src="/api/member-card?phone=082334059852&name=Aji+Sampurno" style="width: 100%; max-height: 220px; object-fit: contain; border-radius: 6px; display: block; margin: 0 auto; background: #262626;" alt="Contoh Kartu Member Java Batik" />
+						</div>
 
-Kami dari Java Batik ingin menginformasikan bahwa Anda memiliki saldo poin reward keanggotaan:
-🎁 <b>Saldo Poin:</b> [Total Poin] Poin
-🏷️ <b>Kode Voucher:</b> [Kode Voucher]
-📍 <b>Outlet Terdaftar:</b> [Nama Outlet / Lokasi]
+						<!-- Body Text -->
+						<div style="background: white; border-radius: 10px; padding: 1.1rem; font-size: 0.82rem; line-height: 1.6; color: #1e293b; white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">✨ <b>Java Batik - Info Poin & Member</b> ✨
 
-Poin Anda dapat langsung ditukarkan dengan potongan belanja atau voucher menarik di kasir outlet Java Batik! 😊👗
+Halo Kak <b>[Nama Panggilan]</b>! 👋
 
-👉 <b>Lihat Katalog Koleksi Terbaru:</b>
-https://javabatikgallery.com/products
+Terima kasih telah setia berbelanja di Java Batik 🛍️
 
-💬 <b>Konsultasi & Pemesanan Online:</b>
-Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membalas pesan WhatsApp ini ya Kak. Terima kasih! 🙏✨</div>
-					<p style="font-size: 0.76rem; color: #64748b; margin: 0.6rem 0 0 0;">
-						💡 <em>Variabel Nama Member, Poin, Kode Voucher, dan Outlet akan otomatis di-generate secara personal saat tombol "Kirim WA" atau "Salin Pesan" diklik.</em>
+📋 <b>Informasi Member:</b>
+━━━━━━━━━━━━━━━━━━━━
+📛 <b>Nama :</b> [Nama Lengkap]
+⭐ <b>Total Poin :</b> [Total Poin] poin
+📊 <b>Total Transaksi :</b> [Total Transaksi]
+📅 <b>Transaksi Terakhir :</b> [Transaksi Terakhir]
+━━━━━━━━━━━━━━━━━━━━
+
+🎫 <b>Voucher Belanja:</b>
+Belum ada voucher aktif saat ini.
+💡 kumpulkan poin Anda untuk ditukarkan dengan potongan harga menarik!
+
+ℹ️ <b>Catatan Poin:</b>
+Poin dapat digunakan untuk transaksi di seluruh cabang store Java Batik & Java Tekstile.
+
+📍 <b>Lokasi Store Kami:</b>
+• Malang: Jl. Buring No. 36 | MOG Lt. 2 (SF 47-48)
+• Surabaya: Pasar Atom Tahap V Lt. 2 | Atom Mall Lt. 3 | Jl. Ir. Soekarno No. 111A
+• Jakarta: PIK Ruko Garden House | Aeon Mall Tanjung Barat Lt. 2 | Aeon Mall JGC Lt. 1 | Jl. Senopati No. 66
+
+📍 <b>Java Tekstile:</b>
+• Surabaya: Atom Mall Lt. 4 FO 48 & 55
+
+━━━━━━━━━━━━━━━━━━━━
+
+Terima kasih telah menjadi bagian dari keluarga Java Batik 🤍
+
+Salam hangat,
+Java Batik</div>
+					</div>
+					<p style="font-size: 0.76rem; color: #64748b; margin: 0.8rem 0 0 0; text-align: center;">
+						💡 <em>Template resmi Meta WABA <code>reminder_member</code> dengan Header Kartu Member Digital dan 5 variabel dinamis.</em>
 					</p>
 				</div>
 			</div>
@@ -251,11 +283,14 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 					<button class="seg-btn active" data-status="all" style="background: white; border: none; padding: 0.45rem 0.85rem; border-radius: 6px; font-size: 0.78rem; font-weight: 700; color: #0f172a; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.08); white-space: nowrap;">
 						Semua (<span id="pillCountAll">{initialData?.total || 0}</span>)
 					</button>
-					<button class="seg-btn" data-status="pending" style="background: transparent; border: none; padding: 0.45rem 0.85rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600; color: #64748b; cursor: pointer; white-space: nowrap;">
-						⚠️ Belum Dikirim (<span id="pillCountPending">{initialData ? initialData.total - initialData.total_wa_sent : 0}</span>)
+					<button class="seg-btn" data-status="pending" style="background: transparent; border: none; padding: 0.45rem 0.85rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600; color: #64748b; cursor: pointer; white-space: nowrap;" title="Pending / Belum Kirim">
+						⏱️ Pending (<span id="pillCountPending">{initialData ? initialData.total - initialData.total_wa_sent : 0}</span>)
 					</button>
-					<button class="seg-btn" data-status="sent" style="background: transparent; border: none; padding: 0.45rem 0.85rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600; color: #64748b; cursor: pointer; white-space: nowrap;">
-						✓ Terkirim (<span id="pillCountSent">{initialData?.total_wa_sent || 0}</span>)
+					<button class="seg-btn" data-status="sukses" style="background: transparent; border: none; padding: 0.45rem 0.85rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600; color: #64748b; cursor: pointer; white-space: nowrap;" title="Sukses Terkirim">
+						✓ Sukses (<span id="pillCountSent">{initialData?.total_wa_sent || 0}</span>)
+					</button>
+					<button class="seg-btn" data-status="gagal" style="background: transparent; border: none; padding: 0.45rem 0.85rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600; color: #64748b; cursor: pointer; white-space: nowrap;" title="Gagal Terkirim">
+						✕ Gagal (<span id="pillCountFailed">0</span>)
 					</button>
 				</div>
 
@@ -312,13 +347,12 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 						<thead>
 							<tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
 								<th style="padding: 0.85rem 1rem; color: #475569; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; text-align: center; width: 44px;">#</th>
-								<th style="padding: 0.85rem 1rem; color: #475569; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; min-width: 220px;">Member & WhatsApp</th>
+								<th style="padding: 0.85rem 1rem; color: #475569; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; min-width: 200px;">Member & WhatsApp</th>
 								<th style="padding: 0.85rem 1rem; color: #475569; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; min-width: 140px;">Outlet / Cabang</th>
 								<th style="padding: 0.85rem 1rem; color: #475569; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; min-width: 120px;">Kode Voucher</th>
-								<th style="padding: 0.85rem 1rem; color: #475569; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; min-width: 130px; text-align: right;">Saldo Poin</th>
 								<th style="padding: 0.85rem 1rem; color: #475569; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; min-width: 90px; text-align: center;">Transaksi</th>
 								<th style="padding: 0.85rem 1rem; color: #475569; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; min-width: 130px;">Terakhir Belanja</th>
-								<th style="padding: 0.85rem 1rem; color: #475569; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; min-width: 120px; text-align: center;">Status WA</th>
+								<th style="padding: 0.85rem 1rem; color: #475569; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; min-width: 100px; text-align: center;">Status WA</th>
 								<th style="padding: 0.85rem 1rem; color: #475569; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; min-width: 180px; text-align: right;">Aksi Reminder</th>
 							</tr>
 						</thead>
@@ -349,7 +383,6 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 		<div style="background: white; border-radius: 14px; max-width: 560px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15); overflow: hidden; display: flex; flex-direction: column;">
 			<div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;">
 				<div style="display: flex; align-items: center; gap: 0.75rem;">
-					<div id="modalAvatar" style="width: 42px; height: 42px; border-radius: 50%; background: #f1efe9; border: 1px solid #dcd6c9; color: #6b5c3e; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 0.9rem;"></div>
 					<div>
 						<h3 id="modalName" style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #0f172a;">-</h3>
 						<span id="modalId" style="font-size: 0.75rem; color: #64748b;">ID Member: -</span>
@@ -358,7 +391,7 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 				<button id="closeModalBtn" style="background: none; border: none; font-size: 1.25rem; color: #94a3b8; cursor: pointer;" title="Tutup Modal">✕</button>
 			</div>
 
-			<div style="padding: 1.25rem 1.5rem; max-height: 65vh; overflow-y: auto;">
+			<div style="padding: 1.25rem 1.5rem; max-height: 75vh; overflow-y: auto;">
 				<!-- Ledger Grid -->
 				<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; margin-bottom: 1.25rem;">
 					<div style="background: #fefce8; border: 1px solid #fef08a; border-radius: 8px; padding: 0.75rem 1rem;">
@@ -407,12 +440,30 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 					</div>
 				</div>
 
-				<!-- Message Preview -->
+				<!-- Message Preview with Live Member Card Header (WhatsApp Bubble Look) -->
 				<div>
-					<label style="display: block; font-size: 0.78rem; font-weight: 700; color: #475569; margin-bottom: 0.4rem;">
-						Pratinjau Pesan yang Akan Dikirim:
+					<label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; font-weight: 700; color: #475569; margin-bottom: 0.4rem;">
+						<span>Pratinjau Pesan Resmi WABA (Kartu + Teks):</span>
+						<span style="font-size: 0.7rem; color: #854d0e; background: #fef9c3; padding: 1px 6px; border-radius: 4px; font-weight: 700;">reminder_member</span>
 					</label>
-					<textarea id="modalMessagePreview" readonly style="width: 100%; height: 110px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem; font-size: 0.8rem; line-height: 1.5; color: #334155; background: #f8fafc; resize: none; outline: none; font-family: inherit; box-sizing: border-box;"></textarea>
+
+					<div style="background: #efeae2; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03);">
+						<!-- 1. Header: Kartu Member Digital -->
+						<div style="background: #1c1917; border-radius: 10px; padding: 8px; text-align: center; border: 1.5px solid #a16207; margin-bottom: 8px;">
+							<div style="font-size: 0.68rem; color: #fbbf24; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.04em;">
+								💳 HEADER PESAN: KARTU MEMBER DIGITAL
+							</div>
+							<img id="modalCardPreviewImg" src="" style="width: 100%; max-height: 200px; object-fit: contain; border-radius: 6px; display: block; margin: 0 auto; background: #262626;" alt="Kartu Member Java Batik" />
+						</div>
+
+						<!-- 2. Body: Text Preview -->
+						<div style="background: #ffffff; border-radius: 8px; padding: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.06);">
+							<div style="font-size: 0.68rem; color: #64748b; font-weight: 700; margin-bottom: 4px;">
+								💬 BODY PESAN WABA:
+							</div>
+							<textarea id="modalMessagePreview" readonly style="width: 100%; height: 160px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.65rem; font-size: 0.78rem; line-height: 1.5; color: #334155; background: #f8fafc; resize: vertical; outline: none; font-family: inherit; box-sizing: border-box;"></textarea>
+						</div>
+					</div>
 				</div>
 			</div>
 
@@ -420,12 +471,10 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 				<button id="modalCopyMsgBtn" style="flex: 1; background: white; border: 1px solid #cbd5e1; color: #334155; padding: 0.65rem 1rem; border-radius: 8px; font-weight: 700; font-size: 0.82rem; cursor: pointer;">
 					📋 Salin Teks Pesan
 				</button>
-				<a id="modalSendWaBtn" href="#" target="_blank" rel="noopener noreferrer" style="flex: 1.5; display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; background: #25d366; color: white; padding: 0.65rem 1rem; border-radius: 8px; font-weight: 700; font-size: 0.84rem; text-decoration: none; box-shadow: 0 2px 4px rgba(37,211,102,0.25);">
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-						<path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.007c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.861.174.086.275.072.376-.044.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.043.073.043.419-.101.824z"/>
-					</svg>
-					Kirim Pesan WhatsApp
-				</a>
+				<button id="modalSendWabaBtn" type="button" style="flex: 1.5; display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; background: #0284c7; color: white; padding: 0.65rem 1rem; border-radius: 8px; font-weight: 700; font-size: 0.84rem; border: none; cursor: pointer; box-shadow: 0 2px 4px rgba(2,132,199,0.25);">
+					<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+					Kirim via WABA
+				</button>
 			</div>
 		</div>
 	</div>
@@ -472,32 +521,32 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 					<span style="font-size: 0.7rem; color: #64748b; margin-top: 3px; display: block;">Data member & poin otomatis ditarik dari database POS saat nomor diisi atau tombol "Tarik dari DB" diklik.</span>
 				</div>
 
-				<!-- Template Parameters Grid -->
+				<!-- Template Parameters Grid (5 Variabel reminder_member) -->
 				<div style="background: #fafaf9; border: 1px solid #e2e8f0; border-radius: 10px; padding: 0.85rem 1rem;">
 					<div style="font-size: 0.76rem; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 0.6rem; letter-spacing: 0.04em;">
-						Parameter Pesan (5 Variabel Meta WABA)
+						Parameter Pesan (5 Variabel Meta WABA reminder_member)
 					</div>
 					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;">
 						<div>
-							<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(1) Nama Member</label>
-							<input id="wabaParamName" type="text" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
+							<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(1) Nama Panggilan (Halo Kak ...!)</label>
+							<input id="wabaParamNickname" type="text" placeholder="aji" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
 						</div>
 						<div>
-							<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(2) Saldo Poin</label>
-							<input id="wabaParamPoin" type="text" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
+							<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(2) Nama Lengkap (Nama : ...)</label>
+							<input id="wabaParamFullName" type="text" placeholder="aji lengkap" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
 						</div>
 						<div>
-							<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(3) Kode Voucher</label>
-							<input id="wabaParamVoucher" type="text" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
+							<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(3) Total Poin (... poin)</label>
+							<input id="wabaParamPoin" type="text" placeholder="100.000" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
 						</div>
 						<div>
-							<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(4) Outlet</label>
-							<input id="wabaParamOutlet" type="text" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
+							<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(4) Total Transaksi (...x belanja)</label>
+							<input id="wabaParamTransaksi" type="text" placeholder="1x belanja" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
 						</div>
 					</div>
 					<div style="margin-top: 0.6rem;">
-						<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(5) Link / Info Tambahan</label>
-						<input id="wabaParamAdditional" type="text" value="https://javabatikgallery.com/products" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
+						<label style="font-size: 0.72rem; color: #64748b; font-weight: 600; display: block; margin-bottom: 2px;">(5) Transaksi Terakhir (Tanggal / -)</label>
+						<input id="wabaParamLastTrx" type="text" placeholder="29 Mei 2001" style="width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.8rem; font-weight: 600;" />
 					</div>
 				</div>
 
@@ -615,7 +664,7 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 			const modalWaStatus = document.getElementById('modalWaStatus');
 			const modalMessagePreview = document.getElementById('modalMessagePreview');
 			const modalCopyMsgBtn = document.getElementById('modalCopyMsgBtn');
-			const modalSendWaBtn = document.getElementById('modalSendWaBtn');
+			const modalSendWabaBtn = document.getElementById('modalSendWabaBtn');
 
 			// Toast
 			const toast = document.getElementById('toastNotification');
@@ -663,27 +712,49 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 				return name.substring(0, 2).toUpperCase();
 			}
 
-			// Helper: Build WhatsApp reminder message
+			// Helper: Build WhatsApp reminder message matching Meta template reminder_member
 			function buildReminderMessage(member) {
-				const name = member.name ? member.name.trim() : 'Kakak';
+				const fullName = (member.name || 'Member Java Batik').trim();
+				const nickname = fullName.split(/\s+/)[0] || 'Kakak';
 				const poin = Number(member.total_poin || 0).toLocaleString('id-ID');
-				const voucher = member.voucher_code || '-';
-				const outlet = member.outlet ? member.outlet.trim() : 'Galeri & Online';
+				const trx = member.total_transaksi ? `${member.total_transaksi}x belanja` : '1x belanja';
+				const lastTrx = member.last_transaction || member.voucher_date || '-';
 
-				return `Halo Kak ${name}! ✨
+				return `✨ Java Batik - Info Poin & Member ✨
 
-Kami dari Java Batik ingin menginformasikan bahwa Anda memiliki saldo poin reward keanggotaan:
-🎁 *Saldo Poin:* ${poin} Poin
-🏷️ *Kode Voucher:* ${voucher}
-📍 *Outlet Terdaftar:* ${outlet}
+Halo Kak ${nickname}! 👋
 
-Poin Anda dapat langsung ditukarkan dengan potongan belanja atau voucher menarik di kasir outlet Java Batik! 😊👗
+Terima kasih telah setia berbelanja di Java Batik 🛍️
 
-👉 *Lihat Katalog Koleksi Terbaru:*
-https://javabatikgallery.com/products
+📋 Informasi Member:
+━━━━━━━━━━━━━━━━━━━━
+📛 Nama : ${fullName}
+⭐ Total Poin : ${poin} poin
+📊 Total Transaksi : ${trx}
+📅 Transaksi Terakhir : ${lastTrx}
+━━━━━━━━━━━━━━━━━━━━
 
-💬 *Konsultasi & Pemesanan Online:*
-Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membalas pesan WhatsApp ini ya Kak. Terima kasih! 🙏✨`;
+🎫 Voucher Belanja:
+Belum ada voucher aktif saat ini.
+💡 kumpulkan poin Anda untuk ditukarkan dengan potongan harga menarik!
+
+ℹ️ Catatan Poin:
+Poin dapat digunakan untuk transaksi di seluruh cabang store Java Batik & Java Tekstile.
+
+📍 Lokasi Store Kami:
+• Malang: Jl. Buring No. 36 | MOG Lt. 2 (SF 47-48)
+• Surabaya: Pasar Atom Tahap V Lt. 2 | Atom Mall Lt. 3 | Jl. Ir. Soekarno No. 111A
+• Jakarta: PIK Ruko Garden House | Aeon Mall Tanjung Barat Lt. 2 | Aeon Mall JGC Lt. 1 | Jl. Senopati No. 66
+
+📍 Java Tekstile:
+• Surabaya: Atom Mall Lt. 4 FO 48 & 55
+
+━━━━━━━━━━━━━━━━━━━━
+
+Terima kasih telah menjadi bagian dari keluarga Java Batik 🤍
+
+Salam hangat,
+Java Batik`;
 			}
 
 			// Build WhatsApp Direct Link
@@ -714,12 +785,16 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 
 			// Update Stat Cards & Header Counts
 			function updateStats(data) {
-				if (!data) return;
-				const total = data.total ?? allReminders.length;
-				const sent = data.total_wa_sent ?? allReminders.filter(r => r.wa_sent).length;
-				const pending = total - sent;
-				const poin = data.total_poin ?? allReminders.reduce((acc, cur) => acc + (cur.total_poin || 0), 0);
-				const trx = data.total_transaksi ?? allReminders.reduce((acc, cur) => acc + (cur.total_transaksi || 0), 0);
+				if (!data && !allReminders.length) return;
+				const total = (data && data.total) ?? allReminders.length;
+				const failed = allReminders.filter(r => {
+					const st = (r.wa_status || '').toLowerCase();
+					return st === 'gagal' || st === 'failed' || st === 'error';
+				}).length;
+				const sent = (data && data.total_wa_sent !== undefined) ? data.total_wa_sent : allReminders.filter(r => r.wa_sent || (r.wa_status || '').toLowerCase() === 'sukses').length;
+				const pending = Math.max(0, total - sent - failed);
+				const poin = (data && data.total_poin) ?? allReminders.reduce((acc, cur) => acc + (cur.total_poin || 0), 0);
+				const trx = (data && data.total_transaksi) ?? allReminders.reduce((acc, cur) => acc + (cur.total_transaksi || 0), 0);
 
 				if (cardTotalMembers) cardTotalMembers.textContent = Number(total).toLocaleString('id-ID');
 				if (cardPendingMembers) cardPendingMembers.textContent = Number(pending).toLocaleString('id-ID');
@@ -730,8 +805,10 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 				if (pillCountAll) pillCountAll.textContent = total;
 				if (pillCountPending) pillCountPending.textContent = pending;
 				if (pillCountSent) pillCountSent.textContent = sent;
+				const pillCountFailed = document.getElementById('pillCountFailed');
+				if (pillCountFailed) pillCountFailed.textContent = failed;
 
-				if (data.today && todayBadge) todayBadge.textContent = data.today;
+				if (data && data.today && todayBadge) todayBadge.textContent = data.today;
 			}
 
 			// Render Table Rows with Direct Inline Styles
@@ -753,89 +830,114 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 
 				emptyState.style.display = 'none';
 
+				function renderStatusSymbol(member) {
+					const status = (member.wa_status || (member.wa_sent ? 'sukses' : 'pending')).toLowerCase();
+
+					if (status === 'sukses' || status === 'success' || member.wa_sent) {
+						return `
+							<span style="display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: #ecfdf5; color: #059669; border: 1.5px solid #a7f3d0; box-shadow: 0 1px 3px rgba(16,185,129,0.15);" title="Sukses (Terkirim)">
+								<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+							</span>
+						`;
+					}
+					if (status === 'gagal' || status === 'failed' || status === 'error') {
+						return `
+							<span style="display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: #fef2f2; color: #dc2626; border: 1.5px solid #fecaca; box-shadow: 0 1px 3px rgba(220,38,38,0.15);" title="Gagal Terkirim">
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+							</span>
+						`;
+					}
+					// Default: Pending / Belum Kirim
+					return `
+						<span style="display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: #fffbeb; color: #d97706; border: 1.5px solid #fde68a; box-shadow: 0 1px 3px rgba(217,119,6,0.15);" title="Pending (Belum Dikirim)">
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+						</span>
+					`;
+				}
+
 				const rowsHtml = items.map((member, index) => {
 					const initials = getInitials(member.name);
 					const phoneClean = cleanPhone(member.tlp);
 					const phoneDisplay = formatPhoneDisplay(member.tlp);
-					const waLink = buildWaLink(member);
 					const poinFormatted = Number(member.total_poin || 0).toLocaleString('id-ID');
 					const kreditFormatted = Number(member.total_kredit || 0).toLocaleString('id-ID');
 					const debitFormatted = Number(member.total_debit || 0).toLocaleString('id-ID');
-					const isWaSent = Boolean(member.wa_sent);
 					const memberJson = encodeURIComponent(JSON.stringify(member));
 
 					return `
-						<tr class="table-row-item" data-member="${memberJson}" style="border-bottom: 1px solid #f1f5f9; transition: background-color 0.15s;">
-							<td style="padding: 0.85rem 1rem; text-align: center; color: #94a3b8; font-weight: 600; font-size: 0.8rem;">
+						<tr class="table-row-item" data-member="${memberJson}" style="transition: background-color 0.15s; border-bottom: none;">
+							<td rowspan="2" style="padding: 0.85rem 0.5rem; text-align: center; color: #94a3b8; font-weight: 700; font-size: 0.82rem; vertical-align: middle; border-bottom: 1px solid #e2e8f0; background: #ffffff;">
 								${index + 1}
 							</td>
-							<td style="padding: 0.85rem 1rem;">
-								<div style="display: flex; align-items: center; gap: 12px;">
-									<div style="width: 38px; height: 38px; border-radius: 50%; background: #f5f3ef; border: 1px solid #dcd6c9; color: #6b5c3e; font-weight: 800; font-size: 0.82rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; letter-spacing: 0.5px;">
-										${initials}
-									</div>
-									<div style="display: flex; flex-direction: column;">
-										<span style="font-weight: 700; color: #0f172a; font-size: 0.88rem; line-height: 1.25; text-transform: uppercase;">
-											${member.name || 'MEMBER JAVA BATIK'}
-										</span>
-										<div style="display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 0.78rem; color: #64748b; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">
-											<span>${phoneDisplay}</span>
-											<button class="btn-copy-phone" data-phone="${phoneClean}" style="background: none; border: none; color: #94a3b8; cursor: pointer; padding: 0; display: inline-flex; align-items: center;" title="Salin nomor HP">
-												<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-											</button>
-										</div>
+							<td style="padding: 0.75rem 1rem 0.25rem 1rem;">
+								<div style="display: flex; flex-direction: column;">
+									<span style="font-weight: 700; color: #0f172a; font-size: 0.88rem; line-height: 1.25; text-transform: uppercase;">
+										${member.name || 'MEMBER JAVA BATIK'}
+									</span>
+									<div style="display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 0.78rem; color: #64748b; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">
+										<span>${phoneDisplay}</span>
+										<button class="btn-copy-phone" data-phone="${phoneClean}" style="background: none; border: none; color: #94a3b8; cursor: pointer; padding: 0; display: inline-flex; align-items: center;" title="Salin nomor HP">
+											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+										</button>
 									</div>
 								</div>
 							</td>
-							<td style="padding: 0.85rem 1rem;">
+							<td style="padding: 0.75rem 1rem 0.25rem 1rem;">
 								<div style="display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: #334155; font-size: 0.82rem;">
 									<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
 									<span>${member.outlet || 'Galeri / Online'}</span>
 								</div>
 							</td>
-							<td style="padding: 0.85rem 1rem;">
+							<td style="padding: 0.75rem 1rem 0.25rem 1rem;">
 								<span class="btn-copy-voucher" data-voucher="${member.voucher_code || ''}" style="display: inline-block; background: #f8fafc; border: 1px dashed #cbd5e1; color: #1e293b; font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 700; font-size: 0.78rem; padding: 3px 8px; border-radius: 6px; cursor: pointer;" title="Klik untuk salin voucher">
 									${member.voucher_code || '-'}
 								</span>
 							</td>
-							<td style="padding: 0.85rem 1rem; text-align: right;">
-								<div style="font-weight: 800; font-size: 0.95rem; color: #b45309; font-variant-numeric: tabular-nums;">
-									${poinFormatted} Poin
-								</div>
-								<div style="font-size: 0.72rem; color: #94a3b8; font-variant-numeric: tabular-nums;">
-									+${kreditFormatted} / ${debitFormatted}
-								</div>
-							</td>
-							<td style="padding: 0.85rem 1rem; text-align: center;">
+							<td style="padding: 0.75rem 1rem 0.25rem 1rem; text-align: center;">
 								<span style="display: inline-block; background: #f1f5f9; color: #334155; font-weight: 700; font-size: 0.8rem; padding: 2px 7px; border-radius: 6px;">
 									${member.total_transaksi || 0}x
 								</span>
 							</td>
-							<td style="padding: 0.85rem 1rem; color: #64748b; font-size: 0.82rem;">
+							<td style="padding: 0.75rem 1rem 0.25rem 1rem; color: #64748b; font-size: 0.82rem;">
 								${member.last_transaction || '-'}
 							</td>
-							<td style="padding: 0.85rem 1rem; text-align: center;">
-								${isWaSent 
-									? `<span style="display: inline-flex; align-items: center; gap: 4px; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; padding: 3px 9px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; white-space: nowrap;">✓ Terkirim</span>`
-									: `<span style="display: inline-flex; align-items: center; gap: 4px; background: #fffbeb; color: #b45309; border: 1px solid #fde68a; padding: 3px 9px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; white-space: nowrap;">⚠️ Belum Kirim</span>`
-								}
+							<td style="padding: 0.75rem 1rem 0.25rem 1rem; text-align: center;">
+								${renderStatusSymbol(member)}
 							</td>
-							<td style="padding: 0.85rem 1rem; text-align: right;">
+							<td style="padding: 0.75rem 1rem 0.25rem 1rem; text-align: right;">
 								<div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
-									<button class="btn-waba-row" data-id="${member.id}" style="display: inline-flex; align-items: center; gap: 4px; background: #0284c7; color: white; border: none; padding: 6px 10px; border-radius: 7px; font-size: 0.76rem; font-weight: 700; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 3px rgba(2,132,199,0.3);" title="Kirim Template WABA (Bisa diuji coba ke no. pribadi)">
-										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-										<span>WABA</span>
+									<button class="btn-waba-row" data-id="${member.id}" style="display: inline-flex; align-items: center; gap: 5px; background: #0284c7; color: white; border: none; padding: 6px 12px; border-radius: 7px; font-size: 0.78rem; font-weight: 700; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 3px rgba(2,132,199,0.3);" title="Kirim Template WABA (reminder_member)">
+										<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+										<span>Kirim WABA</span>
 									</button>
-									<a href="${waLink}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 5px; background: #25d366; color: white; padding: 6px 12px; border-radius: 7px; font-size: 0.78rem; font-weight: 700; text-decoration: none; box-shadow: 0 1px 3px rgba(37,211,102,0.3); white-space: nowrap;" title="Buka WhatsApp & Kirim Pesan Manual">
-										<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.007c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.861.174.086.275.072.376-.044.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.043.073.043.419-.101.824z"/></svg>
-										<span>Kirim WA</span>
-									</a>
 									<button class="btn-copy-msg" style="display: inline-flex; align-items: center; justify-content: center; width: 31px; height: 31px; border-radius: 7px; border: 1px solid #e2e8f0; background: white; color: #475569; cursor: pointer;" title="Salin Teks Pesan Template">
 										<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
 									</button>
 									<button class="btn-open-detail" style="display: inline-flex; align-items: center; justify-content: center; width: 31px; height: 31px; border-radius: 7px; border: 1px solid #e2e8f0; background: white; color: #475569; cursor: pointer;" title="Lihat Detail Member">
 										<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
 									</button>
+								</div>
+							</td>
+						</tr>
+						<tr class="table-row-subitem" data-member="${memberJson}" style="border-bottom: 1px solid #e2e8f0; background: #ffffff;">
+							<td colspan="7" style="padding: 0 1rem 0.75rem 1rem;">
+								<div style="display: flex; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; background: #fffbeb; border: 1px solid #fde68a; border-radius: 7px; padding: 6px 14px; font-size: 0.78rem; box-shadow: 0 1px 2px rgba(245,158,11,0.06);">
+									<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+										<span style="display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: #92400e;">
+											🪙 Saldo Poin:
+										</span>
+										<span style="font-weight: 800; color: #b45309; font-size: 0.88rem; font-variant-numeric: tabular-nums;">
+											${poinFormatted} Poin
+										</span>
+										<span style="color: #cbd5e1; font-weight: 300;">|</span>
+										<span style="font-size: 0.74rem; color: #64748b; font-variant-numeric: tabular-nums;">
+											Akumulasi Kredit: <b style="color: #059669; font-weight: 700;">+${kreditFormatted}</b> &nbsp;&bull;&nbsp; Debit: <b style="color: #dc2626; font-weight: 700;">-${debitFormatted}</b>
+										</span>
+									</div>
+									<div style="font-size: 0.72rem; color: #b45309; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;">
+										<span>Loyalty Member</span>
+										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+									</div>
 								</div>
 							</td>
 						</tr>
@@ -864,9 +966,20 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 
 				// 2. Status Filter
 				if (currentStatusFilter === 'pending') {
-					result = result.filter(item => !item.wa_sent);
-				} else if (currentStatusFilter === 'sent') {
-					result = result.filter(item => Boolean(item.wa_sent));
+					result = result.filter(item => {
+						const st = (item.wa_status || (item.wa_sent ? 'sukses' : 'pending')).toLowerCase();
+						return st === 'pending' && !item.wa_sent;
+					});
+				} else if (currentStatusFilter === 'sent' || currentStatusFilter === 'sukses') {
+					result = result.filter(item => {
+						const st = (item.wa_status || (item.wa_sent ? 'sukses' : 'pending')).toLowerCase();
+						return st === 'sukses' || st === 'success' || Boolean(item.wa_sent);
+					});
+				} else if (currentStatusFilter === 'gagal' || currentStatusFilter === 'failed') {
+					result = result.filter(item => {
+						const st = (item.wa_status || '').toLowerCase();
+						return st === 'gagal' || st === 'failed' || st === 'error';
+					});
 				}
 
 				// 3. Outlet Filter
@@ -963,7 +1076,7 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 			let activeModalMember = null;
 			function openModal(member) {
 				activeModalMember = member;
-				modalAvatar.textContent = getInitials(member.name);
+				if (modalAvatar) modalAvatar.textContent = getInitials(member.name);
 				modalName.textContent = member.name || 'Member Java Batik';
 				modalId.textContent = `ID Member POS: #${member.id || '-'}`;
 				modalPoin.textContent = `${Number(member.total_poin || 0).toLocaleString('id-ID')} Poin`;
@@ -975,12 +1088,26 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 				modalOutlet.textContent = member.outlet || 'Galeri / Online';
 				modalLastTrx.textContent = member.last_transaction || '-';
 				modalVoucherDate.textContent = member.formatted_date || member.voucher_date || '-';
-				modalWaStatus.textContent = member.wa_sent ? 'Sudah Terkirim' : 'Belum Dikirim (Pending)';
-				modalWaStatus.style.color = member.wa_sent ? '#059669' : '#d97706';
+				
+				const st = (member.wa_status || (member.wa_sent ? 'sukses' : 'pending')).toLowerCase();
+				if (st === 'sukses' || st === 'success' || member.wa_sent) {
+					modalWaStatus.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 5px; color: #059669; font-weight: 700;"><span style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #ecfdf5; border: 1.5px solid #a7f3d0; font-size: 0.75rem;">✓</span> Sukses (Terkirim)</span>`;
+				} else if (st === 'gagal' || st === 'failed' || st === 'error') {
+					modalWaStatus.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 5px; color: #dc2626; font-weight: 700;"><span style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #fef2f2; border: 1.5px solid #fecaca; font-size: 0.75rem;">✕</span> Gagal Terkirim</span>`;
+				} else {
+					modalWaStatus.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 5px; color: #d97706; font-weight: 700;"><span style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #fffbeb; border: 1.5px solid #fde68a; font-size: 0.75rem;">⏱️</span> Pending (Belum Kirim)</span>`;
+				}
 
 				const msg = buildReminderMessage(member);
 				modalMessagePreview.value = msg;
-				modalSendWaBtn.href = buildWaLink(member);
+
+				const phone = cleanPhone(member.tlp);
+				const name = member.name ? member.name.trim() : 'MEMBER SETIA';
+				const cardUrl = `/api/member-card?phone=${phone}&name=${encodeURIComponent(name)}`;
+				const modalCardPreviewImg = document.getElementById('modalCardPreviewImg');
+				if (modalCardPreviewImg) {
+					modalCardPreviewImg.src = cardUrl;
+				}
 
 				modal.style.display = 'flex';
 			}
@@ -1003,6 +1130,16 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 				}
 			});
 
+			if (modalSendWabaBtn) {
+				modalSendWabaBtn.addEventListener('click', () => {
+					if (activeModalMember) {
+						const mem = activeModalMember;
+						closeModal();
+						openWabaModal(mem);
+					}
+				});
+			}
+
 			// ==========================================
 			// WABA Modal Handlers (reminder_member)
 			// ==========================================
@@ -1016,11 +1153,11 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 			const wabaResultBox = document.getElementById('wabaResultBox');
 
 			const wabaInputPhone = document.getElementById('wabaInputPhone');
-			const wabaParamName = document.getElementById('wabaParamName');
+			const wabaParamNickname = document.getElementById('wabaParamNickname');
+			const wabaParamFullName = document.getElementById('wabaParamFullName');
 			const wabaParamPoin = document.getElementById('wabaParamPoin');
-			const wabaParamVoucher = document.getElementById('wabaParamVoucher');
-			const wabaParamOutlet = document.getElementById('wabaParamOutlet');
-			const wabaParamAdditional = document.getElementById('wabaParamAdditional');
+			const wabaParamTransaksi = document.getElementById('wabaParamTransaksi');
+			const wabaParamLastTrx = document.getElementById('wabaParamLastTrx');
 			const wabaInputImage = document.getElementById('wabaInputImage');
 
 			const dbFetchStatus = document.getElementById('dbFetchStatus');
@@ -1038,7 +1175,7 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 
 			function updateCardPreview() {
 				const phone = wabaInputPhone.value.trim() || '6282334059852';
-				const name = wabaParamName.value.trim() || 'MEMBER SETIA';
+				const name = (wabaParamFullName ? wabaParamFullName.value.trim() : '') || 'MEMBER SETIA';
 				const cardUrl = getMemberCardUrl(phone, name);
 				wabaInputImage.value = cardUrl;
 				wabaCardPreviewImg.src = cardUrl;
@@ -1057,10 +1194,13 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 					const json = await res.json();
 					if (res.ok && json && json.success && json.data) {
 						const d = json.data;
-						wabaParamName.value = d.name || 'Aji Sampurno';
+						const fullName = (d.name || 'Aji Sampurno').trim();
+						const nickname = fullName.split(/\s+/)[0] || 'Aji';
+						wabaParamNickname.value = nickname;
+						wabaParamFullName.value = fullName;
 						wabaParamPoin.value = Number(d.poin || 0).toLocaleString('id-ID');
-						wabaParamVoucher.value = d.code || 'JAVABTK1';
-						wabaParamOutlet.value = d.outlet || 'Java Batik Gallery';
+						wabaParamTransaksi.value = d.transaksi ? `${d.transaksi}x belanja` : '1x belanja';
+						wabaParamLastTrx.value = d.last_transaction || '-';
 						if (dbFetchStatus) {
 							dbFetchStatus.textContent = `✓ Data ${d.name} (${Number(d.poin || 0).toLocaleString('id-ID')} Poin) Ditemukan!`;
 							dbFetchStatus.style.color = '#059669';
@@ -1092,7 +1232,11 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 			if (btnLoadAji) {
 				btnLoadAji.addEventListener('click', () => {
 					wabaInputPhone.value = '6282334059852';
-					wabaParamName.value = 'Aji Sampurno';
+					wabaParamNickname.value = 'aji';
+					wabaParamFullName.value = 'aji lengkap';
+					wabaParamPoin.value = '100.000';
+					wabaParamTransaksi.value = '1x belanja';
+					wabaParamLastTrx.value = '29 Mei 2001';
 					fetchMemberFromDb('6282334059852');
 				});
 			}
@@ -1108,9 +1252,19 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 				}
 			});
 
-			wabaParamName.addEventListener('input', updateCardPreview);
+			if (wabaParamFullName) {
+				wabaParamFullName.addEventListener('input', () => {
+					const full = wabaParamFullName.value.trim();
+					if (full && (!wabaParamNickname.value || wabaParamNickname.value === 'Kakak' || wabaParamNickname.value === 'aji')) {
+						wabaParamNickname.value = full.split(/\s+/)[0] || 'Kakak';
+					}
+					updateCardPreview();
+				});
+			}
 
+			let activeWabaMember = null;
 			function openWabaModal(member, isHeaderTest = false) {
+				activeWabaMember = (!isHeaderTest && member) ? member : null;
 				wabaResultBox.style.display = 'none';
 				wabaResultBox.innerHTML = '';
 				btnSubmitSendWaba.disabled = false;
@@ -1119,27 +1273,32 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 				if (dbFetchStatus) dbFetchStatus.textContent = '';
 
 				if (isHeaderTest) {
-					// Tes Uji Coba: Default ke data Pak Aji Sampurno dari Database
+					// Tes Uji Coba: Default ke format template contoh Meta
 					wabaInputPhone.value = '6282334059852';
-					wabaParamName.value = 'Aji Sampurno';
+					wabaParamNickname.value = 'aji';
+					wabaParamFullName.value = 'aji lengkap';
 					wabaParamPoin.value = '100.000';
-					wabaParamVoucher.value = 'JAVABTK1';
-					wabaParamOutlet.value = 'Boutique Senopati';
+					wabaParamTransaksi.value = '1x belanja';
+					wabaParamLastTrx.value = '29 Mei 2001';
 					updateCardPreview();
 					fetchMemberFromDb('6282334059852');
 				} else if (member) {
+					const fullName = (member.name || 'Member Java Batik').trim();
+					const nickname = fullName.split(/\s+/)[0] || 'Kakak';
 					wabaInputPhone.value = cleanPhone(member.tlp);
-					wabaParamName.value = member.name ? member.name.trim() : 'Kakak';
+					wabaParamNickname.value = nickname;
+					wabaParamFullName.value = fullName;
 					wabaParamPoin.value = Number(member.total_poin || 0).toLocaleString('id-ID');
-					wabaParamVoucher.value = member.voucher_code || '-';
-					wabaParamOutlet.value = member.outlet ? member.outlet.trim() : 'Java Batik Gallery';
+					wabaParamTransaksi.value = member.total_transaksi ? `${member.total_transaksi}x belanja` : '1x belanja';
+					wabaParamLastTrx.value = member.last_transaction || member.voucher_date || '-';
 					updateCardPreview();
 				} else {
 					wabaInputPhone.value = '6282334059852';
-					wabaParamName.value = 'Aji Sampurno';
+					wabaParamNickname.value = 'aji';
+					wabaParamFullName.value = 'aji lengkap';
 					wabaParamPoin.value = '100.000';
-					wabaParamVoucher.value = 'JAVABTK1';
-					wabaParamOutlet.value = 'Boutique Senopati';
+					wabaParamTransaksi.value = '1x belanja';
+					wabaParamLastTrx.value = '29 Mei 2001';
 					updateCardPreview();
 					fetchMemberFromDb('6282334059852');
 				}
@@ -1186,11 +1345,11 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 							headers: { 'Content-Type': 'application/json' },
 							body: JSON.stringify({
 								to: targetPhone,
-								name: wabaParamName.value.trim(),
+								nickname: wabaParamNickname.value.trim(),
+								fullName: wabaParamFullName.value.trim(),
 								poin: wabaParamPoin.value.trim(),
-								voucher: wabaParamVoucher.value.trim(),
-								outlet: wabaParamOutlet.value.trim(),
-								additional: wabaParamAdditional.value.trim(),
+								transaksi: wabaParamTransaksi.value.trim(),
+								lastTrx: wabaParamLastTrx.value.trim(),
 								imageUrl: wabaInputImage.value.trim()
 							})
 						});
@@ -1199,6 +1358,12 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 
 						wabaResultBox.style.display = 'block';
 						if (res.ok && data.success) {
+							if (activeWabaMember) {
+								activeWabaMember.wa_sent = true;
+								activeWabaMember.wa_status = 'sukses';
+								updateStats();
+								applyFilters();
+							}
 							wabaResultBox.style.background = '#ecfdf5';
 							wabaResultBox.style.border = '1px solid #a7f3d0';
 							wabaResultBox.style.color = '#065f46';
@@ -1213,6 +1378,11 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 							`;
 							showToast(`Template WABA berhasil dikirim ke ${targetPhone}!`);
 						} else {
+							if (activeWabaMember) {
+								activeWabaMember.wa_status = 'gagal';
+								updateStats();
+								applyFilters();
+							}
 							wabaResultBox.style.background = '#fef2f2';
 							wabaResultBox.style.border = '1px solid #fecaca';
 							wabaResultBox.style.color = '#991b1b';
@@ -1222,6 +1392,11 @@ Butuh bantuan motif, ukuran, atau rekomendasi busana? Anda dapat langsung membal
 							`;
 						}
 					} catch (err) {
+						if (activeWabaMember) {
+							activeWabaMember.wa_status = 'gagal';
+							updateStats();
+							applyFilters();
+						}
 						wabaResultBox.style.display = 'block';
 						wabaResultBox.style.background = '#fef2f2';
 						wabaResultBox.style.border = '1px solid #fecaca';

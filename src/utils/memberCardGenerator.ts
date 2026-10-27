@@ -139,8 +139,8 @@ export async function generateMemberCardImage({
 
   // 3. Generate Vertical Barcode SVG (Pure SVG, 0 dependency)
   const cleanPhone = phone.replace(/[^0-9]/g, '');
-  const barcodeValue = cleanPhone.startsWith('62') ? cleanPhone.slice(2) : cleanPhone;
-  const barcodeSvgRects = generateVerticalBarcodeSvg(barcodeValue || '0000000000', 1005, 75, 505, 110);
+  const barcodeValue = cleanPhone || '0000000000';
+  const barcodeSvgRects = generateVerticalBarcodeSvg(barcodeValue, 1005, 75, 505, 110);
 
   // 4. Koordinat & Elemen Desain
   const boxX = 95;
