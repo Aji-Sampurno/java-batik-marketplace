@@ -7,6 +7,7 @@ interface Props {
 
 const { title, description, image } = Astro.props;
 import { apiFetch } from "../lib/api";
+import { getMaintenanceStatus } from "../lib/maintenance";
 import "../styles/index.css";
 
 // Fetch Site Settings
@@ -68,6 +69,8 @@ const restWords = nameParts.slice(1).join(" ");
 // Admin Visibility Check
 const isAdmin = Astro.cookies.get("admin_session")?.value === "authenticated";
 const isBukaTokoPage = Astro.url.pathname.startsWith("/buka-toko");
+const maintenanceStatus = getMaintenanceStatus();
+const isMaintenanceActive = maintenanceStatus.enabled;
 
 // Favicon URL formatting (handle existing query string in logo_url)
 const rawFavicon = settings?.logo_url || "/favicon.png";
@@ -117,6 +120,12 @@ const faviconUrl = rawFavicon.includes("?")
 		<title>{title} | {settings?.site_name || "Java Batik"}</title>
 	</head>
 	<body style="scroll-behavior: smooth;">
+		{isAdmin && isMaintenanceActive && (
+			<aside aria-label="Mode Maintenance Status" style="background: linear-gradient(90deg, #991b1b, #dc2626); color: #ffffff; padding: 0.65rem 1rem; font-size: 0.85rem; font-family: var(--font-main); text-align: center; position: sticky; top: 0; z-index: 999999; display: flex; align-items: center; justify-content: center; gap: 0.85rem; box-shadow: 0 2px 10px rgba(0,0,0,0.25);">
+				<span>⚠️ <strong>Mode Maintenance Sedang AKTIF:</strong> Pengunjung umum diarahkan ke halaman pemeliharaan. Anda bebas perbaiki data Noir tanpa henti.</span>
+				<a href="/buka-toko" style="background: #ffffff; color: #991b1b; padding: 0.25rem 0.65rem; border-radius: 4px; font-weight: 700; text-decoration: none; font-size: 0.75rem; text-transform: uppercase;">Kelola di Dashboard</a>
+			</aside>
+		)}
 		<header
 			id="main-header"
 			style="position: absolute; top: 0; left: 0; right: 0; z-index: 100; transition: var(--transition); padding: 1.2rem 0;"

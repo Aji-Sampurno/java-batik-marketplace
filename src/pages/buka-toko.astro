@@ -2,8 +2,10 @@
 export const prerender = false;
 import Layout from "../layouts/Layout.astro";
 import { apiFetch, uploadToLaravel } from "../lib/api";
+import { getMaintenanceStatus, setMaintenanceStatus } from "../lib/maintenance";
 import DeleteConfirmModal from "../components/DeleteConfirmModal.astro";
 import AdminProductRow from "../components/AdminProductRow.astro";
+import MaintenanceModal from "../components/MaintenanceModal.astro";
 
 // Check for session (Authentication Gate)
 const session = Astro.cookies.get("admin_session");
@@ -80,12 +82,32 @@ if (Astro.request.method === "POST") {
 				await apiFetch(`products/${id}`, { method: "DELETE" });
 				return Astro.redirect("/buka-toko?success=delete");
 			}
+
+			if (action === "toggle_maintenance") {
+				const enabled = formData.get("enabled") === "true";
+				const customTitle = formData.get("maintenance_title")?.toString();
+				const customMessage = formData.get("maintenance_message")?.toString();
+				const estimatedTime = formData.get("maintenance_time")?.toString();
+				const contactWa = formData.get("maintenance_wa")?.toString();
+
+				setMaintenanceStatus({
+					enabled,
+					...(customTitle ? { title: customTitle.trim() } : {}),
+					...(customMessage ? { message: customMessage.trim() } : {}),
+					...(estimatedTime !== undefined ? { estimatedEndTime: estimatedTime.trim() } : {}),
+					...(contactWa ? { contactWhatsapp: contactWa.trim() } : {}),
+					updatedBy: "admin_buka_toko",
+				});
+				return Astro.redirect(`/buka-toko?success=maintenance_${enabled ? "on" : "off"}`);
+			}
 		} catch (e: any) {
 			isError = true;
 			message = "Gagal: " + e.message;
 		}
 	}
 }
+
+const maintenanceStatus = getMaintenanceStatus();
 
 const success = Astro.url.searchParams.get("success");
 if (success === "product") message = "Produk berhasil ditambahkan!";
@@ -98,6 +120,8 @@ if (success === "delete_type") message = "Jenis produk berhasil dihapus!";
 if (success === "delete_motif") message = "Motif berhasil dihapus!";
 if (success === "size") message = "Ukuran berhasil ditambahkan!";
 if (success === "deleted") message = "Data berhasil dihapus!";
+if (success === "maintenance_on") message = "Mode maintenance berhasil DIAKTIFKAN. Akses publik kini menampilkan halaman pemeliharaan.";
+if (success === "maintenance_off") message = "Mode maintenance berhasil DINONAKTIFKAN. Website publik kembali normal online.";
 ---
 
 <Layout title={`Admin Panel - ${settings?.site_name || "Batik Nusantara"}`}>
@@ -153,8 +177,60 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 					>
 						<span>🧪 Tes Watermark & Firebase</span>
 					</a>
+					<button
+						type="button"
+						onclick="window.openMaintenanceModal()"
+						style={`display: inline-flex; align-items: center; gap: 0.45rem; background: ${maintenanceStatus.enabled ? '#fef2f2' : '#f0fdf4'}; color: ${maintenanceStatus.enabled ? '#b91c1c' : '#15803d'}; border: 1px solid ${maintenanceStatus.enabled ? '#fecaca' : '#bbf7d0'}; padding: 0.55rem 0.9rem; border-radius: 8px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05);`}
+						title="Klik untuk mengatur mode under maintenance website"
+					>
+						<span style={`width: 8px; height: 8px; border-radius: 50%; background: ${maintenanceStatus.enabled ? '#dc2626' : '#16a34a'}; display: inline-block;`}></span>
+						<span>{maintenanceStatus.enabled ? '🔴 Maintenance: AKTIF' : '🟢 Website: ONLINE'}</span>
+					</button>
 				</div>
 			</div>
+
+			{maintenanceStatus.enabled && (
+				<div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: var(--spacing-xl); box-shadow: 0 4px 12px rgba(225, 29, 72, 0.08);">
+					<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+						<div style="display: flex; align-items: flex-start; gap: 1rem;">
+							<div style="background: #ffe4e6; color: #e11d48; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0;">
+								🛠️
+							</div>
+							<div>
+								<div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+									<h3 style="margin: 0; font-size: 1.05rem; color: #9f1239; font-weight: 700;">
+										Mode Under Maintenance Sedang Aktif!
+									</h3>
+									<span style="background: #e11d48; color: white; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">Akses Publik Terkunci</span>
+								</div>
+								<p style="margin: 0; font-size: 0.88rem; color: #be123c; line-height: 1.5;">
+									Akses pengunjung dialihkan ke halaman pemeliharaan. Anda leluasa melakukan perbaikan data Noir <strong>tanpa perlu mematikan aplikasi Node.js</strong>.
+								</p>
+								{maintenanceStatus.estimatedEndTime && (
+									<p style="margin-top: 0.35rem; font-size: 0.82rem; color: #9f1239; font-weight: 600;">
+										⏱️ Estimasi Selesai: {maintenanceStatus.estimatedEndTime}
+									</p>
+								)}
+							</div>
+						</div>
+						<div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+							<a href="/?preview_maintenance=1" target="_blank" style="background: white; color: #9f1239; border: 1px solid #fecdd3; padding: 0.55rem 0.9rem; border-radius: 8px; font-size: 0.82rem; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+								👁️ Preview Halaman
+							</a>
+							<button type="button" onclick="window.openMaintenanceModal()" style="background: white; color: #9f1239; border: 1px solid #fecdd3; padding: 0.55rem 0.9rem; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;">
+								⚙️ Edit Pesan
+							</button>
+							<form method="POST" style="margin: 0;">
+								<input type="hidden" name="action" value="toggle_maintenance" />
+								<input type="hidden" name="enabled" value="false" />
+								<button type="submit" style="background: #e11d48; color: white; border: none; padding: 0.55rem 1.1rem; border-radius: 8px; font-size: 0.82rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 2px 4px rgba(225, 29, 72, 0.2);">
+									✅ Kembalikan Online
+								</button>
+							</form>
+						</div>
+					</div>
+				</div>
+			)}
 
 			<!-- Overview Stats -->
 			<div
@@ -1571,4 +1647,5 @@ if (success === "deleted") message = "Data berhasil dihapus!";
 			}
 		});
 	</script>
+	<MaintenanceModal maintenance={maintenanceStatus} />
 </Layout>

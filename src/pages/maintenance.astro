@@ -1,0 +1,16 @@
+---
+export const prerender = false;
+import { getMaintenanceStatus, renderMaintenanceHtml } from '../lib/maintenance';
+
+const config = getMaintenanceStatus();
+const html = renderMaintenanceHtml(config);
+
+return new Response(html, {
+  status: config.enabled ? 503 : 200,
+  headers: {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+  },
+});
+---
+

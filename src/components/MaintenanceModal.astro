@@ -1,0 +1,163 @@
+---
+import type { MaintenanceConfig } from '../lib/maintenance';
+
+interface Props {
+  maintenance: MaintenanceConfig;
+}
+
+const { maintenance } = Astro.props;
+---
+
+<!-- Modal Maintenance Settings -->
+<div id="maintenanceModal" style="display: none; position: fixed; inset: 0; z-index: 10000; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); padding: 1rem;">
+  <div style="max-width: 540px; width: 100%; background: #ffffff; border-radius: var(--radius-md, 12px); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid var(--color-border, #e5e7eb); overflow: hidden; max-height: 90vh; display: flex; flex-direction: column;">
+    
+    <!-- Modal Header -->
+    <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid #f3f4f6; display: flex; justify-content: space-between; align-items: center; background: #fafaf9;">
+      <div style="display: flex; align-items: center; gap: 0.6rem;">
+        <span style="font-size: 1.25rem;">🛠️</span>
+        <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #1c1917;">
+          Pengaturan Mode Under Maintenance
+        </h3>
+      </div>
+      <button 
+        type="button" 
+        onclick="document.getElementById('maintenanceModal').style.display='none'" 
+        style="background: none; border: none; font-size: 1.4rem; color: #9ca3af; cursor: pointer; padding: 0.2rem 0.5rem; line-height: 1;"
+      >
+        &times;
+      </button>
+    </div>
+
+    <!-- Modal Body / Form -->
+    <form method="POST" action="/buka-toko" style="padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1.1rem; margin: 0;">
+      <input type="hidden" name="action" value="toggle_maintenance" />
+
+      <p style="font-size: 0.85rem; color: #57534e; margin: 0; line-height: 1.5;">
+        Aktifkan fitur ini saat ingin melakukan perbaikan data Noir, sinkronisasi inventori POS, atau upgrade sistem. 
+        <strong>Node.js tetap berjalan</strong> dan Anda tetap bisa memakai Admin Panel / Buka Toko.
+      </p>
+
+      <!-- Status Radio / Switch -->
+      <div style="background: #f5f5f4; border: 1px solid #e7e5e4; border-radius: 8px; padding: 1rem;">
+        <label style="font-size: 0.82rem; font-weight: 700; color: #292524; display: block; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+          Status Akses Publik
+        </label>
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          <label style={`flex: 1; min-width: 140px; display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 0.9rem; border-radius: 6px; cursor: pointer; border: 2px solid ${!maintenance.enabled ? '#16a34a' : '#d6d3d1'}; background: ${!maintenance.enabled ? '#f0fdf4' : '#ffffff'}; font-size: 0.88rem; font-weight: 600;`}>
+            <input 
+              type="radio" 
+              name="enabled" 
+              value="false" 
+              checked={!maintenance.enabled} 
+              style="accent-color: #16a34a;"
+            />
+            <span style="color: #15803d;">🟢 Website ONLINE</span>
+          </label>
+
+          <label style={`flex: 1; min-width: 140px; display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 0.9rem; border-radius: 6px; cursor: pointer; border: 2px solid ${maintenance.enabled ? '#dc2626' : '#d6d3d1'}; background: ${maintenance.enabled ? '#fef2f2' : '#ffffff'}; font-size: 0.88rem; font-weight: 600;`}>
+            <input 
+              type="radio" 
+              name="enabled" 
+              value="true" 
+              checked={maintenance.enabled} 
+              style="accent-color: #dc2626;"
+            />
+            <span style="color: #b91c1c;">🔴 MAINTENANCE AKTIF</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Maintenance Title -->
+      <div>
+        <label style="font-size: 0.82rem; font-weight: 600; color: #44403c; display: block; margin-bottom: 0.35rem;">
+          Judul Halaman Pemeliharaan
+        </label>
+        <input 
+          type="text" 
+          name="maintenance_title" 
+          value={maintenance.title} 
+          placeholder="Contoh: Website Sedang Dalam Pemeliharaan"
+          style="width: 100%; padding: 0.65rem 0.8rem; border: 1px solid #d6d3d1; border-radius: 6px; font-size: 0.9rem; font-family: inherit;"
+        />
+      </div>
+
+      <!-- Maintenance Message -->
+      <div>
+        <label style="font-size: 0.82rem; font-weight: 600; color: #44403c; display: block; margin-bottom: 0.35rem;">
+          Pesan Informasi untuk Pengunjung
+        </label>
+        <textarea 
+          name="maintenance_message" 
+          rows="3" 
+          placeholder="Pesan yang akan dibaca oleh pengunjung website saat mengakses..."
+          style="width: 100%; padding: 0.65rem 0.8rem; border: 1px solid #d6d3d1; border-radius: 6px; font-size: 0.9rem; font-family: inherit; resize: vertical;"
+        >{maintenance.message}</textarea>
+      </div>
+
+      <!-- Estimated Time & WhatsApp -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+        <div>
+          <label style="font-size: 0.82rem; font-weight: 600; color: #44403c; display: block; margin-bottom: 0.35rem;">
+            Estimasi Selesai (Opsional)
+          </label>
+          <input 
+            type="text" 
+            name="maintenance_time" 
+            value={maintenance.estimatedEndTime || ''} 
+            placeholder="Contoh: 19:30 WIB / 30 Menit"
+            style="width: 100%; padding: 0.65rem 0.8rem; border: 1px solid #d6d3d1; border-radius: 6px; font-size: 0.85rem; font-family: inherit;"
+          />
+        </div>
+        <div>
+          <label style="font-size: 0.82rem; font-weight: 600; color: #44403c; display: block; margin-bottom: 0.35rem;">
+            No. WhatsApp CS
+          </label>
+          <input 
+            type="text" 
+            name="maintenance_wa" 
+            value={maintenance.contactWhatsapp || '6281228222383'} 
+            placeholder="Contoh: 6281228222383"
+            style="width: 100%; padding: 0.65rem 0.8rem; border: 1px solid #d6d3d1; border-radius: 6px; font-size: 0.85rem; font-family: inherit;"
+          />
+        </div>
+      </div>
+
+      <!-- Quick CLI Hint -->
+      <div style="background: #eff6ff; border: 1px dashed #93c5fd; border-radius: 6px; padding: 0.65rem 0.85rem; font-size: 0.78rem; color: #1e40af; line-height: 1.4;">
+        💡 <strong>Info Server:</strong> Bisa juga di-toggle dari SSH / Terminal dengan <code>touch .maintenance</code> (aktif) atau <code>rm .maintenance</code> (nonaktif) tanpa perlu restart Node.js.
+      </div>
+
+      <!-- Actions -->
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem; padding-top: 0.75rem; border-top: 1px solid #f3f4f6;">
+        <button 
+          type="button" 
+          onclick="document.getElementById('maintenanceModal').style.display='none'"
+          style="padding: 0.65rem 1.1rem; border: 1px solid #d1d5db; background: #ffffff; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; color: #4b5563;"
+        >
+          Batal
+        </button>
+        <button 
+          type="submit" 
+          style="padding: 0.65rem 1.3rem; background: var(--color-accent, #8c7851); color: #ffffff; border: none; border-radius: 6px; font-size: 0.85rem; font-weight: 700; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"
+        >
+          Simpan & Terapkan Status
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script is:inline>
+  window.openMaintenanceModal = () => {
+    const modal = document.getElementById('maintenanceModal');
+    if (modal) modal.style.display = 'flex';
+  };
+
+  document.getElementById('maintenanceModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'maintenanceModal') {
+      e.target.style.display = 'none';
+    }
+  });
+</script>
+
