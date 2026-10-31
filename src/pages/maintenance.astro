@@ -6,11 +6,12 @@ const config = getMaintenanceStatus();
 const html = renderMaintenanceHtml(config);
 
 return new Response(html, {
-  status: config.enabled ? 503 : 200,
+  status: 200,
   headers: {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    'Pragma': 'no-cache',
+    'X-LiteSpeed-Cache-Control': 'no-cache',
   },
 });
 ---
-

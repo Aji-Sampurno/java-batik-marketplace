@@ -55,15 +55,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
       );
     }
 
-    // Return custom HTML maintenance page with HTTP 503
+    // Return custom HTML maintenance page with HTTP 200 (avoid LiteSpeed 503 fallback to directory index)
     const html = renderMaintenanceHtml(maintenance);
     return new Response(html, {
-      status: 503,
+      status: 200,
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
-        'Retry-After': '3600',
         'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
         'Pragma': 'no-cache',
+        'X-LiteSpeed-Cache-Control': 'no-cache',
         'X-Accel-Expires': '0',
       },
     });
@@ -77,6 +77,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   response.headers.set('Pragma', 'no-cache');
   response.headers.set('Expires', '0');
   response.headers.set('X-Accel-Expires', '0');
+  response.headers.set('X-LiteSpeed-Cache-Control', 'no-cache');
 
   return response;
 });
